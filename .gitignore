@@ -10,6 +10,12 @@ log/
 data/
 outputs/
 
+# training checkpoints, exported policies, and eval sweep results -- large,
+# regenerable, machine-specific; never meant to be committed
+policy/locomotion/checkpoints/*
+!policy/locomotion/checkpoints/.gitkeep
+policy/locomotion/eval/results/
+
 # python
 __pycache__/
 *.pyc

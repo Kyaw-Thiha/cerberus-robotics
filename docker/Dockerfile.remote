@@ -76,6 +76,12 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 
 WORKDIR /workspace
 
+# wandb -- default experiment logger for policy/locomotion/train.py (project
+# "cerberus-robotics"). Not part of Isaac Lab's own install; rsl_rl supports it
+# as an optional logger backend but doesn't pull in the client library itself.
+RUN --mount=type=cache,target=/root/.cache/pip \
+    /workspace/isaaclab/_isaac_sim/python.sh -m pip install wandb
+
 # SSH setup (see the vendor-portability note in this file's header).
 RUN apt-get update && apt-get install -y --no-install-recommends \
     openssh-server \

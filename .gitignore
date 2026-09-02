@@ -13,3 +13,6 @@ outputs/
 # python
 __pycache__/
 *.pyc
+
+# secrets
+.env

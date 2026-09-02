@@ -1,0 +1,91 @@
+# Cerberus — remote training/dev image (Isaac Sim + Isaac Lab).
+#
+# Runs ONLY on a rented remote GPU box (Brev / Lambda / RunPod / vast.ai) —
+# never locally. See docs/isaac_lab_workflow.md for why. No provider-specific
+# assumptions baked in: build and run with plain `docker build` / `docker run
+# --gpus all` on any provider that offers an NVIDIA GPU + driver.
+#
+# Versions pinned to Isaac Lab's latest stable (non-beta) release as of this
+# writing, per its own docker/.env.base for v2.3.2:
+#   https://github.com/isaac-sim/IsaacLab/blob/v2.3.2/docker/.env.base
+#   https://github.com/isaac-sim/IsaacLab/blob/v2.3.2/source/isaaclab_rl/setup.py
+#
+# SSH portability across providers (see docker/start.sh for the implementation):
+#   - RunPod / vast.ai are container-native: their platform launches THIS
+#     image directly, so it has to carry its own sshd or you're locked out.
+#     RunPod expects the image to consume $PUBLIC_KEY itself (what start.sh
+#     does); vast.ai's SSH launch mode overrides the entrypoint and runs its
+#     own onstart script instead, but still needs sshd installed and startable
+#     for that to work — satisfied by the same apt-get layer below either way.
+#   - Lambda / Brev hand you a bare VM with Docker preinstalled — SSH happens
+#     at the VM/host level before `docker run` is ever invoked, so this
+#     image's sshd goes unused there. Harmless either way: start.sh no-ops
+#     the key setup when $PUBLIC_KEY is unset and just keeps the container up.
+
+ARG ISAACSIM_VERSION=5.1.0
+ARG ISAACLAB_VERSION=v2.3.2
+
+FROM nvcr.io/nvidia/isaac-sim:${ISAACSIM_VERSION}
+
+# The base image defaults to a non-root `isaac-sim` user (uid 1234), which
+# can't apt-get/pip-install or bind sshd. Root throughout matches RunPod's
+# own official images and is fine here — this is a disposable remote
+# instance (see docs/isaac_lab_workflow.md), not a shared multi-tenant box.
+USER root
+
+ARG ISAACLAB_VERSION
+ENV ISAACLAB_PATH=/workspace/isaaclab
+ENV ACCEPT_EULA=Y
+ENV DEBIAN_FRONTEND=noninteractive
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN git clone --branch ${ISAACLAB_VERSION} --depth 1 \
+    https://github.com/isaac-sim/IsaacLab.git ${ISAACLAB_PATH}
+
+WORKDIR ${ISAACLAB_PATH}
+
+# isaaclab.sh resolves its Python interpreter via a symlink at
+# <isaaclab-repo>/_isaac_sim, per Isaac Lab's own Dockerfile.base.
+RUN ln -sf /isaac-sim ${ISAACLAB_PATH}/_isaac_sim
+
+# --install rsl_rl pulls in rsl-rl-lib==3.1.2 (see isaaclab_rl/setup.py above),
+# the PPO library Phase 0 trains with per Rudin et al.'s recipe. TERM is set
+# because isaaclab.sh calls `tput` for colored output, which errors out
+# ("unknown terminal type") in a non-interactive `docker build` shell.
+ENV TERM=xterm
+RUN --mount=type=cache,target=/root/.cache/pip \
+    ./isaaclab.sh --install rsl_rl
+
+# isaaclab.sh's --install loop (v2.3.2) only pip-installs a source/<ext>
+# directory when it finds a setup.py there — every extension has one,
+# including core isaaclab, so this isn't a skip. Core isaaclab's own
+# setup.py specifically fails silently under pip's default isolated build
+# (pip fetches a fresh setuptools into that sandbox; current PyPI setuptools
+# 80+ dropped the pkg_resources module core isaaclab's build needs), while
+# every other extension's simpler setup.py doesn't hit that path — so
+# isaaclab.sh's own loop exits 0 even though this one install failed
+# underneath it. --no-build-isolation reuses the base image's already-present
+# setuptools (<81, still has pkg_resources) instead. isaaclab_tasks (and
+# gymnasium as its transitive dependency) both import core isaaclab, so
+# nothing downstream works until this is installed explicitly.
+RUN --mount=type=cache,target=/root/.cache/pip \
+    ./isaaclab.sh -p -m pip install --no-build-isolation -e source/isaaclab
+
+WORKDIR /workspace
+
+# SSH setup (see the vendor-portability note in this file's header).
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    openssh-server \
+    && mkdir -p /var/run/sshd \
+    && rm -rf /var/lib/apt/lists/*
+
+COPY docker/start.sh /start.sh
+RUN chmod +x /start.sh
+
+# The base image sets its own ENTRYPOINT (/isaac-sim/runheadless.sh) — CMD
+# alone would just get passed to it as an argument, not replace it. Clear it
+# explicitly.
+ENTRYPOINT ["/start.sh"]

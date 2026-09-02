@@ -1,0 +1,20 @@
+[workspace]
+name = "cerberus"
+version = "0.1.0"
+description = "Cerberus: end-to-end quadruped robot learning stack"
+channels = ["robostack-jazzy", "conda-forge"]
+platforms = ["linux-64"]
+
+[dependencies]
+python = "3.12.*"
+ros-jazzy-ros-base = "*"
+colcon-common-extensions = "*"
+ruff = "*"
+pytest = "<8"
+matplotlib = "*"
+pandas = "*"
+
+[tasks]
+build = "colcon build --symlink-install"
+lint = "ruff check ."
+test = "pytest"

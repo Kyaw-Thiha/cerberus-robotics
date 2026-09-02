@@ -1,0 +1,15 @@
+# pixi
+.pixi/
+
+# colcon
+build/
+install/
+log/
+
+# data & outputs (per docs/project_structure.md)
+data/
+outputs/
+
+# python
+__pycache__/
+*.pyc

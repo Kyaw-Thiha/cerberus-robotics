@@ -24,4 +24,16 @@ fi
 
 ssh-keygen -A
 
+# RunPod injects RUNPOD_POD_ID/RUNPOD_API_KEY/etc into this container's PID 1
+# environment (this script), but that does NOT reach a later `ssh host
+# "command"` session on its own -- an official runpod/* base image apparently
+# handles that propagation itself; this image (built FROM the Isaac Sim base,
+# not a runpod/* one) doesn't get it for free. Rather than depend on PAM/
+# /etc/environment semantics that vary by distro and by login-vs-non-login
+# shell (an `ssh host "command"` session, which is how scripts/run_remote_job.sh
+# is actually invoked, does NOT run as a login shell and so does NOT source
+# /etc/profile.d/* either), write these explicitly to a file our own scripts
+# source themselves -- see scripts/run_remote_job.sh.
+env | grep '^RUNPOD_' | sed 's/^/export /' > /etc/cerberus_env.sh
+
 exec /usr/sbin/sshd -D

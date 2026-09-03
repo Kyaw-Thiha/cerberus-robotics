@@ -76,15 +76,25 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 
 WORKDIR /workspace
 
-# wandb -- default experiment logger for policy/locomotion/train.py (project
-# "cerberus-robotics"). Not part of Isaac Lab's own install; rsl_rl supports it
-# as an optional logger backend but doesn't pull in the client library itself.
+# Additive packages layered onto Isaac Sim's bundled Python interpreter --
+# see docker/requirements.txt for what's in it and why (wandb for
+# train.py's default logger, imageio[ffmpeg] for core/video_capture.py's
+# direct frame writing). Pinned there, not inline here, so the exact
+# resolved set is reproducible on rebuild -- pixi.lock's equivalent for this
+# additive layer (pixi itself doesn't fit -- it owns/creates its own
+# interpreter, it doesn't attach to Isaac Sim's).
+COPY docker/requirements.txt /tmp/requirements.txt
 RUN --mount=type=cache,target=/root/.cache/pip \
-    /workspace/isaaclab/_isaac_sim/python.sh -m pip install wandb
+    /workspace/isaaclab/_isaac_sim/python.sh -m pip install -r /tmp/requirements.txt
 
-# SSH setup (see the vendor-portability note in this file's header).
+# SSH setup (see the vendor-portability note in this file's header), plus a
+# plain system python3 -- Isaac Sim's own bundled interpreter (above) is for
+# Isaac-Sim-dependent scripts only; scripts/sync_to_r2.py and
+# scripts/run_remote_job.sh have no Isaac Sim dependency and shouldn't pay
+# that interpreter's startup cost just to run argparse + subprocess calls.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     openssh-server \
+    python3 \
     && mkdir -p /var/run/sshd \
     && rm -rf /var/lib/apt/lists/*
 

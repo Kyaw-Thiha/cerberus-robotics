@@ -1,0 +1,17 @@
+# Pinned additive packages installed into Isaac Sim's bundled Python
+# interpreter (via _isaac_sim/python.sh -m pip install -r) on top of
+# whatever Isaac Sim/Isaac Lab already ships. This is the reproducibility
+# mechanism for that additive layer -- pixi.lock plays the equivalent role
+# for the local dev env, but pixi doesn't fit here (see docs/artifact_storage.md's
+# note: pixi owns/creates its own interpreter, it doesn't attach packages to
+# an externally-provided one like Isaac Sim's). Versions verified installable
+# via `pip index versions <pkg>` at the time each was added.
+#
+# wandb -- default experiment logger for policy/locomotion/train.py.
+# imageio[ffmpeg] -- direct frame-writing for core/video_capture.py's
+#   multi-condition capture loop (play_terrain_showcase.py,
+#   eval/push_recovery_showcase.py) -- not RecordVideo-based, see that
+#   module's docstring for why.
+wandb==0.29.0
+imageio==2.37.4
+imageio-ffmpeg==0.6.0

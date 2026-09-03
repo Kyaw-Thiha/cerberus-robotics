@@ -36,6 +36,12 @@
 #   - Only self-terminates the pod if the final sync actually succeeded. If
 #     it didn't, the pod is left running on purpose so nothing gets lost --
 #     investigate and sync/terminate manually.
+#   - Self-terminate can be skipped with --no-terminate, for a step that
+#     isn't the last thing you want to happen on this pod -- e.g. training,
+#     when the plan is to look at the results and decide whether to run an
+#     eval sweep before the pod goes away. Everything else (timeout, periodic
+#     sync, final sync) still happens; only the self-terminate step is
+#     skipped, leaving the pod running for whatever comes next.
 #
 # Requires: R2_* vars (see scripts/sync_to_r2.py) sourced into the
 # environment already, and RUNPOD_POD_ID + RUNPOD_API_KEY for the

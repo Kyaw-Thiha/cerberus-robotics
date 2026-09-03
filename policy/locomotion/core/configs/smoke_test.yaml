@@ -1,0 +1,7 @@
+# Headless smoke test: tiny env count, a couple of iterations, finishes in
+# seconds. Values match what we've been passing manually via --num_envs/
+# --max_iterations while verifying the environment and curriculum.
+#
+# Usage: ./isaaclab.sh -p policy/locomotion/train.py --config smoke_test
+env.scene.num_envs: 32
+agent.max_iterations: 3

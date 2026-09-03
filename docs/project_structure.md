@@ -100,6 +100,8 @@ cerberus/
 ├── docs/                             # architecture.svg, pipeline diagram, this file, isaac_lab_workflow.md
 ├── docker/
 │   └── Dockerfile.remote             # Isaac Lab base image + pinned extras, built on rented GPU box
+├── scripts/                          # cross-cutting ops tooling, not owned by one stack component
+│   └── sync_to_r2.py                   # permanent artifact storage — see docs/artifact_storage.md
 ├── data/                             # gitignored — demos, trajectories
 ├── outputs/                          # gitignored — checkpoints, logs, videos, wandb runs
 └── README.md

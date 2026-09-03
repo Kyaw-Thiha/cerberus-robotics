@@ -60,6 +60,7 @@ MODULE=""
 CHECKPOINTS_DIR=""
 JOB_TIMEOUT=""
 SYNC_INTERVAL="5m"
+NO_TERMINATE=0
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -79,6 +80,10 @@ while [[ $# -gt 0 ]]; do
             SYNC_INTERVAL="$2"
             shift 2
             ;;
+        --no-terminate)
+            NO_TERMINATE=1
+            shift
+            ;;
         --)
             shift
             break
@@ -91,7 +96,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 if [[ -z "$MODULE" || -z "$CHECKPOINTS_DIR" || -z "$JOB_TIMEOUT" || $# -eq 0 ]]; then
-    echo "Usage: $0 --module <name> --checkpoints-dir <path> --timeout <duration> [--sync-interval <duration>] -- <training command...>" >&2
+    echo "Usage: $0 --module <name> --checkpoints-dir <path> --timeout <duration> [--sync-interval <duration>] [--no-terminate] -- <training command...>" >&2
     exit 1
 fi
 
@@ -141,6 +146,11 @@ python3 "$REPO_ROOT/scripts/sync_to_r2.py" sync-run --module "$MODULE" --run-dir
 
 if [[ "$SYNC_OK" != "1" ]]; then
     echo "[run_remote_job] ERROR: R2 sync failed -- NOT self-terminating. Investigate, then sync/terminate manually." >&2
+    exit "$TRAIN_EXIT_CODE"
+fi
+
+if [[ "$NO_TERMINATE" == "1" ]]; then
+    echo "[run_remote_job] --no-terminate given -- sync succeeded, leaving pod running."
     exit "$TRAIN_EXIT_CODE"
 fi
 

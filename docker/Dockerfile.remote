@@ -91,10 +91,15 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 # plain system python3 -- Isaac Sim's own bundled interpreter (above) is for
 # Isaac-Sim-dependent scripts only; scripts/sync_to_r2.py and
 # scripts/run_remote_job.sh have no Isaac Sim dependency and shouldn't pay
-# that interpreter's startup cost just to run argparse + subprocess calls.
+# that interpreter's startup cost just to run argparse + subprocess calls --
+# and tmux, for the coding-agent dev loop's session-survives-disconnect
+# pattern (see docs/isaac_lab_workflow.md) -- not needed by any of our own
+# scripts (they use nohup/background jobs), but needed to manually attach to
+# and watch a live run over SSH.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     openssh-server \
     python3 \
+    tmux \
     && mkdir -p /var/run/sshd \
     && rm -rf /var/lib/apt/lists/*
 

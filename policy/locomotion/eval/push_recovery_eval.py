@@ -215,11 +215,33 @@ def main(env_cfg, agent_cfg):
     pitch_final = torch.zeros(num_envs, device=device)
     tracking_error_max_in_sustain = torch.zeros(num_envs, device=device)
 
+    # Planar displacement-from-spawn tracking -- added to check a real reliability
+    # concern (see REFERENCES.md / RUN_001.md): every "pyramid"-style sub-terrain
+    # function (stairs, inverted stairs, boxes, both slope types) reserves a flat
+    # platform_width-sized flat zone at the spawn origin by design (confirmed from
+    # Isaac Lab v2.3.2's mesh_terrains.py/hf_terrains.py source), so a trial that
+    # samples a slow/near-zero velocity command can spend its whole ~7s episode
+    # never leaving that flat zone -- meaning its pass/fail result doesn't actually
+    # test terrain traversal at all. Logging displacement (not fixing spawn/command
+    # bias yet) so this can be measured directly instead of argued from geometry.
     obs = env.get_observations()
+    initial_pos_xy = asset.data.root_pos_w[:, :2].clone()
+    commanded_speed_mps = torch.norm(raw_env.command_manager.get_command("base_velocity")[:, :2], dim=1)
+    max_displacement_m = torch.zeros(num_envs, device=device)
+    displacement_at_push_m = torch.zeros(num_envs, device=device)
+    displacement_at_window_end_m = torch.zeros(num_envs, device=device)
+
     with torch.inference_mode():
         for step in range(total_steps):
             actions = policy(obs)
             obs, _, dones, extras = env.step(actions)
+
+            current_disp = torch.norm(asset.data.root_pos_w[:, :2] - initial_pos_xy, dim=1)
+            max_displacement_m = torch.maximum(max_displacement_m, current_disp)
+            if step == push_step:
+                displacement_at_push_m = current_disp.clone()
+            if step == window_end_step:
+                displacement_at_window_end_m = current_disp.clone()
 
             # dones fires for BOTH an actual fall (terminated) and the episode's own
             # natural time_out -- and every trial's episode is deliberately just long
@@ -258,6 +280,10 @@ def main(env_cfg, agent_cfg):
     # written by apply_single_push directly onto raw_env (not via EventTermCfg params --
     # see push_recovery_event.py's docstring for why that doesn't work)
     angle_log_cpu = raw_env.push_angle_log.cpu()
+    commanded_speed_cpu = commanded_speed_mps.cpu()
+    displacement_at_push_cpu = displacement_at_push_m.cpu()
+    displacement_at_window_end_cpu = displacement_at_window_end_m.cpu()
+    max_displacement_cpu = max_displacement_m.cpu()
 
     # cells were laid out as contiguous `trials`-sized blocks, in `cells` order -- cell c's
     # envs are [c * trials, (c + 1) * trials)
@@ -295,6 +321,10 @@ def main(env_cfg, agent_cfg):
                     "tracking_error_max_in_sustain": float(tracking_error_max_cpu[env_idx]),
                     "tracking_ok_sustained": bool(tracking_ok_cpu[env_idx]),
                     "recovered": bool(recovered_cpu[env_idx]),
+                    "commanded_speed_mps": float(commanded_speed_cpu[env_idx]),
+                    "displacement_at_push_m": float(displacement_at_push_cpu[env_idx]),
+                    "displacement_at_window_end_m": float(displacement_at_window_end_cpu[env_idx]),
+                    "max_displacement_m": float(max_displacement_cpu[env_idx]),
                 }
             )
 
@@ -327,6 +357,10 @@ def main(env_cfg, agent_cfg):
                 "tracking_error_max_in_sustain",
                 "tracking_ok_sustained",
                 "recovered",
+                "commanded_speed_mps",
+                "displacement_at_push_m",
+                "displacement_at_window_end_m",
+                "max_displacement_m",
             ],
         )
         writer.writeheader()

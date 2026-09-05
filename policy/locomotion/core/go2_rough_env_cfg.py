@@ -20,6 +20,27 @@ class UnitreeGo2RoughCerberusEnvCfg(UnitreeGo2RoughEnvCfg):
         super().__post_init__()
         add_push_disturbance(self)
 
+        # Stock UnitreeGo2RoughEnvCfg (super().__post_init__() above) already rescales
+        # "boxes"/"random_rough" for Go2's smaller body size, but leaves "pyramid_stairs"/
+        # "pyramid_stairs_inv" at their stock (ANYmal-scale) step_height_range -- an
+        # absolute-meters parameter, unlike hf_pyramid_slope's scale-invariant slope_range
+        # ratio. Found via a real per-sub-terrain-type push-recovery eval (2026-09-04,
+        # see RUN_001.md): pyramid_stairs_inv scored just 12% success (vs 91-97% for both
+        # slope types and random_rough), pyramid_stairs 49% -- both far below boxes' own
+        # already-rescaled 63.5% -- and pyramid_stairs_inv was already bad at the easiest
+        # level tested, not a difficulty-driven decline like the other types, the
+        # signature of an unscaled absolute-length parameter rather than a genuine skill
+        # ceiling. Rescaled by the same 0.5x factor stock's own boxes rescale used
+        # ((0.05, 0.2) -> (0.025, 0.1)) -- a reasoned estimate following that established
+        # pattern, not independently verified. See REFERENCES.md.
+        stairs_scale = 0.5
+        stock_step_height_range = (0.05, 0.23)
+        scaled_step_height_range = tuple(v * stairs_scale for v in stock_step_height_range)
+        for stairs_type in ("pyramid_stairs", "pyramid_stairs_inv"):
+            self.scene.terrain.terrain_generator.sub_terrains[stairs_type].step_height_range = (
+                scaled_step_height_range
+            )
+
 
 @configclass
 class UnitreeGo2RoughCerberusEnvCfg_PLAY(UnitreeGo2RoughCerberusEnvCfg):
@@ -50,3 +71,19 @@ class UnitreeGo2RoughCerberusEnvCfg_PLAY(UnitreeGo2RoughCerberusEnvCfg):
         self.events.base_external_force_torque = None
         self.events.push_disturbance = None
         self.curriculum.push_disturbance_curriculum = None
+
+        # Follow-cam: the default viewer is a fixed world-space camera that
+        # never tracks the robot, so footage drifts out of frame once a push
+        # (or just plain walking) moves the robot away from its spawn point --
+        # and, on Rough, this fixed point sits over one terrain cell regardless
+        # of which env/condition is nominally being recorded, which is why
+        # showcase clips for different terrain levels/sub-terrain types all
+        # looked identical (see REFERENCES.md's camera-framing writeup).
+        # asset_root origin makes Isaac Lab recompute eye/lookat from the
+        # robot's current root pose every step instead of once. Needs a
+        # pod-side smoke test to confirm (not verifiable from source alone --
+        # Isaac Lab isn't installed here).
+        self.viewer.origin_type = "asset_root"
+        self.viewer.asset_name = "robot"
+        self.viewer.eye = (-2.5, -2.5, 1.3)
+        self.viewer.lookat = (0.0, 0.0, 0.3)

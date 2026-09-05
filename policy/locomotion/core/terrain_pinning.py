@@ -52,6 +52,21 @@ def sub_terrain_column_for_type(terrain_generator_cfg: TerrainGeneratorCfg, type
     raise ValueError(f"Sub-terrain type {type_name!r} has no column at num_cols={num_cols} (proportion too small).")
 
 
+def sub_terrain_type_for_column(terrain_generator_cfg: TerrainGeneratorCfg, col: int, num_cols: int) -> str:
+    """Inverse of sub_terrain_column_for_type: returns the sub-terrain type name
+    generated at a given column index, using the same proportional column
+    assignment as TerrainGenerator._generate_curriculum_terrains. Lets callers
+    that pin/round-robin by raw column index (push_recovery_eval.py's
+    --terrain_levels sweep) log which type each trial actually ran on.
+    """
+    names = list(terrain_generator_cfg.sub_terrains.keys())
+    proportions = np.array([cfg.proportion for cfg in terrain_generator_cfg.sub_terrains.values()])
+    proportions = proportions / proportions.sum()
+    cumulative = np.cumsum(proportions)
+    type_index = int(np.min(np.where(col / num_cols + 0.001 < cumulative)[0]))
+    return names[type_index]
+
+
 def pin_terrain(env, levels_per_env: list[int], types_per_env: list[int]) -> None:
     """Overwrites terrain.terrain_levels/.terrain_types and recomputes
     env_origins so each env spawns at its assigned (level, type) cell,

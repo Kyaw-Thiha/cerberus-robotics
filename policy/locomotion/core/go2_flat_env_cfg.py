@@ -34,3 +34,15 @@ class UnitreeGo2FlatCerberusEnvCfg_PLAY(UnitreeGo2FlatCerberusEnvCfg):
         self.events.push_disturbance = None
         # the curriculum term references push_disturbance above; must go too
         self.curriculum.push_disturbance_curriculum = None
+
+        # Follow-cam: the default viewer is a fixed world-space camera that
+        # never tracks the robot, so footage drifts out of frame once a push
+        # (or just plain walking) moves the robot away from its spawn point --
+        # see REFERENCES.md's camera-framing writeup. asset_root origin makes
+        # Isaac Lab recompute eye/lookat from the robot's current root pose
+        # every step instead of once. Needs a pod-side smoke test to confirm
+        # (not verifiable from source alone -- Isaac Lab isn't installed here).
+        self.viewer.origin_type = "asset_root"
+        self.viewer.asset_name = "robot"
+        self.viewer.eye = (-2.5, -2.5, 1.3)
+        self.viewer.lookat = (0.0, 0.0, 0.3)

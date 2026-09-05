@@ -109,6 +109,7 @@ import torch
 import gymnasium as gym
 from rsl_rl.runners import OnPolicyRunner
 
+from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.utils.assets import retrieve_file_path
 
@@ -119,6 +120,8 @@ import policy.locomotion  # noqa: F401  -- registers the Cerberus Go2 tasks
 from isaaclab_tasks.utils import get_checkpoint_path
 from isaaclab_tasks.utils.hydra import hydra_task_config
 from policy.locomotion.eval.push_recovery_event import apply_single_push
+from policy.locomotion.core.push_disturbance_cfg import IMPULSE_DURATION_S
+from policy.locomotion.core.push_impulse_event import clear_expired_push_impulses
 from policy.locomotion.core.script_utils import checkpoints_root
 from policy.locomotion.core.terrain_pinning import pin_terrain, sub_terrain_column_for_type
 from policy.locomotion.core.video_capture import record_condition_clips
@@ -162,6 +165,19 @@ def main(env_cfg, agent_cfg):
     env_cfg.scene.num_envs = num_envs
     env_cfg.episode_length_s = args_cli.push_time_s + args_cli.window_s + 1.0
 
+    # apply_single_push (fired manually below via on_window_step, not an EventTerm
+    # trigger) sets its force via the same permanent_wrench_composer that only resets
+    # at episode reset -- so without this clear pass, the showcase's push would persist
+    # for the rest of each short clip instead of the true short impulse the trained
+    # policy actually experienced. See push_impulse_event.py / REFERENCES.md.
+    step_dt = env_cfg.sim.dt * env_cfg.decimation
+    env_cfg.events.push_showcase_clear = EventTerm(
+        func=clear_expired_push_impulses,
+        mode="interval",
+        interval_range_s=(step_dt, step_dt),
+        params={"asset_cfg": SceneEntityCfg("robot", body_names="base")},
+    )
+
     log_root_path = checkpoints_root(os.path.dirname(os.path.dirname(__file__)), agent_cfg)
     if args_cli.checkpoint:
         resume_path = retrieve_file_path(args_cli.checkpoint)
@@ -192,7 +208,13 @@ def main(env_cfg, agent_cfg):
 
     def fire_push_at_window_start(env_idx: int, local_step: int) -> None:
         if local_step == push_local_step:
-            apply_single_push(raw_env, torch.tensor([env_idx], device=raw_env.device), magnitudes_tensor, asset_cfg)
+            apply_single_push(
+                raw_env,
+                torch.tensor([env_idx], device=raw_env.device),
+                magnitudes_tensor,
+                IMPULSE_DURATION_S,
+                asset_cfg,
+            )
 
     output_dir = (
         Path(args_cli.output_dir) if args_cli.output_dir else Path(resume_path).parent / "eval" / "push_recovery_showcase"

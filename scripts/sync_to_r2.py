@@ -17,7 +17,11 @@ is reusable for future phases beyond locomotion, not locomotion-specific
 
 e.g. a Go2 flat run at policy/locomotion/checkpoints/unitree_go2_flat/2026-09-05_14-32-10/
 uploads to r2://<bucket>/locomotion/unitree_go2_flat/2026-09-05_14-32-10/, and
-updates r2://<bucket>/locomotion/unitree_go2_flat/latest.json to point at it.
+updates r2://<bucket>/locomotion/unitree_go2_flat/latest.json to point at it. One
+difference from a plain mirror: model_*.pt/model_best_*.pt (saved at the run dir's
+own root by rsl_rl) land in their own nested .../2026-09-05_14-32-10/checkpoints/
+subfolder on R2, not at the run's root -- everything else (videos/, eval/, params/,
+tensorboard events) mirrors the local layout unchanged.
 
 Two subcommands, because eval doesn't always run alongside training (often
 later, sometimes on a different pod, against a checkpoint that isn't sitting
@@ -113,7 +117,21 @@ def sync_run(module: str, run_dir: Path) -> None:
     run_timestamp = run_dir.resolve().name  # e.g. "2026-09-05_14-32-10"
     remote_prefix = f"{REMOTE}:{bucket}/{module}/{experiment_name}/{run_timestamp}/"
 
-    _run(["rclone", "sync", str(run_dir), remote_prefix, "--progress"], env=rclone_env)
+    # rsl_rl's OnPolicyRunner saves model_*.pt (and BestCheckpointOnPolicyRunner's
+    # model_best_*.pt) directly at the run dir's own root -- not ours to change, it's
+    # stock rsl_rl behavior. On R2 they get their own checkpoints/ subfolder instead,
+    # kept separate from videos/eval/params/tensorboard so the run's R2 folder reads
+    # cleanly as one artifact type per subfolder. "/*.pt" is root-anchored (rclone
+    # filter syntax) -- doesn't touch exported/policy.pt, which already lives in its
+    # own subfolder and isn't part of this reorg.
+    _run(
+        ["rclone", "sync", str(run_dir), remote_prefix, "--progress", "--exclude", "/*.pt"],
+        env=rclone_env,
+    )
+    _run(
+        ["rclone", "copy", str(run_dir), remote_prefix + "checkpoints/", "--progress", "--include", "/*.pt"],
+        env=rclone_env,
+    )
     _write_latest_pointer(bucket, module, experiment_name, run_timestamp, rclone_env)
 
 

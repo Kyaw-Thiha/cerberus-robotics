@@ -27,8 +27,9 @@ r2://<bucket>/
     <experiment_name>/                # e.g. "unitree_go2_flat", agent_cfg.experiment_name
       latest.json                       # {"run": "<run_timestamp>"} -- newest run for this experiment
       <run_timestamp>/                  # one training run, same name as the local log_dir
-        model_0.pt, model_50.pt, ...      # every periodic checkpoint, not just best/final
-        model_best_easy.pt / _medium.pt / _hard.pt
+        checkpoints/
+          model_0.pt, model_50.pt, ...      # every periodic checkpoint, not just best/final
+          model_best_easy.pt / _medium.pt / _hard.pt
         events.out.tfevents...
         params/env.yaml, params/agent.yaml
         git/isaaclab.diff, git/cerberus.diff
@@ -39,7 +40,12 @@ r2://<bucket>/
 
 Local path `policy/locomotion/checkpoints/unitree_go2_flat/2026-09-05_14-32-10/`
 becomes `r2://<bucket>/locomotion/unitree_go2_flat/2026-09-05_14-32-10/` — same
-relative shape, different root.
+relative shape, different root, with one deliberate difference: `model_*.pt`/
+`model_best_*.pt` (which rsl_rl's `OnPolicyRunner` saves at the run dir's own
+local root, not nested) get uploaded into their own `checkpoints/` subfolder on
+R2 instead, so the run's R2 folder reads cleanly as one artifact type per
+subfolder rather than dozens of checkpoint files mixed in at the root
+alongside `params/`, `git/`, tensorboard events, etc.
 
 **Why eval nests inside the run, not a separate top-level `eval/` collection:**
 one R2 prefix then holds everything about a checkpoint — training artifacts and

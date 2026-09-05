@@ -106,8 +106,10 @@ import policy.locomotion  # noqa: F401  -- registers the Cerberus Go2 tasks
 from isaaclab_tasks.utils import get_checkpoint_path
 from isaaclab_tasks.utils.hydra import hydra_task_config
 from policy.locomotion.eval.push_recovery_event import apply_single_push
+from policy.locomotion.core.push_disturbance_cfg import IMPULSE_DURATION_S
+from policy.locomotion.core.push_impulse_event import clear_expired_push_impulses
 from policy.locomotion.core.script_utils import checkpoints_root
-from policy.locomotion.core.terrain_pinning import pin_terrain
+from policy.locomotion.core.terrain_pinning import pin_terrain, sub_terrain_type_for_column
 
 
 @hydra_task_config(args_cli.task, args_cli.agent)
@@ -137,9 +139,19 @@ def main(env_cfg, agent_cfg):
         interval_range_s=(args_cli.push_time_s, args_cli.push_time_s),
         params={
             "magnitudes": magnitudes_tensor,
+            "impulse_duration_s": IMPULSE_DURATION_S,
             "asset_cfg": SceneEntityCfg("robot", body_names="base"),
             "log_angles": True,
         },
+    )
+    # Fires every env.step() (degenerate step_dt interval) to zero out the probe push
+    # once IMPULSE_DURATION_S has elapsed -- see push_impulse_event.py.
+    step_dt = env_cfg.sim.dt * env_cfg.decimation
+    env_cfg.events.push_recovery_probe_clear = EventTerm(
+        func=clear_expired_push_impulses,
+        mode="interval",
+        interval_range_s=(step_dt, step_dt),
+        params={"asset_cfg": SceneEntityCfg("robot", body_names="base")},
     )
 
     log_root_path = checkpoints_root(os.path.dirname(os.path.dirname(__file__)), agent_cfg)
@@ -149,6 +161,10 @@ def main(env_cfg, agent_cfg):
         resume_path = get_checkpoint_path(log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint)
 
     env = gym.make(args_cli.task, cfg=env_cfg)
+
+    # per-env sub-terrain type name, for per-trial CSV logging -- "flat" for a Flat
+    # (magnitude-only) sweep, where there's no terrain-type axis at all.
+    type_name_per_env = ["flat"] * num_envs
 
     if terrain_levels_list is not None:
         terrain = env.unwrapped.scene.terrain
@@ -164,6 +180,11 @@ def main(env_cfg, agent_cfg):
         levels_per_env = [lvl for _, lvl in cells for _ in range(trials)]
         types_per_env = [i % num_cols for i in range(num_envs)]
         pin_terrain(env, levels_per_env, types_per_env)
+
+        terrain_generator = env_cfg.scene.terrain.terrain_generator
+        type_name_per_env = [
+            sub_terrain_type_for_column(terrain_generator, col, num_cols) for col in types_per_env
+        ]
 
     env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
 
@@ -198,10 +219,18 @@ def main(env_cfg, agent_cfg):
     with torch.inference_mode():
         for step in range(total_steps):
             actions = policy(obs)
-            obs, _, dones, _ = env.step(actions)
+            obs, _, dones, extras = env.step(actions)
 
-            newly_done = dones.bool() & ~finished
-            fell |= newly_done
+            # dones fires for BOTH an actual fall (terminated) and the episode's own
+            # natural time_out -- and every trial's episode is deliberately just long
+            # enough to time out right after the observation window regardless of
+            # outcome (episode_length_s = push_time_s + window_s + 1.0), so treating
+            # any `dones` as "fell" incorrectly flags every trial, including clean
+            # recoveries, once their episode reaches that time_out. RslRlVecEnvWrapper
+            # exposes the split via extras["time_outs"] (dones = terminated | truncated,
+            # extras["time_outs"] = truncated) -- only count the non-timeout case as a fall.
+            newly_fell = dones.bool() & ~extras["time_outs"].bool() & ~finished
+            fell |= newly_fell
             finished |= dones.bool()
 
             if step >= sustain_start_step and step < window_end_step:
@@ -256,6 +285,7 @@ def main(env_cfg, agent_cfg):
                 {
                     "magnitude_n": mag,
                     "terrain_level": terrain_label,
+                    "sub_terrain_type": type_name_per_env[env_idx],
                     "trial_index": trial_idx,
                     "push_angle_rad": float(angle_log_cpu[env_idx]),
                     "fell": bool(fell_cpu[env_idx]),
@@ -287,6 +317,7 @@ def main(env_cfg, agent_cfg):
             fieldnames=[
                 "magnitude_n",
                 "terrain_level",
+                "sub_terrain_type",
                 "trial_index",
                 "push_angle_rad",
                 "fell",

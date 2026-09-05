@@ -22,6 +22,17 @@ reimplementing step-counting. Relies on all envs resetting in lockstep at
 eval start (true for push_recovery_eval.py's one-env-per-trial design), so
 every env's interval elapses at the same step and every trial gets pushed at
 the same point in its own episode.
+
+The force is scheduled to self-clear after `impulse_duration_s` via
+push_impulse_event.py's `schedule_push_clear` (paired with a second
+`clear_expired_push_impulses` EventTerm push_recovery_eval.py registers) --
+without this, Isaac Lab's `permanent_wrench_composer` (what
+`set_forces_and_torques` below writes to) never resets except at episode
+reset, so the "push" would actually be a continuous, unending force lasting
+from push_time_s to episode end, not a shove. See REFERENCES.md's "True
+impulse, not a sustained force" section for the investigation that found
+this (a real eval run showing 0% recovery at exactly the peak trained
+magnitude).
 """
 
 from __future__ import annotations
@@ -32,6 +43,8 @@ import torch
 from isaaclab.assets import Articulation, RigidObject
 from isaaclab.managers import SceneEntityCfg
 
+from policy.locomotion.core.push_impulse_event import schedule_push_clear
+
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedEnv
 
@@ -40,6 +53,7 @@ def apply_single_push(
     env: ManagerBasedEnv,
     env_ids: torch.Tensor,
     magnitudes: torch.Tensor,
+    impulse_duration_s: float,
     asset_cfg: SceneEntityCfg = SceneEntityCfg("robot", body_names="base"),
     log_angles: bool = False,
 ) -> None:
@@ -80,3 +94,4 @@ def apply_single_push(
         body_ids=asset_cfg.body_ids,
         env_ids=env_ids,
     )
+    schedule_push_clear(env, env_ids, impulse_duration_s)

@@ -6,11 +6,13 @@ curriculum terms, not a conflict. Rewards, PPO hyperparameters, and network
 architecture are untouched -- see REFERENCES.md.
 """
 
+from isaaclab.managers import CurriculumTermCfg as CurrTerm
 from isaaclab.utils import configclass
 from isaaclab_tasks.manager_based.locomotion.velocity.config.go2.rough_env_cfg import (
     UnitreeGo2RoughEnvCfg,
 )
 
+from .curriculum import terrain_level_frac_at_max, terrain_level_max
 from .push_disturbance_cfg import add_push_disturbance
 
 
@@ -40,6 +42,18 @@ class UnitreeGo2RoughCerberusEnvCfg(UnitreeGo2RoughEnvCfg):
             self.scene.terrain.terrain_generator.sub_terrains[stairs_type].step_height_range = (
                 scaled_step_height_range
             )
+
+        # Diagnostic-only curriculum terms (no effect on training): the stock
+        # terrain_levels term above only logs the MEAN across envs, which can't
+        # confirm plans/handoff_phase0.md's actual "Done when" criterion --
+        # envs reaching the curriculum's top row and cycling back down, not
+        # just a high average. See curriculum.py's terrain_level_max /
+        # terrain_level_frac_at_max docstrings.
+        max_level = self.scene.terrain.terrain_generator.num_rows - 1
+        self.curriculum.terrain_level_max = CurrTerm(func=terrain_level_max)
+        self.curriculum.terrain_level_frac_at_max = CurrTerm(
+            func=terrain_level_frac_at_max, params={"max_level": max_level}
+        )
 
 
 @configclass

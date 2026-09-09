@@ -75,6 +75,16 @@ parser.add_argument("--roll_pitch_bound_deg", type=float, default=30.0, help="Ma
 parser.add_argument(
     "--tracking_error_threshold", type=float, default=0.3, help="Max base_velocity/error_vel_xy (m/s) to count as recovered."
 )
+parser.add_argument(
+    "--min_command_speed_mps",
+    type=float,
+    default=0.5,
+    help="Floor applied to each trial's sampled xy velocity-command magnitude (direction preserved when "
+    "defined, else a fixed random direction). Without this, the standard Uniform(-1,1) command distribution "
+    "(plus its explicit 2%% 'standing' envs) can hand a trial a near-zero/zero command for its whole one-shot "
+    "episode, which then trivially 'passes' without ever attempting real motion -- a measurement artifact, "
+    "not a genuine recovery. Set to 0 to disable and use the raw sampled command.",
+)
 parser.add_argument("--output", type=str, default=None, help="Output CSV path (default: eval/results/<timestamp>.csv).")
 cli_args.add_rsl_rl_args(parser)
 AppLauncher.add_app_launcher_args(parser)
@@ -215,6 +225,51 @@ def main(env_cfg, agent_cfg):
     pitch_final = torch.zeros(num_envs, device=device)
     tracking_error_max_in_sustain = torch.zeros(num_envs, device=device)
 
+    # Command floor -- a trial's episode (7s, see episode_length_s above) is shorter
+    # than the velocity command's own resampling_time_range (10s, both training's
+    # and this eval's), so each trial gets exactly ONE sampled command for its whole
+    # episode. The standard Uniform(-1,1) distribution (plus its explicit 2%
+    # "standing" envs) can hand a trial a near-zero/zero command, which then
+    # trivially "recovers" without ever attempting real motion -- eval is a
+    # one-shot pass/fail grade (unlike training's continuous distance-based
+    # curriculum, which just wastes a low-signal episode rather than mis-grading
+    # one), so this is a genuine measurement bug here, not a design choice worth
+    # preserving the way it is for training's command distribution. Fixed by
+    # flooring the sampled command's xy magnitude, direction preserved when
+    # defined (a real low-but-nonzero sample), else a fixed random direction
+    # (a "standing" env) chosen once and held for the whole trial -- not
+    # re-randomized each step, so the commanded direction doesn't visibly spin
+    # in showcase-style video review. See REFERENCES.md.
+    # `get_term` (returning the live UniformVelocityCommand instance, not just its
+    # cfg) and `vel_command_b` (its (num_envs, 3) xy/yaw command buffer) follow
+    # Isaac Lab's stateful-manager convention (CommandManager is a ManagerBase
+    # subclass; get_command(name) -- already used elsewhere in this file to READ
+    # the current command -- almost certainly delegates to the same term object).
+    # Not independently verified against source this session (Isaac Lab isn't
+    # installed locally) -- needs a pod-side smoke test to confirm before trusting
+    # results from a run that used this flag.
+    command_term = raw_env.command_manager.get_term("base_velocity")
+    obs = env.get_observations()
+    sampled_command_xy = command_term.vel_command_b[:, :2].clone()
+    sampled_speed = torch.norm(sampled_command_xy, dim=1)
+    random_direction = torch.nn.functional.normalize(torch.randn(num_envs, 2, device=device), dim=1)
+    forced_direction = torch.where(
+        (sampled_speed > 1e-6).unsqueeze(1),
+        sampled_command_xy / sampled_speed.clamp(min=1e-6).unsqueeze(1),
+        random_direction,
+    )
+    min_speed = args_cli.min_command_speed_mps
+
+    def apply_command_floor() -> None:
+        if min_speed <= 0.0:
+            return
+        cmd_xy = command_term.vel_command_b[:, :2]
+        too_slow = torch.norm(cmd_xy, dim=1) < min_speed
+        cmd_xy[too_slow] = forced_direction[too_slow] * min_speed
+
+    apply_command_floor()
+    obs = env.get_observations()  # refresh so the first action already sees the floored command
+
     # Planar displacement-from-spawn tracking -- added to check a real reliability
     # concern (see REFERENCES.md / RUN_001.md): every "pyramid"-style sub-terrain
     # function (stairs, inverted stairs, boxes, both slope types) reserves a flat
@@ -222,11 +277,12 @@ def main(env_cfg, agent_cfg):
     # Isaac Lab v2.3.2's mesh_terrains.py/hf_terrains.py source), so a trial that
     # samples a slow/near-zero velocity command can spend its whole ~7s episode
     # never leaving that flat zone -- meaning its pass/fail result doesn't actually
-    # test terrain traversal at all. Logging displacement (not fixing spawn/command
-    # bias yet) so this can be measured directly instead of argued from geometry.
-    obs = env.get_observations()
+    # test terrain traversal at all. The command floor above fixes the root cause;
+    # this logging measures the remaining effect directly (e.g. a real command that
+    # still can't escape a "sticky" terrain type like pyramid_stairs_inv -- see
+    # RUN_001.md's dynamics-asymmetry discussion) instead of arguing from geometry.
     initial_pos_xy = asset.data.root_pos_w[:, :2].clone()
-    commanded_speed_mps = torch.norm(raw_env.command_manager.get_command("base_velocity")[:, :2], dim=1)
+    commanded_speed_mps = torch.norm(command_term.vel_command_b[:, :2], dim=1)
     max_displacement_m = torch.zeros(num_envs, device=device)
     displacement_at_push_m = torch.zeros(num_envs, device=device)
     displacement_at_window_end_m = torch.zeros(num_envs, device=device)
@@ -235,6 +291,7 @@ def main(env_cfg, agent_cfg):
         for step in range(total_steps):
             actions = policy(obs)
             obs, _, dones, extras = env.step(actions)
+            apply_command_floor()  # guard against any per-step internal re-zeroing (e.g. standing envs)
 
             current_disp = torch.norm(asset.data.root_pos_w[:, :2] - initial_pos_xy, dim=1)
             max_displacement_m = torch.maximum(max_displacement_m, current_disp)

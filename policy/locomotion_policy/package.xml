@@ -1,0 +1,30 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematron="http://download.ros.org/schema/package_format3.xsd"?>
+<package format="3">
+  <name>locomotion_policy</name>
+  <version>0.1.0</version>
+  <description>ROS2 inference node running a trained Cerberus locomotion policy from an exported ONNX checkpoint.</description>
+  <maintainer email="k.thiha10.mail@gmail.com">Kevin Thiha</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <depend>rclpy</depend>
+  <depend>sensor_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>std_msgs</depend>
+  <exec_depend>python3-numpy</exec_depend>
+  <!-- onnxruntime is a hard runtime import in inference_node.py but is not
+       a rosdep-resolvable package name, so it is a pip/pixi-only dependency,
+       added via `pixi add onnxruntime` to pixi.toml (see pixi.toml). rosdep
+       cannot install it; the pixi environment provides it instead. -->
+
+  <test_depend>ament_copyright</test_depend>
+  <test_depend>ament_flake8</test_depend>
+  <test_depend>ament_pep257</test_depend>
+  <test_depend>python3-pytest</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

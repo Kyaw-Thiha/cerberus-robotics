@@ -29,18 +29,21 @@ if _REPO_ROOT not in sys.path:
 sys.path.insert(0, os.path.join(os.environ["ISAACLAB_PATH"], "scripts", "reinforcement_learning", "rsl_rl"))
 
 import cli_args  # isort: skip
-from policy.cli_common import check_gpu_driver_for_rendering  # isort: skip
+from policy.cli_common import add_platform_args, check_gpu_driver_for_rendering  # isort: skip
 
 parser = argparse.ArgumentParser(description="Push-recovery video showcase for a Flat-terrain checkpoint.")
 parser.add_argument(
     "--task",
     type=str,
-    default="Isaac-Velocity-Flat-Unitree-Go2-Cerberus-Play-v0",
-    help="Base task to build the showcase env from (Flat only -- see push_recovery_showcase.py for Rough).",
+    default=None,
+    help="Raw gym task id override -- bypasses --platform. Flat only -- see push_recovery_showcase.py "
+    "for Rough.",
 )
 parser.add_argument(
     "--agent", type=str, default="rsl_rl_cfg_entry_point", help="Name of the RL agent configuration entry point."
 )
+add_platform_args(parser)
+parser.set_defaults(terrain="flat")
 parser.add_argument(
     "--magnitudes", type=str, default="0,80,120,160,200", help="Comma-separated push magnitudes (N), one clip each."
 )
@@ -80,15 +83,22 @@ import isaaclab_tasks  # noqa: F401
 import policy.locomotion  # noqa: F401  -- registers the Cerberus Go2 tasks
 from isaaclab_tasks.utils import get_checkpoint_path
 from isaaclab_tasks.utils.hydra import hydra_task_config
+from policy.cli_common import resolve_task_id
+from policy.locomotion.core.platforms.registry import get_platform
 from policy.locomotion.eval.push_recovery_event import apply_single_push
 from policy.locomotion.core.push_disturbance_cfg import IMPULSE_DURATION_S
 from policy.locomotion.core.push_impulse_event import clear_expired_push_impulses
 from policy.locomotion.core.script_utils import checkpoints_root
 from policy.locomotion.core.video_capture import record_condition_clips
 
+# now that policy.locomotion has registered every platform's gym tasks, resolve
+# --platform/--terrain to a concrete task id (unless --task was passed explicitly)
+args_cli.task = resolve_task_id(args_cli, play=True)
+
 
 @hydra_task_config(args_cli.task, args_cli.agent)
 def main(env_cfg, agent_cfg):
+    platform = get_platform(args_cli.platform)
     magnitudes = [float(m) for m in args_cli.magnitudes.split(",")]
 
     num_envs = len(magnitudes)
@@ -103,7 +113,7 @@ def main(env_cfg, agent_cfg):
         func=clear_expired_push_impulses,
         mode="interval",
         interval_range_s=(step_dt, step_dt),
-        params={"asset_cfg": SceneEntityCfg("robot", body_names="base")},
+        params={"asset_cfg": SceneEntityCfg("robot", body_names=platform.root_body_name)},
     )
 
     log_root_path = checkpoints_root(os.path.dirname(os.path.dirname(__file__)), agent_cfg)
@@ -126,7 +136,7 @@ def main(env_cfg, agent_cfg):
     steps_per_clip = round((args_cli.push_time_s + args_cli.window_s) / dt)
 
     magnitudes_tensor = torch.tensor(magnitudes, device=raw_env.device)
-    asset_cfg = SceneEntityCfg("robot", body_names="base")
+    asset_cfg = SceneEntityCfg("robot", body_names=platform.root_body_name)
     asset_cfg.resolve(raw_env.scene)
 
     def fire_push_at_window_start(env_idx: int, local_step: int) -> None:

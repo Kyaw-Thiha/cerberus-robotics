@@ -17,14 +17,6 @@ from .push_impulse_event import apply_push_impulse, clear_expired_push_impulses
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedRLEnvCfg
 
-# Peak values anchored to isaaclab-go2-locomotion's validated Go2 numbers (87.5%
-# recovery at 120N peak vs 0% for the untrained baseline) — see REFERENCES.md.
-# Torque has no verified source anywhere in the Hwangbo/Lee/Miki lineage or the
-# reference repo; this is a reasoned ESTIMATE (peak force x ~0.15m, an
-# approximate Go2 body-frame lever arm), not a verified figure.
-PEAK_FORCE_N = 120.0
-PEAK_TORQUE_NM = 18.0  # ESTIMATE -- see REFERENCES.md
-
 # Interval endpoints: sparse start matches the reference repo's impulse trigger
 # interval (6-10s); dense end is our own conservative interpretation, since
 # Miki et al.'s exact interval (if published at all) was in supplementary
@@ -57,9 +49,17 @@ INTERVAL_SATURATION_K_C = 0.5
 IMPULSE_DURATION_S = 0.2
 
 
-def add_push_disturbance(env_cfg: ManagerBasedRLEnvCfg) -> None:
+def add_push_disturbance(
+    env_cfg: ManagerBasedRLEnvCfg,
+    *,
+    peak_force_n: float,
+    peak_torque_nm: float,
+    root_body_name: str,
+) -> None:
     """Adds the push_disturbance EventTerm (+ its clear pair) and curriculum to env_cfg
-    in place."""
+    in place. `peak_force_n`/`peak_torque_nm`/`root_body_name` are platform-specific --
+    see core/platforms/registry.py's PlatformCfg and REFERENCES.md for how Go2's
+    values were derived."""
     env_cfg.events.push_disturbance = EventTerm(
         func=apply_push_impulse,
         mode="interval",
@@ -68,7 +68,7 @@ def add_push_disturbance(env_cfg: ManagerBasedRLEnvCfg) -> None:
             "force_range": (0.0, 0.0),
             "torque_range": (0.0, 0.0),
             "impulse_duration_s": IMPULSE_DURATION_S,
-            "asset_cfg": SceneEntityCfg("robot", body_names="base"),
+            "asset_cfg": SceneEntityCfg("robot", body_names=root_body_name),
         },
     )
     # Fires every env.step() (degenerate step_dt interval) to zero out any push whose
@@ -78,14 +78,14 @@ def add_push_disturbance(env_cfg: ManagerBasedRLEnvCfg) -> None:
         func=clear_expired_push_impulses,
         mode="interval",
         interval_range_s=(step_dt, step_dt),
-        params={"asset_cfg": SceneEntityCfg("robot", body_names="base")},
+        params={"asset_cfg": SceneEntityCfg("robot", body_names=root_body_name)},
     )
     env_cfg.curriculum.push_disturbance_curriculum = CurrTerm(
         func=push_disturbance_curriculum,
         params={
             "event_term_name": "push_disturbance",
-            "peak_force": PEAK_FORCE_N,
-            "peak_torque": PEAK_TORQUE_NM,
+            "peak_force": peak_force_n,
+            "peak_torque": peak_torque_nm,
             "sparse_interval_range_s": SPARSE_INTERVAL_RANGE_S,
             "dense_interval_range_s": DENSE_INTERVAL_RANGE_S,
             "interval_saturation_k_c": INTERVAL_SATURATION_K_C,

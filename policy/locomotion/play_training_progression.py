@@ -36,18 +36,20 @@ if _REPO_ROOT not in sys.path:
 sys.path.insert(0, os.path.join(os.environ["ISAACLAB_PATH"], "scripts", "reinforcement_learning", "rsl_rl"))
 
 import cli_args  # isort: skip
-from policy.cli_common import check_gpu_driver_for_rendering  # isort: skip
+from policy.cli_common import add_platform_args, check_gpu_driver_for_rendering  # isort: skip
 
 parser = argparse.ArgumentParser(description="Training-progression video: one clip per periodic checkpoint.")
 parser.add_argument(
     "--task",
     type=str,
-    default="Isaac-Velocity-Rough-Unitree-Go2-Cerberus-Play-v0",
-    help="Base task to build the env from.",
+    default=None,
+    help="Raw gym task id override -- bypasses --platform (this script is Rough-only).",
 )
 parser.add_argument(
     "--agent", type=str, default="rsl_rl_cfg_entry_point", help="Name of the RL agent configuration entry point."
 )
+add_platform_args(parser)
+parser.set_defaults(terrain="rough")
 parser.add_argument(
     "--run-dir",
     type=str,
@@ -106,7 +108,12 @@ from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper
 import isaaclab_tasks  # noqa: F401
 import policy.locomotion  # noqa: F401  -- registers the Cerberus Go2 tasks
 from isaaclab_tasks.utils.hydra import hydra_task_config
+from policy.cli_common import resolve_task_id
 from policy.locomotion.core.terrain_pinning import pin_terrain
+
+# now that policy.locomotion has registered every platform's gym tasks, resolve
+# --platform/--terrain to a concrete task id (unless --task was passed explicitly)
+args_cli.task = resolve_task_id(args_cli, play=True)
 
 CHECKPOINT_RE = re.compile(r"^model_(\d+)\.pt$")
 

@@ -62,15 +62,19 @@ def check_gpu_driver_for_rendering() -> None:
     print(f"[INFO] GPU driver {driver_version} OK for rendering.")
 
 
-def add_common_args(parser: argparse.ArgumentParser, default_task: str, task_help: str, video_help: str) -> None:
+def add_common_args(parser: argparse.ArgumentParser, task_help: str, video_help: str) -> None:
     """Adds the CLI args identical across train.py/play.py: --video,
     --video_length, --num_envs, --task, --agent, --seed, --config. Each
     script adds its own additional args after calling this.
+
+    --task has no default here (None) -- pass it explicitly to force a
+    specific gym task id and bypass --platform/--terrain resolution
+    (add_platform_args/resolve_task_id), which is the normal path.
     """
     parser.add_argument("--video", action="store_true", default=False, help=video_help)
     parser.add_argument("--video_length", type=int, default=200, help="Length of the recorded video (in steps).")
     parser.add_argument("--num_envs", type=int, default=None, help="Number of environments to simulate.")
-    parser.add_argument("--task", type=str, default=default_task, help=task_help)
+    parser.add_argument("--task", type=str, default=None, help=task_help)
     parser.add_argument(
         "--agent", type=str, default="rsl_rl_cfg_entry_point", help="Name of the RL agent configuration entry point."
     )
@@ -85,6 +89,47 @@ def add_common_args(parser: argparse.ArgumentParser, default_task: str, task_hel
             "CLI. Explicit CLI overrides still win over the preset for the same key."
         ),
     )
+
+
+def add_platform_args(parser: argparse.ArgumentParser) -> None:
+    """Adds --platform (default 'go2') and --terrain (choices: flat, rough,
+    no default -- caller sets one via parser.set_defaults(terrain=...) after
+    calling this, matching add_common_args' per-script default_task pattern).
+    """
+    parser.add_argument(
+        "--platform",
+        type=str,
+        default="go2",
+        help="Robot platform to train/play (see policy/locomotion/core/platforms/).",
+    )
+    parser.add_argument(
+        "--terrain",
+        type=str,
+        choices=["flat", "rough"],
+        help="Which of the platform's env variants to use.",
+    )
+
+
+def resolve_task_id(args_cli: argparse.Namespace, *, play: bool) -> str:
+    """Resolves the gym task id to use: args_cli.task if the caller passed
+    one explicitly (escape hatch, bypasses --platform/--terrain entirely),
+    otherwise looked up from the platform registry via --platform/--terrain.
+
+    Must be called only after `policy.locomotion` (or any other module that
+    imports a platform's platform.py) has already been imported -- populating
+    the registry needs isaaclab_tasks, which this module's own callers only
+    import after AppLauncher launches (see this module's own docstring for
+    why that ordering matters).
+    """
+    if args_cli.task is not None:
+        return args_cli.task
+
+    from policy.locomotion.core.platforms.registry import get_platform
+
+    platform = get_platform(args_cli.platform)
+    if args_cli.terrain == "flat":
+        return platform.flat_play_task_id if play else platform.flat_task_id
+    return platform.rough_play_task_id if play else platform.rough_task_id
 
 
 def apply_config_preset(args_cli: argparse.Namespace, hydra_args: list[str]) -> list[str]:

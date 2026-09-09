@@ -54,7 +54,7 @@ def apply_single_push(
     env_ids: torch.Tensor,
     magnitudes: torch.Tensor,
     impulse_duration_s: float,
-    asset_cfg: SceneEntityCfg = SceneEntityCfg("robot", body_names="base"),
+    asset_cfg: SceneEntityCfg,
     log_angles: bool = False,
 ) -> None:
     """One-shot horizontal push. `magnitudes` is a [num_envs] tensor of force

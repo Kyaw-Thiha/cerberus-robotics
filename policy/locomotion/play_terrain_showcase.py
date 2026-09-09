@@ -37,7 +37,7 @@ if _REPO_ROOT not in sys.path:
 sys.path.insert(0, os.path.join(os.environ["ISAACLAB_PATH"], "scripts", "reinforcement_learning", "rsl_rl"))
 
 import cli_args  # isort: skip
-from policy.cli_common import check_gpu_driver_for_rendering  # isort: skip
+from policy.cli_common import add_platform_args, check_gpu_driver_for_rendering  # isort: skip
 
 SUB_TERRAIN_TYPES = [
     "pyramid_stairs",
@@ -52,12 +52,15 @@ parser = argparse.ArgumentParser(description="Structured Rough-terrain video sho
 parser.add_argument(
     "--task",
     type=str,
-    default="Isaac-Velocity-Rough-Unitree-Go2-Cerberus-Play-v0",
-    help="Base task to build the showcase env from (must have a terrain-difficulty grid -- Rough only).",
+    default=None,
+    help="Raw gym task id override -- bypasses --platform. Must have a terrain-difficulty grid "
+    "(Rough only).",
 )
 parser.add_argument(
     "--agent", type=str, default="rsl_rl_cfg_entry_point", help="Name of the RL agent configuration entry point."
 )
+add_platform_args(parser)
+parser.set_defaults(terrain="rough")
 parser.add_argument(
     "--levels", type=str, default="0,2,4,6,8", help="Comma-separated terrain difficulty rows to show (0=easiest)."
 )
@@ -106,9 +109,14 @@ import isaaclab_tasks  # noqa: F401
 import policy.locomotion  # noqa: F401  -- registers the Cerberus Go2 tasks
 from isaaclab_tasks.utils import get_checkpoint_path
 from isaaclab_tasks.utils.hydra import hydra_task_config
+from policy.cli_common import resolve_task_id
 from policy.locomotion.core.script_utils import checkpoints_root
 from policy.locomotion.core.terrain_pinning import pin_terrain, sub_terrain_column_for_type
 from policy.locomotion.core.video_capture import record_condition_clips
+
+# now that policy.locomotion has registered every platform's gym tasks, resolve
+# --platform/--terrain to a concrete task id (unless --task was passed explicitly)
+args_cli.task = resolve_task_id(args_cli, play=True)
 
 
 def _build_conditions(levels: list[int], full_coverage_levels: set[int], fixed_type: str) -> list[tuple[int, str]]:

@@ -39,16 +39,22 @@ sys.path.insert(0, os.path.join(os.environ["ISAACLAB_PATH"], "scripts", "reinfor
 
 # local imports
 import cli_args  # isort: skip
-from policy.cli_common import add_common_args, apply_config_preset, check_gpu_driver_for_rendering  # isort: skip
+from policy.cli_common import (  # isort: skip
+    add_common_args,
+    add_platform_args,
+    apply_config_preset,
+    check_gpu_driver_for_rendering,
+)
 
 # add argparse arguments
-parser = argparse.ArgumentParser(description="Train the Cerberus Go2 locomotion policy with RSL-RL.")
+parser = argparse.ArgumentParser(description="Train the Cerberus locomotion policy with RSL-RL.")
 add_common_args(
     parser,
-    default_task="Isaac-Velocity-Flat-Unitree-Go2-Cerberus-v0",
-    task_help="Name of the task (override to the -Rough- variant for step 3's terrain curriculum).",
+    task_help="Raw gym task id override -- bypasses --platform/--terrain entirely.",
     video_help="Record videos during training.",
 )
+add_platform_args(parser)
+parser.set_defaults(terrain="flat")
 parser.add_argument("--video_interval", type=int, default=2000, help="Interval between video recordings (in steps).")
 parser.add_argument("--max_iterations", type=int, default=None, help="RL Policy training iterations.")
 parser.add_argument(
@@ -105,8 +111,13 @@ import isaaclab_tasks  # noqa: F401
 import policy.locomotion  # noqa: F401  -- registers the Cerberus Go2 tasks
 from isaaclab_tasks.utils import get_checkpoint_path
 from isaaclab_tasks.utils.hydra import hydra_task_config
+from policy.cli_common import resolve_task_id
 from policy.locomotion.core.best_checkpoint_runner import BestCheckpointOnPolicyRunner
 from policy.locomotion.core.script_utils import checkpoints_root, maybe_record_video, new_run_log_dir
+
+# now that policy.locomotion has registered every platform's gym tasks, resolve
+# --platform/--terrain to a concrete task id (unless --task was passed explicitly)
+args_cli.task = resolve_task_id(args_cli, play=False)
 
 torch.backends.cuda.matmul.allow_tf32 = True
 torch.backends.cudnn.allow_tf32 = True

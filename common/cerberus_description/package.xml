@@ -1,0 +1,18 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematron="http://download.ros.org/schema/package_format3.xsd"?>
+<package format="3">
+  <name>cerberus_description</name>
+  <version>0.1.0</version>
+  <description>Robot description (URDF/xacro/meshes) for Cerberus platforms. Go2's URDF is vendored from unitreerobotics/unitree_ros (BSD-3-Clause), converted from catkin to ament_cmake -- see LICENSE.</description>
+  <maintainer email="k.thiha10.mail@gmail.com">Kevin Thiha</maintainer>
+  <license>BSD-3-Clause</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <exec_depend>xacro</exec_depend>
+  <exec_depend>robot_state_publisher</exec_depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

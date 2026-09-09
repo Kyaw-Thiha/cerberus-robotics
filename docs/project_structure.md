@@ -39,6 +39,43 @@ workspace — no separate `ros2_ws/`.
    one is hierarchically composed inside the other** (locomotion is a frozen
    low-level controller under the manipulation/navigation policy — not a
    peer, so it nests under `policy/`, not promoted to root).
+6. **Embodiment identity is a config, never a hardcoded assumption**, so the
+   quadruped and/or arm can be swapped later without restructuring this tree
+   or rewriting `train.py`, the ROS2 inference nodes, or the safety filter.
+   See "Embodiment configuration pattern" below for the concrete practices.
+
+## Embodiment configuration pattern (for cross-platform modularity)
+
+The current combo is Go2 (legs) + ARX5 (arm), but the codebase should not
+assume this combo is permanent — retraining on a swap is expected and fine,
+rewriting the codebase on a swap is not. Three practices make that true,
+following the pattern LeggedManip_Lab already demonstrates across its 7
+supported platform combos (one `train.py`, a `--task` string selects the
+platform):
+
+1. **Compose embodiment configs, don't write one monolithic robot config.**
+   `common/cerberus_description/` defines separable `UNITREE_GO2_CFG` (legs)
+   and `ARX5_CFG` (arm) objects and composes them into `GO2_ARX5_CFG`. A
+   future arm swap edits only the arm sub-config; a future leg-platform swap
+   (e.g. to ANYmal, the likely candidate if an inspection/intervention
+   mission is added later) edits only the leg sub-config.
+2. **Index joints by name, never by array position**, in both the RL
+   observation/action space (`policy/locomotion/`, `policy/manipulation/`)
+   and the ROS2 inference nodes (`policy/locomotion_policy/`,
+   `policy/manipulation_policy/`). Isaac Lab's `ArticulationCfg` supports
+   this natively — it costs nothing to do now and is a real refactor to
+   retrofit later.
+3. **ROS2 inference nodes stay generic**: `sensor_msgs/JointState` keyed by
+   name, joint list loaded from a launch-time YAML/URDF param rather than
+   hardcoded in node source. `safety_filter/core/`'s CBF constants (joint
+   limits, self-collision geometry, torque limits) are likewise loaded from
+   the embodiment config rather than inlined — the CBF/QP *formulation* code
+   survives a swap even though its numeric parameters don't.
+
+Checkpoint naming follows the same principle: prefix with the embodiment id
+(`go2_arx5_...`, not just `go2_...`) once the arm is in the loop, so a future
+combo's checkpoints don't collide with or shadow this one's (see "Checkpoint
+versioning" below for the current, legs-only-so-far naming).
 
 ## Tree
 
@@ -51,7 +88,15 @@ cerberus/
 │
 ├── common/                        # shared, dependency-only, no standalone behavior
 │   ├── cerberus_msgs/               # custom msg/srv/action defs
-│   └── cerberus_description/        # Go2 + arm URDF/USD
+│   └── cerberus_description/        # UNITREE_GO2_CFG + ARX5_CFG, composed into
+│                                       # GO2_ARX5_CFG — see embodiment config pattern above
+│
+├── worlds/                        # mission environment scenes — pulled from external
+│   │                                 # libraries, not authored here; gitignored like data/
+│   ├── household/                   # BEHAVIOR-1K / OmniGibson scene USDs — Phase 1/2 primary
+│   ├── retail_restaurant_office/    # same OmniGibson/BEHAVIOR-1K asset family — secondary
+│   │                                 # missions, near-zero marginal cost over household
+│   └── fetch_scenes.py                # pulls/caches scene USDs; no scene binaries committed
 │
 ├── perception/
 │   ├── terrain_perception/          # ROS2 pkg: terrain/obstacle perception for nav
@@ -97,7 +142,8 @@ cerberus/
 │   ├── scripts/
 │   └── systemd/
 │
-├── docs/                             # architecture.svg, pipeline diagram, this file, isaac_lab_workflow.md
+├── docs/                             # architecture.svg, pipeline diagram, this file,
+│                                       # isaac_lab_workflow.md, manipulator.md (VLM/VLA plan)
 ├── docker/
 │   └── Dockerfile.remote             # Isaac Lab base image + pinned extras, built on rented GPU box
 ├── scripts/                          # cross-cutting ops tooling, not owned by one stack component
@@ -163,6 +209,13 @@ possible robustify loop rather than immediately after Phase 0 training:
 - `go2_locomotion_final.pt` — the checkpoint that passed the Phase 0.5 gate.
   This, and only this, is what Phase 1's ROS2 `locomotion_policy` inference
   node and any composed high-level policy are ever built against.
+
+This naming is legs-only and stays that way through Phase 0.5, since the arm
+isn't in the loop yet. Once Phase 2 attaches ARX5, the manipulation-phase
+checkpoints under `policy/manipulation/` switch to an embodiment-prefixed
+scheme (`go2_arx5_...`) per the "Embodiment configuration pattern" section
+above, so a future arm or platform swap gets its own checkpoint lineage
+rather than colliding with this one's.
 
 ## Open item
 

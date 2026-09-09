@@ -1,0 +1,23 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematron="http://download.ros.org/schema/package_format3.xsd"?>
+<package format="3">
+  <name>cerberus_bringup</name>
+  <version>0.1.0</version>
+  <description>Launch files composing the full Cerberus graph. Owns platform/locomotion-mode selection (platforms.yaml) -- see docs/superpowers/specs/2026-09-09-multi-platform-config-design.md.</description>
+  <maintainer email="k.thiha10.mail@gmail.com">Kevin Thiha</maintainer>
+  <license>MIT</license>
+
+  <buildtool_depend>ament_python</buildtool_depend>
+
+  <exec_depend>cerberus_description</exec_depend>
+  <exec_depend>locomotion_policy</exec_depend>
+  <exec_depend>robot_state_publisher</exec_depend>
+  <exec_depend>xacro</exec_depend>
+
+  <test_depend>python3-pytest</test_depend>
+  <test_depend>python3-yaml</test_depend>
+
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

@@ -1,0 +1,49 @@
+go2:
+  urdf_relative_path: urdf/go2.urdf.xacro
+  # PLACEHOLDER: matches this repo's URDF joint order, NOT independently
+  # verified against Isaac Lab's actual training-time articulation joint
+  # order (requires a pod-side check: import the trained env, read
+  # env.scene['robot'].joint_names). Do not trust this for real hardware
+  # until verified. See docs/locomotion_architecture.md's "Known
+  # verification gaps" section.
+  joint_names:
+    - FR_hip_joint
+    - FR_thigh_joint
+    - FR_calf_joint
+    - FL_hip_joint
+    - FL_thigh_joint
+    - FL_calf_joint
+    - RR_hip_joint
+    - RR_thigh_joint
+    - RR_calf_joint
+    - RL_hip_joint
+    - RL_thigh_joint
+    - RL_calf_joint
+  # PLACEHOLDER: zero vector, not sourced from the real Go2 default joint
+  # angles (that sourcing hasn't happened in this session). One value per
+  # entry in joint_names, same order.
+  default_joint_pos:
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+    - 0.0
+  locomotion_modes:
+    blind:
+      checkpoint: policy/locomotion/checkpoints/go2_locomotion_flat_v1_candidate.onnx
+      observation_shape: proprioception_only
+      height_scan_size: 187
+      action_scale: 0.25
+    perceptive:
+      checkpoint: policy/locomotion/checkpoints/go2_locomotion_v1_candidate.onnx
+      observation_shape: proprioception_plus_height_scan
+      height_scan_size: 187
+      action_scale: 0.25
+  default_locomotion_mode: blind

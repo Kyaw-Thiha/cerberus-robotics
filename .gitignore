@@ -16,6 +16,14 @@ policy/locomotion/checkpoints/*
 !policy/locomotion/checkpoints/.gitkeep
 policy/locomotion/eval/results/
 
+# pulled-down run artifacts (videos, tensorboard events, csvs, params) --
+# large, regenerable from R2, not meant to be committed. Scoped to these two
+# folder-naming patterns specifically (not a blanket *.mp4/*.png ignore) so
+# RUN_*.md docs at runs/ top level and any future README-attached gifs/images
+# elsewhere in the repo stay trackable.
+policy/locomotion/runs/*_analysis/
+policy/locomotion/runs/*_videos/
+
 # python
 __pycache__/
 *.pyc

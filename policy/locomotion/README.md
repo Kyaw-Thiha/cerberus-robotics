@@ -1,12 +1,11 @@
 # Go2 Locomotion Policy
 
 A learned walking policy for the Unitree Go2 quadruped, trained in Isaac Lab.
-It walks on flat ground and rough, stepped terrain, follows a commanded
-velocity, and recovers from pushes. This is Phase 0 of the Cerberus project:
-proving the training pipeline end to end and producing a solid low level
-policy for later phases to build on.
+It walks on flat ground and rough, stepped terrain, follows a commanded velocity, and recovers from pushes.
 
 <!-- Video/gif showcase goes here -->
+
+---
 
 ## What it does
 
@@ -16,6 +15,8 @@ policy for later phases to build on.
 - Recovers from a sideways push without falling.
 - Does not use vision. It only feels the ground through joint and body
   sensors (proprioception).
+
+---
 
 ## How it was trained
 
@@ -38,13 +39,14 @@ trained for 1500 iterations per run.
 See `REFERENCES.md` for the full reasoning behind these choices, and
 `runs/RUN_001.md` and `runs/RUN_002.md` for the detailed session logs.
 
+---
+
 ## Results
 
 Push recovery rate across a range of push strengths and terrain difficulty
 levels (100 trials per cell):
 
-![Push recovery curve](eval/rough_push_recovery_curve.png)
-
+<img src="eval/rough_push_recovery_curve.png" width="500" alt="Push recovery curve">
 
 | Push magnitude | Easy terrain | Medium terrain | Hard terrain |
 |---|---|---|---|
@@ -69,16 +71,19 @@ difficulty levels):
 Boxes and descending stairs are the two weakest terrain types. Everything
 else holds up well even under a strong push.
 
+---
+
 ## Known limitations
 
 - Recovery on boxes and descending stairs is noticeably weaker than on other
   terrain. Not yet root caused.
 - No perception. The policy cannot see obstacles ahead of time, only react
-  once it touches them. Vision is planned for a later phase, added as a
-  separate policy layered on top rather than folded into this network.
+  once it touches them. Vision is planned as a separate policy layered on
+  top rather than folded into this network.
 - This checkpoint is a candidate, not final. It still needs to pass a
-  separate adversarial robustness check (Phase 0.5) before later phases can
-  build on it.
+  separate adversarial robustness check before anything else builds on it.
+
+---
 
 ## References
 

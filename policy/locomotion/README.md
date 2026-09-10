@@ -41,6 +41,21 @@ See `REFERENCES.md` for the full reasoning behind these choices, and
 
 ---
 
+## Checkpoints
+
+Both checkpoints from this run (flat-terrain, and rough-terrain with push
+recovery) are public. Grab one with:
+
+```bash
+python3 scripts/fetch_checkpoint.py locomotion go2_locomotion_v1_candidate.onnx
+```
+
+Drop the filename to fetch every locomotion checkpoint at once. Use the
+`flat` file for the flat-only policy, or swap `.onnx` for `.pt` if you want
+the raw checkpoint instead of the exported inference format.
+
+---
+
 ## Results
 
 Push recovery rate across a range of push strengths and terrain difficulty

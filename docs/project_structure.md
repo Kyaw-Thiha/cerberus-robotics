@@ -77,6 +77,19 @@ Checkpoint naming follows the same principle: prefix with the embodiment id
 combo's checkpoints don't collide with or shadow this one's (see "Checkpoint
 versioning" below for the current, legs-only-so-far naming).
 
+### `policy/locomotion/core/platforms/`
+
+`PlatformCfg` per robot (e.g. `core/platforms/go2/platform.py`'s `GO2`),
+narrower than the `common/cerberus_description/` embodiment configs above —
+covers what Isaac Lab's training/eval/CLI stack needs (gym task ids, PPO
+agent cfg class, push-disturbance magnitudes, `--platform` CLI resolution),
+not joints/bodies/USDs (those come from Isaac Lab's upstream Go2 config for
+now).
+
+Whether it ever imports `common/cerberus_description/` is open. If it
+happens, the dependency only runs one way: `common/` is imported by
+`core/platforms/`, never the reverse.
+
 ## Tree
 
 ```
@@ -196,6 +209,12 @@ because:
   discoverable from either side.
 
 ## Checkpoint versioning within `policy/locomotion/checkpoints/`
+
+The `go2_` prefix below comes from `GO2.checkpoint_prefix` in
+`policy/locomotion/core/platforms/go2/platform.py` (defaults to
+`"<platform.name>_locomotion"`, i.e. `go2_locomotion`) -- a new platform gets
+its own prefix automatically from its own `PlatformCfg.name`, not a
+convention someone has to remember to follow by hand.
 
 Introduced alongside the Phase 0.5 gate, since freezing now happens after a
 possible robustify loop rather than immediately after Phase 0 training:

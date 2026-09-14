@@ -23,9 +23,15 @@ assumed absent forever.
 
 | Modality | Decision | Isaac Lab mechanism |
 |---|---|---|
-| **RGB + Depth camera** | **In** | `CameraCfg`, RTX renderer (rgb, depth, normals, segmentation) |
-| **LiDAR** | **In** | `RayCasterCfg` + `patterns.LidarPatternCfg` — a documented Go2 config combines this with a front `CameraCfg` in the same scene |
-| **Radar** | **Out (for now)** | No native Isaac Lab sensor class exists (`isaacsim.sensors.experimental.rtx.Radar` is a raw Isaac Sim / Replicator API, single-prim, not batched for parallel RL envs). Requires Motion BVH for the Doppler effect, which materially raises VRAM/render cost stack-wide. Radar's actual value proposition (fog/dust/smoke penetration) doesn't organically appear in a clean sim scene without deliberately building obscurant scenarios to exercise it. **Revisit only if** a dedicated perceptual-degradation ablation scenario is built later. |
+| **LiDAR (spinning)** | **In — primary rig only** | `RayCasterCfg` + `patterns.LidarPatternCfg`. Spinning preferred over solid-state — legged robots' omnidirectional motion benefits from the wider FoV (Boxi, ETH 2025); matches stock Go2 EDU's built-in 4D LiDAR. A single front camera is sufficient alongside it — LiDAR's near-field/underbody coverage makes a rear camera redundant; no reference Go2+LiDAR rig in the literature (SCAN-Planner, VOP-Nav, RAEM, ForEnt) pairs it with one. |
+| **Front stereo camera, global shutter** | **In — both rigs** | `CameraCfg` (stereo pair). Stereo + global shutter, not RGB-D/rolling-shutter — a 2026 multi-platform quadruped SLAM study found stereo consistently outperforms RGB-D and global shutter avoids the motion-blur tracking failures rolling shutter showed under quadruped locomotion. ~15–25° downward tilt (consistent with published Go2 nav/parkour rigs). |
+| **Rear stereo camera** | **In — camera-only ablation rig only** | Same `CameraCfg` type, mirrored mount. Only needed when LiDAR is absent — DELTA's own real deployment (front + rear RealSense D430) is the reference rig for this path. |
+| **Wrist-adjacent RGB-D (arm camera)** | **In — Phase 2, placeholder for now** | `CameraCfg`, mounted ~10cm proximal from the ARX5 wrist joint, not on the gripper, to avoid arm self-occlusion (per a quadruped-manipulator EAS design paper). RGB-D matches the Diffusion Policy/ACT baselines Phase 2 implements faithfully — though a 2026 paper (SCDP) found single-RGB can match or beat wrist-camera+RGB-D setups on manipulation benchmarks, which is a candidate additional Phase 2 ablation, not resolved here. |
+| **Radar** | **Out (for now)** | No native Isaac Lab sensor class for batched parallel RL envs (`isaacsim.sensors.experimental.rtx.Radar` is a raw Isaac Sim / Replicator API, single-prim, not batched for parallel RL envs). Requires Motion BVH for the Doppler effect, which materially raises VRAM/render cost stack-wide. Radar's actual value proposition (fog/dust/smoke penetration) doesn't organically appear in a clean sim scene without deliberately building obscurant scenarios to exercise it. **Revisit only if** a dedicated perceptual-degradation ablation scenario is built later. |
+
+See `docs/sensor_setup_handoff.md` for concrete Isaac Lab configs, the
+sensor-suite composition pattern, and how algorithms declare and validate
+their required sensor inputs.
 
 ---
 
@@ -61,7 +67,7 @@ assumed absent forever.
 
 **DELTA** — deformable elevation-attention encoder: predicts a *fixed* number of proprioception-conditioned sampling locations and encodes only those local elevation patches, decoupling encoder cost from map resolution (vs. AME-2's dense full-map attention).
 - Park, Jung, Hwangbo (KAIST) — Aug 2026
-- **Metrics:** 99.5% success rate on stage-10 stepping stones; 96.6% avg. success across 4 unseen mixed terrain courses, vs. AME's 26.0% and a plain-MLP encoder's 3.5% on the same courses. 9.9× faster wall-clock training to reach 90% SR. Real-world: 100% SR across 21/21 trials on RAIBO2, depth-camera only (Intel RealSense D430, front + rear), no LiDAR, no foothold planner.
+- **Metrics:** 99.5% success rate on stage-10 stepping stones; 96.6% avg. success across 4 unseen mixed terrain courses, vs. AME's 26.0% and a plain-MLP encoder's 3.5% on the same courses. 9.9× faster wall-clock training to reach 90% SR. Real-world: 100% SR across 21/21 trials on RAIBO2, front + rear Intel RealSense D430 depth cameras (no LiDAR, no foothold planner).
 - Paper: https://www.alphaxiv.org/abs/2608.22033
 - GitHub: not found as of this pass.
 
@@ -96,7 +102,7 @@ assumed absent forever.
 
 **HiPAN** — hierarchical RL, no explicit map: a high-level policy reads onboard depth images directly and outputs strategic navigation commands (velocity **and** body posture — crouch/tilt for confined spaces); a low-level posture-adaptive locomotion policy executes them. Trained with "Path-Guided Curriculum Learning" to escape local minima (dead-ends) without myopic behavior.
 - Jeong, Yoon, Choi, Shin, Yang, Yoon (KAIST) — Apr 2026
-- **Metrics:** 94.4–98.5% success rate / 83.6–93.2 SPL across 4 unstructured 3D test environments, vs. 20–88% SR for classical Bug/Wall-Following and 44–82% SR for an end-to-end flat-RL baseline. Real-world: Unitree Go1 + RealSense D435i depth camera only, no LiDAR, no map — demonstrated dead-end backtracking and posture adaptation under a height-constrained passage.
+- **Metrics:** 94.4–98.5% success rate / 83.6–93.2 SPL across 4 unstructured 3D test environments, vs. 20–88% SR for classical Bug/Wall-Following and 44–82% SR for an end-to-end flat-RL baseline. Real-world: Unitree Go1 + single front-facing RealSense D435i depth camera, no LiDAR, no map — demonstrated dead-end backtracking and posture adaptation under a height-constrained passage.
 - Paper: https://www.alphaxiv.org/abs/2604.26504
 - GitHub: not found as of this pass (project page referenced, URL not captured).
 - Paradigm: mapless, learned, implicit.
@@ -132,6 +138,7 @@ Same underlying techniques as §2 (Terrain Understanding), viewed from the "how 
 | Local planner | SCAN-Planner (optimization, static/structured) | VOP-Nav (learned, dynamic/crowded) | Does either degrade badly in the other's regime (SCAN-Planner with moving pedestrians; VOP-Nav on a staircase with overhangs)? If both degrade meaningfully, that argues for a switched/blended local-planner layer rather than picking one — a stronger systems finding than either paper alone claims. |
 | Global planner | RAEM (explicit map + graph search) | HiPAN (mapless, learned) | Classical-vs-learned navigation, directly on your stated PhD interest in what should be classical vs. learned in a deployed system. |
 | Uncertainty modeling | AME-2's Bayesian winner-take-all (in-domain, cheap) | UP-Fuse-style learned uncertainty gating (general, more robust under degradation) | Is the cheaper in-domain approach "good enough," or does the more general gating mechanism earn its extra complexity? |
+| **Sensor rig** | **LiDAR + front stereo camera** | **Front + rear stereo camera, no LiDAR** | What does LiDAR actually buy over a well-designed camera-only rig, on our own household scenes? See `docs/sensor_setup_handoff.md` for the concrete configs and how algorithms declare which rig they require. |
 
 ---
 
@@ -142,6 +149,7 @@ Per earlier scoping discussion, these are real components of the eventual stack 
 - **Last-resort safety filter** (CBF/shielding) — needs a mature, composed policy stack to wrap and concrete failure modes to constrain against; premature before Phase 1+2 are done.
 - **Object-level perception** (6D pose for grasp targets) — Phase 2 (manipulation), different job from Phase 1's "don't hit things while navigating."
 - **Radar** — see Sensor Modalities table above.
+- **Wrist/arm camera** — Phase 2; see `docs/sensor_setup_handoff.md` for the reserved config placeholder.
 
 ---
 
@@ -151,3 +159,4 @@ Per earlier scoping discussion, these are real components of the eventual stack 
 - Whether SCAN-Planner / RAEM's "code will be released" repos are live yet — worth re-checking before committing to either as a code base to build on.
 - Whether to pursue the VOP-Nav / SCAN-Planner blended-local-planner idea as a real deliverable, or treat the ablation as purely diagnostic.
 - Whether UP-Fuse's gating mechanism is worth reimplementing standalone, or whether AME-2's native uncertainty handling is sufficient given compute constraints.
+- Exact stereo camera specs (baseline, resolution) not yet tuned against a specific real-hardware reference — see `docs/sensor_setup_handoff.md` §7 for current placeholders.

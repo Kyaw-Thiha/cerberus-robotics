@@ -159,5 +159,6 @@ Most other module level implementation specifics are intentionally not locked in
 - Object level perception approach for grasp target detection and pose estimation, not yet decided.
 - Phase 0.5's observation/state-estimator attack modality (stretch goal, deferred by default) — revisit only if the two-modality gate is inconclusive or if time allows after the core gate is implemented.
 - Whether Isaac Lab Mimic works cleanly against a custom fused GO2-ARX5 combo out of the box, or needs adaptation — not yet verified.
+- IL data-mixing fallback: general prior-sim co-training (RoboCasa/MimicGen-style, ~90-99% mix ratio, Maddukuri et al. 2025) is a proven lever for the ARX5 grasp/place sub-skill if raw demos are thin — but nothing covers the loco-manip (base+arm) motion itself; that stays fully self-collected and could be a small contribution.
 - Concrete embodiment-config module design (how `UNITREE_GO2_CFG` and `ARX5_CFG` compose, and how ROS2 nodes/safety filter consume it) — pattern is decided (see `project_structure.md`), exact implementation is not yet written.
 - VLM/VLA architecture for the orchestrator's task decomposition — see `manipulator.md`, explicitly a placeholder pending Phase 2 research.

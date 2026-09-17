@@ -94,6 +94,18 @@ def test_go2_locomotion_mode_declares_checkpoint_derived_constants(mode_name):
     assert "action_scale" in mode
 
 
+@pytest.mark.parametrize("mode_name", ["blind", "perceptive"])
+def test_go2_locomotion_mode_declares_sensor_requirements(mode_name):
+    # Same field AlgorithmCfg.sensor_requirements uses -- validated the same
+    # way in bringup.launch.py. Neither mode needs a real rig sensor today
+    # (height_scan isn't part of SensorSuiteCfg's namespace), so both are
+    # empty, but the field must exist for that to be an explicit fact
+    # rather than an absent key.
+    go2 = _load_platforms()["go2"]
+    mode = go2["locomotion_modes"][mode_name]
+    assert mode["sensor_requirements"] == {}
+
+
 def test_go2_default_locomotion_mode_is_blind():
     go2 = _load_platforms()["go2"]
     assert go2["default_locomotion_mode"] == "blind"

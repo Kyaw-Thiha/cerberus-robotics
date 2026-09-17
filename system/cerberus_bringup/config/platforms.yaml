@@ -35,15 +35,25 @@ go2:
     - 0.0
     - 0.0
     - 0.0
+  # sensor_requirements: rig sensors this mode needs (same field as
+  # AlgorithmCfg's) -- fails launch if missing. height_scan doesn't count:
+  # it comes from terrain_perception, not raw hardware (see below).
+  # requires_implemented: packages that must have a real (non-stub)
+  # algorithm for this mode to be a validated deployment -- warns, doesn't
+  # fail, since running with a stub is a supported bring-up config.
   locomotion_modes:
     blind:
       checkpoint: policy/locomotion/checkpoints/go2_locomotion_flat_v1_candidate.onnx
       observation_shape: proprioception_only
       height_scan_size: 187
       action_scale: 0.25
+      sensor_requirements: {}
+      requires_implemented: []
     perceptive:
       checkpoint: policy/locomotion/checkpoints/go2_locomotion_v1_candidate.onnx
       observation_shape: proprioception_plus_height_scan
       height_scan_size: 187
       action_scale: 0.25
+      sensor_requirements: {}
+      requires_implemented: [terrain_perception]
   default_locomotion_mode: blind

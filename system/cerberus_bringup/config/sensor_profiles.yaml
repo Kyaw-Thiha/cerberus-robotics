@@ -1,0 +1,41 @@
+# Sensor-rig selection, mirrors platforms.yaml's role for embodiment.
+#
+# `sensors` is a hand-kept mirror of common/cerberus_description/sensors/sensor_configs.py's
+# LIDAR_CAMERA_SUITE/CAMERA_ONLY_SUITE -- not auto-checked, since that file
+# needs isaaclab (training-only, never installed where this launches). Keep
+# them in sync by hand; only a pod-side check can verify it for real.
+#
+# `algorithms.<package>` is the default algorithm for that package under this
+# profile, must match a name in that package's own core/algorithms.py
+# (checked by test/test_sensor_profiles_yaml.py). `null` = no candidate in
+# docs/perception.md fits this profile yet, a real research gap -- launching
+# that package here needs an explicit --<package>_algorithm override.
+
+lidar_camera:
+  sensors:
+    lidar: true
+    front_camera: true
+    rear_camera: false
+    wrist_camera: false
+  algorithms:
+    slam: fast_lio2
+    terrain_perception: delta
+    local_planner: scan_planner
+    global_planner: raem
+
+camera_only:
+  sensors:
+    lidar: false
+    front_camera: true
+    rear_camera: true
+    wrist_camera: false
+  algorithms:
+    # Both perception.md SLAM candidates (FAST-LIO2, FAST-LIVO2) require
+    # LiDAR -- no camera-only-rig SLAM candidate is documented yet.
+    slam: null
+    terrain_perception: delta
+    # Both perception.md local-planner candidates (SCAN-Planner, VOP-Nav)
+    # require LiDAR -- no camera-only-rig local-planner candidate is
+    # documented yet.
+    local_planner: null
+    global_planner: hipan

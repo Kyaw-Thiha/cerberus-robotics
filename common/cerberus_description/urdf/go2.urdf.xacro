@@ -109,6 +109,49 @@
     <link name="front_camera">
     </link>
 
+    <!-- Cerberus nav sensor rig. See common/cerberus_description/sensors/sensor_configs.py,
+         which these positions must match. "trunk" and Isaac Lab's "base" prim are
+         coincident (the floating_base joint below has zero offset), so mounting
+         here is equivalent to sensor_configs.py's Robot/base prim_path.
+         Orientation (rpy) intentionally left at zero, NOT yet converted from
+         sensor_configs.py's ROS optical frame quaternion. An incorrect guess
+         would be a silent TF bug, not a placeholder; position only is enough
+         for the frames to exist. Do the rotation as a follow up. -->
+    <joint name="front_cam_left_joint" type="fixed">
+        <parent link="trunk"/>
+        <child link="front_cam_left"/>
+        <origin rpy="0 0 0" xyz="0.32 -0.06 0.05"/>
+    </joint>
+    <link name="front_cam_left"/>
+
+    <joint name="front_cam_right_joint" type="fixed">
+        <parent link="trunk"/>
+        <child link="front_cam_right"/>
+        <origin rpy="0 0 0" xyz="0.32 0.06 0.05"/>
+    </joint>
+    <link name="front_cam_right"/>
+
+    <joint name="rear_cam_left_joint" type="fixed">
+        <parent link="trunk"/>
+        <child link="rear_cam_left"/>
+        <origin rpy="0 0 0" xyz="-0.32 -0.06 0.05"/>
+    </joint>
+    <link name="rear_cam_left"/>
+
+    <joint name="rear_cam_right_joint" type="fixed">
+        <parent link="trunk"/>
+        <child link="rear_cam_right"/>
+        <origin rpy="0 0 0" xyz="-0.32 0.06 0.05"/>
+    </joint>
+    <link name="rear_cam_right"/>
+
+    <joint name="lidar_joint" type="fixed">
+        <parent link="trunk"/>
+        <child link="lidar"/>
+        <origin rpy="0 0 0" xyz="0 0 0.05"/>
+    </joint>
+    <link name="lidar"/>
+
     <!--
     <joint name="load_joint" type="fixed">
         <parent link="trunk"/>

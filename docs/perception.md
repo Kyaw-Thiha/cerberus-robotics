@@ -39,18 +39,23 @@ their required sensor inputs.
 
 ### 1. SLAM (state estimation + mapping, merged)
 
-**FAST-LIO2** — LiDAR-inertial odometry, direct point registration (no feature extraction), incremental k-d tree (ikd-Tree) map. The de facto standard practical baseline — used as the real-world localization backbone by RAEM, SCAN-Planner, and VOP-Nav below.
-- Xu, Cai, He, Lin, Zhang — IEEE T-RO, Aug 2022 (arXiv: Jul 2021)
-- Paper: https://arxiv.org/abs/2107.06829
-- GitHub: https://github.com/hku-mars/FAST_LIO
-- Role here: **LiDAR-only baseline** for the SLAM ablation below.
+Three sensor configs, two candidates each (baseline vs. latest), so each config
+gets its own ablation rather than one algorithm being picked project-wide. Full
+implementation detail — repo links, ROS versions, the pluggable-backend
+architecture, Docker/`ros1_bridge` strategy, ground-truth export, and the
+eval/viz pipeline — lives in `docs/slam_handoff.md`; this is the short version.
 
-**FAST-LIVO2** — tightly-coupled LiDAR-inertial-**visual** odometry, direct methods for both LiDAR and camera fused via a sequential-update error-state iterated Kalman filter on one unified voxel map.
-- Zheng et al. (HKU-MARS) — Aug 2024
-- **Metrics:** 0.044 m avg. translational RMSE across 25 benchmark sequences (NTU-VIRAL + Hilti), vs. 0.151 m for FAST-LIO2 (LiDAR-only), 0.278 m for R3LIVE, 1.928 m for LVI-SAM. Runs on both x86 and ARM (Kryo585).
-- Paper: https://www.alphaxiv.org/abs/2408.14035
-- GitHub: https://github.com/hku-mars/FAST-LIVO2
-- Role here: **LiDAR+camera fused** candidate.
+| Sensor config | Baseline | Latest |
+|---|---|---|
+| LiDAR only (primary rig, LiDAR-only algorithm) | FAST-LIO2 | BIEVR-LIO |
+| LiDAR + camera (primary rig, fused algorithm) | FAST-LIVO2 | LVI-Q |
+| Camera-only (ablation rig) | ORB-SLAM3 (stereo, no IMU) | ORB-SLAM3 + Multicam-SLAM fusion |
+
+RGB-D was considered as a possible fourth config and rejected: a systematic
+quadruped SLAM benchmark (Corlito et al., KIT/Freiburg, 2026) found stereo
+consistently outperforms RGB-D on a legged platform — this confirms the
+`sensor_setup_handoff.md` stereo-over-RGB-D decision independently rather than
+contradicting it.
 
 ---
 
@@ -79,7 +84,7 @@ their required sensor inputs.
 - Zheng, Chen, Fu, Yang, Qin (SJTU) — Jun 2026
 - **Metrics:** in a cluttered-desk scene with an overhanging obstacle, finds the shortest feasible route through the under-table clearance while CMU-Planner / ART-Planner take longer bypasses; on stairs, the only compared method that stays physically valid for a ground robot (EGO-Planner-3D "succeeds" by flying over the obstacle). Real-world: Unitree Go2 + Livox Mid-360 LiDAR + Jetson Orin NX — 251 s / 149 m cross-floor inspection, 589 s / 367 m outdoor delivery run.
 - Paper: https://www.alphaxiv.org/abs/2606.19555
-- GitHub: https://github.com/wuyi2121/SCAN-Planner (**stated as "will be released"** — not confirmed live as of this pass)
+- GitHub: https://github.com/wuyi2121/SCAN-Planner — **confirmed live** (main algorithm released, ROS1 Noetic, `catkin_make`), not a placeholder repo.
 - Best regime: static/quasi-static structured 3D clutter (narrow passages, overhangs, stairs).
 
 **VOP-Nav** — RL policy that implicitly learns Velocity-Obstacle-style safety constraints from raw multi-frame LiDAR (VOP-Net regresses a 360° "safe velocity region," used both as a policy input and a reward-shaping signal), rather than explicit geometric optimization. Learned, not optimization-based.
@@ -97,7 +102,8 @@ their required sensor inputs.
 - Yuan, Ren, Wang, Wang, Fang, Zhang, Cheng, Chen, Ho, Zhu, Xu, Cheng, Yang (multi-institution HK/China) — Aug 2026
 - **Metrics:** 20/20 successful trials completing every floor across 4 simulated multi-floor buildings, vs. baselines (TARE, FAEL, HPHS) which fail to progress past the first floor in every scene (0/20 success on floors 2+; HPHS scores 0/20 entirely on the hardest scene). Real-world: Unitree Go2 + Mid-360S LiDAR + Jetson Orin NX + FAST-LIO2 — autonomously explored a real 5-floor stairwell.
 - Paper: https://www.alphaxiv.org/abs/2608.25366
-- GitHub: none published; authors state code "will be released upon acceptance."
+- GitHub: **none found** — checked directly, no repo or project-page code link exists anywhere for this paper (authors state code "will be released upon acceptance"). A near-identical alternative, "Multi-Floor Exploration for Ground Robots via an Incremental Reachable Graph and Structural Priors" (Zhu et al., alphaXiv 2605.23350), was also checked and also has no released code.
+- **Fallback if code is needed before RAEM/its twin release: TARE** (Cao, Zhu, Choset, Zhang, RSS 2021) — `github.com/caochao39/tare_planner`, real and actively maintained (RSS Best Paper + Best System Paper). Classical, explicit map + hierarchical graph exploration — the same category as RAEM, just not multi-floor-native. RAEM's own results show TARE stalls past the first floor in true multi-floor buildings; this is a known, documented limitation to report honestly rather than a disqualifying flaw, and it may not even matter if the household mission scenes turn out to be single-story.
 - Paradigm: explicit map + graph search.
 
 **HiPAN** — hierarchical RL, no explicit map: a high-level policy reads onboard depth images directly and outputs strategic navigation commands (velocity **and** body posture — crouch/tilt for confined spaces); a low-level posture-adaptive locomotion policy executes them. Trained with "Path-Guided Curriculum Learning" to escape local minima (dead-ends) without myopic behavior.
@@ -133,10 +139,12 @@ Same underlying techniques as §2 (Terrain Understanding), viewed from the "how 
 
 | Module | Candidate A | Candidate B | What the ablation tests |
 |---|---|---|---|
-| SLAM | FAST-LIO2 (LiDAR-only) | FAST-LIVO2 (LiDAR+camera) | Does the camera actually buy localization accuracy in our sim scenes, or is it dead weight? |
+| SLAM (LiDAR-only) | FAST-LIO2 | BIEVR-LIO | Does BIEVR-LIO's degeneracy handling (bump-image voxel maps) actually matter in our flat, hallway-heavy household scenes? |
+| SLAM (LiDAR + camera) | FAST-LIVO2 | LVI-Q | Does LVI-Q's joint-kinematics fusion — free, already on the ROS2 bus — meaningfully help over camera+LiDAR alone? |
+| SLAM (camera-only) | ORB-SLAM3 (single stereo pair) | ORB-SLAM3 + Multicam-SLAM fusion | Does true front+rear fusion beat a single stereo pair enough to justify the extra integration work? |
 | Terrain understanding | AME-2 (dense attention) | DELTA (sparse deformable attention) | Does DELTA's resolution-independent cost trade away any accuracy vs. AME-2, given our compute budget? |
 | Local planner | SCAN-Planner (optimization, static/structured) | VOP-Nav (learned, dynamic/crowded) | Does either degrade badly in the other's regime (SCAN-Planner with moving pedestrians; VOP-Nav on a staircase with overhangs)? If both degrade meaningfully, that argues for a switched/blended local-planner layer rather than picking one — a stronger systems finding than either paper alone claims. |
-| Global planner | RAEM (explicit map + graph search) | HiPAN (mapless, learned) | Classical-vs-learned navigation, directly on your stated PhD interest in what should be classical vs. learned in a deployed system. |
+| Global planner | RAEM (or TARE, if RAEM/its twin stay codeless) | HiPAN (mapless, learned) | Classical-vs-learned navigation, directly on your stated PhD interest in what should be classical vs. learned in a deployed system. |
 | Uncertainty modeling | AME-2's Bayesian winner-take-all (in-domain, cheap) | UP-Fuse-style learned uncertainty gating (general, more robust under degradation) | Is the cheaper in-domain approach "good enough," or does the more general gating mechanism earn its extra complexity? |
 | **Sensor rig** | **LiDAR + front stereo camera** | **Front + rear stereo camera, no LiDAR** | What does LiDAR actually buy over a well-designed camera-only rig, on our own household scenes? See `docs/sensor_setup_handoff.md` for the concrete configs and how algorithms declare which rig they require. |
 
@@ -156,7 +164,9 @@ Per earlier scoping discussion, these are real components of the eventual stack 
 ## Open Decisions
 
 - Final pick (or ablation scope) per module — this doc deliberately doesn't lock these in; see Proposed Ablations.
-- Whether SCAN-Planner / RAEM's "code will be released" repos are live yet — worth re-checking before committing to either as a code base to build on.
+- SLAM: full architecture, ROS versions, Docker strategy, and eval/viz pipeline are in `docs/slam_handoff.md`, not here.
+- Whether SCAN-Planner's now-confirmed-live repo is far enough along to build on for the Local Planner ablation, or still needs more releases to land.
+- Whether RAEM (or its uncoded twin) ever releases code before Phase 1's global planner work starts, or whether TARE is the permanent stand-in.
 - Whether to pursue the VOP-Nav / SCAN-Planner blended-local-planner idea as a real deliverable, or treat the ablation as purely diagnostic.
 - Whether UP-Fuse's gating mechanism is worth reimplementing standalone, or whether AME-2's native uncertainty handling is sufficient given compute constraints.
 - Exact stereo camera specs (baseline, resolution) not yet tuned against a specific real-hardware reference — see `docs/sensor_setup_handoff.md` §7 for current placeholders.

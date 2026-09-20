@@ -42,7 +42,14 @@ def timed(label, fn):
     return result
 
 
-def with_retries(label, fn):
+def with_retries(label, fn, cleanup_on_failure=None):
+    """cleanup_on_failure: optional zero-arg callable run after a failed attempt, before
+    retrying. Needed because download_behavior_1k_assets()'s own idempotency check is just
+    `if os.path.exists(dataset_path): print("already installed")` - it doesn't verify
+    completeness, so a disk-full (or any other) failure mid-extraction leaves a PARTIAL
+    directory that a naive retry would silently treat as a finished install. Verified on a
+    real pod 2026-09-20 (see plans/omnigibson_handoff.md section 6) - this is not
+    theoretical."""
     last_exc = None
     for attempt in range(1, MAX_RETRIES + 1):
         try:
@@ -50,6 +57,9 @@ def with_retries(label, fn):
         except Exception as exc:  # noqa: BLE001 - retry anything transient (network flake etc.)
             last_exc = exc
             print(f"[fetch_omnigibson_assets] {label} failed on attempt {attempt}: {exc}", flush=True)
+            if cleanup_on_failure is not None:
+                print(f"[fetch_omnigibson_assets] {label}: cleaning up partial output before retry", flush=True)
+                cleanup_on_failure()
             if attempt < MAX_RETRIES:
                 time.sleep(RETRY_BACKOFF_SEC)
     print(f"[fetch_omnigibson_assets] {label} failed after {MAX_RETRIES} attempts", flush=True)
@@ -57,18 +67,35 @@ def with_retries(label, fn):
 
 
 def download():
-    from omnigibson.utils.asset_utils import download_assets, download_behavior_1k_assets
+    # download_assets() from earlier OmniGibson releases no longer exists in
+    # BEHAVIOR-1K v3.9.2 - replaced by download_omnigibson_robot_assets() for
+    # base robot assets. download_behavior_1k_assets() already handles the
+    # decryption key download internally (see asset_utils.py), no separate
+    # download_key() call needed. Verified against the actual v3.9.2 source
+    # 2026-09-20, not assumed - see plans/omnigibson_handoff.md section 2.
+    from omnigibson.utils.asset_utils import download_behavior_1k_assets, download_omnigibson_robot_assets
 
-    with_retries("download_assets", download_assets)
+    from omnigibson.utils.asset_utils import get_dataset_path
+
+    def clean_partial_behavior_1k():
+        path = Path(get_dataset_path("behavior-1k-assets"))
+        if path.is_dir():
+            shutil.rmtree(path)
+
+    with_retries("download_omnigibson_robot_assets", download_omnigibson_robot_assets)
     # accept_license=True: see plans/omnigibson_handoff.md section 9 for the
     # considered license decision behind this, not an oversight.
-    with_retries("download_behavior_1k_assets", lambda: download_behavior_1k_assets(accept_license=True))
+    with_retries(
+        "download_behavior_1k_assets",
+        lambda: download_behavior_1k_assets(accept_license=True),
+        cleanup_on_failure=clean_partial_behavior_1k,
+    )
 
 
 def prune_scenes():
     from omnigibson.macros import gm
 
-    dataset_path = Path(gm.DATASET_PATH)
+    dataset_path = Path(gm.DATA_PATH) / "behavior-1k-assets"
     scenes_dir = dataset_path / "scenes"
     print(f"[fetch_omnigibson_assets] dataset path: {dataset_path}", flush=True)
 

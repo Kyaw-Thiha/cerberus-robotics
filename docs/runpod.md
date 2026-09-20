@@ -33,6 +33,29 @@ available — structured, no auth-string parsing.
   if you don't constrain the datacenter differently — relevant if you're
   re-rolling specifically to escape a bad host (see driver section below).
 
+## Building and pushing the image
+
+No CI — build and push manually when `docker/Dockerfile.remote`,
+`docker/requirements.txt`, or `docker/fetch_omnigibson_assets.py` changes:
+
+```bash
+docker build -t kevinkyawthiha/cerberus-remote:v2 -f docker/Dockerfile.remote .
+docker push kevinkyawthiha/cerberus-remote:v2
+```
+
+Bumping the tag vs. overwriting `v1` is free either way (Docker Hub doesn't
+charge for public-repo storage, and layers dedupe by content hash) — bump for
+rollback safety, or overwrite for simplicity; update the tag referenced in
+pod-create calls either way.
+
+**Rebuild needed for:** Dockerfile changes, `requirements.txt` changes, or
+changing which OmniGibson scenes are kept (that list is applied at build
+time — pruned scenes are deleted from the image layer, not re-evaluated per
+pod). **Not a rebuild trigger:** any Cerberus code change (`policy/`,
+`scripts/`, etc.) — that's synced per pod via `tar`/`git`, separate from the
+image. Needs 120GB+ container disk to build once OmniGibson's dataset
+download step is in the image.
+
 ## SSH access
 
 Use the dedicated, passphrase-free automation key

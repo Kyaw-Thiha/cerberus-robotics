@@ -77,19 +77,6 @@ Checkpoint naming follows the same principle: prefix with the embodiment id
 combo's checkpoints don't collide with or shadow this one's (see "Checkpoint
 versioning" below for the current, legs-only-so-far naming).
 
-### `policy/locomotion/core/platforms/`
-
-`PlatformCfg` per robot (e.g. `core/platforms/go2/platform.py`'s `GO2`),
-narrower than the `common/cerberus_description/` embodiment configs above —
-covers what Isaac Lab's training/eval/CLI stack needs (gym task ids, PPO
-agent cfg class, push-disturbance magnitudes, `--platform` CLI resolution),
-not joints/bodies/USDs (those come from Isaac Lab's upstream Go2 config for
-now).
-
-Whether it ever imports `common/cerberus_description/` is open. If it
-happens, the dependency only runs one way: `common/` is imported by
-`core/platforms/`, never the reverse.
-
 ## Tree
 
 ```
@@ -106,10 +93,12 @@ cerberus/
 │
 ├── worlds/                        # mission environment scenes — pulled from external
 │   │                                 # libraries, not authored here; gitignored like data/
-│   ├── household/                   # BEHAVIOR-1K / OmniGibson scene USDs — Phase 1/2 primary
-│   ├── retail_restaurant_office/    # same OmniGibson/BEHAVIOR-1K asset family — secondary
-│   │                                 # missions, near-zero marginal cost over household
-│   └── fetch_scenes.py                # pulls/caches scene USDs; no scene binaries committed
+│   ├── household/                   # BEHAVIOR-1K/OmniGibson scenes — Phase 1/2 primary, see
+│   │                                 # docs/omnigibson.md for scene list + train/test split
+│   ├── retail_restaurant_office/    # same asset family — secondary missions, near-zero
+│   │                                 # marginal cost over household
+│   └── fetch_scenes.py                # loads scenes via OmniGibson (required for decryption —
+│                                       # see docs/omnigibson.md); not a plain USD pull
 │
 ├── perception/
 │   ├── terrain_perception/          # ROS2 pkg: terrain/obstacle perception for nav
@@ -156,7 +145,9 @@ cerberus/
 │   └── systemd/
 │
 ├── docs/                             # architecture.svg, pipeline diagram, this file,
-│                                       # isaac_lab_workflow.md, manipulator.md (VLM/VLA plan)
+│                                       # isaac_lab_workflow.md, manipulator.md (VLM/VLA plan),
+│                                       # omnigibson.md (scenes/splits/docker),
+│                                       # omnigibson_handoff.md (coding-agent handoff)
 ├── docker/
 │   └── Dockerfile.remote             # Isaac Lab base image + pinned extras, built on rented GPU box
 ├── scripts/                          # cross-cutting ops tooling, not owned by one stack component
@@ -209,12 +200,6 @@ because:
   discoverable from either side.
 
 ## Checkpoint versioning within `policy/locomotion/checkpoints/`
-
-The `go2_` prefix below comes from `GO2.checkpoint_prefix` in
-`policy/locomotion/core/platforms/go2/platform.py` (defaults to
-`"<platform.name>_locomotion"`, i.e. `go2_locomotion`) -- a new platform gets
-its own prefix automatically from its own `PlatformCfg.name`, not a
-convention someone has to remember to follow by hand.
 
 Introduced alongside the Phase 0.5 gate, since freezing now happens after a
 possible robustify loop rather than immediately after Phase 0 training:

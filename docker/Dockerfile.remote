@@ -76,6 +76,36 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 
 WORKDIR /workspace
 
+# OmniGibson (BEHAVIOR-1K monorepo) -- used purely as a scene-loading/
+# decryption layer, never its own Environment/robot/step loop, per
+# docs/omnigibson_handoff.md section 1. Its own setup.sh would pip-install a
+# SEPARATE isaacsim==5.1.0 (duplicating the base image's already-present
+# Isaac Sim) -- but that step is gated behind `import isaacsim` succeeding
+# first and no-ops when it does, and omnigibson's own setup.py doesn't list
+# isaacsim as a dependency at all. So installing the omnigibson/bddl
+# packages directly (skipping setup.sh entirely) sidesteps the duplicate
+# install with no special flag needed. v3.9.2 confirmed to target Isaac Sim
+# 5.1.0 exactly (verified 2026-09-19, see plans/omnigibson_handoff.md).
+ENV BEHAVIOR1K_PATH=/workspace/behavior-1k
+RUN git clone --branch v3.9.2 --depth 1 \
+    https://github.com/StanfordVL/BEHAVIOR-1K.git ${BEHAVIOR1K_PATH}
+
+# cffi/websockets force-reinstall matches BEHAVIOR-1K's own setup.sh, whose
+# omnigibson install step does the same -- Isaac Sim ships older/conflicting
+# versions of both.
+RUN --mount=type=cache,target=/root/.cache/pip \
+    /workspace/isaaclab/_isaac_sim/python.sh -m pip install -e ${BEHAVIOR1K_PATH}/bddl3 && \
+    /workspace/isaaclab/_isaac_sim/python.sh -m pip install -e ${BEHAVIOR1K_PATH}/OmniGibson --no-build-isolation && \
+    /workspace/isaaclab/_isaac_sim/python.sh -m pip install --force-reinstall cffi==1.17.1 "websockets>=15.0.1"
+
+# Dataset download (>30GB) + prune to only Cerberus's chosen scenes
+# (docs/omnigibson_handoff.md section 4), both in this ONE layer -- a later
+# layer's deletion wouldn't shrink the image. accept_license=True is a
+# considered decision given the dataset's "non-commercial academic research"
+# EULA clause, not an oversight -- see plans/omnigibson_handoff.md section 9.
+COPY docker/fetch_omnigibson_assets.py /tmp/fetch_omnigibson_assets.py
+RUN /workspace/isaaclab/_isaac_sim/python.sh /tmp/fetch_omnigibson_assets.py
+
 # Additive packages layered onto Isaac Sim's bundled Python interpreter --
 # see docker/requirements.txt for what's in it and why (wandb for
 # train.py's default logger, imageio[ffmpeg] for core/video_capture.py's

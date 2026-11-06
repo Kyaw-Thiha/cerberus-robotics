@@ -1239,7 +1239,18 @@ exercised the code changed in `fd35698` (task configs imported from `isaaclab_ta
 |---|---|
 | `train.py --config smoke_test` | PASS, 59 s, `model_2.pt` written, 3 iterations at ~1.1 s each |
 | `play.py --headless --video ... --num_envs 8` | PASS, exit 0, `clip_0000.mp4` h264 1280x720 100 frames, plus `exported/policy.pt` and `policy.onnx` (+`.data`) |
-| `arena_spike_go2.py --scene stock`, 16 envs, 100 steps | PASS on the 2nd launch: `passed: true`, build 13.3 s, reset 202 s |
+| `arena_spike_go2.py --scene stock`, 16 envs, 100 steps | runs to completion on the 2nd launch, but the verdict is NOT a meaningful pass: see "the standing check" below |
+
+**The standing check (2026-11-06, same session).** The spike reported `passed: true` while the robot had sunk through
+the Galileo background floor: `robot_z_min_max [-0.7296, -0.4822]`, `foot_z_mean -0.506`, and `base_minus_foot_z_mean
+-0.181` — i.e. the base ended up *below* its own feet. That is the same signature the log already branded "NOT
+meaningful" for the EA run on 2026-10-05 (base-minus-foot -0.04), versus the meaningful 2026-10-05 stock run
+(+0.216). The script already measured `base_minus_foot_z_mean` and documented the intended reading in a comment
+("standing Go2 ~0.25-0.35 m, collapsed ~0.1 m") but never consulted it when setting `passed`. It now does: a value
+<= 0.15 m is a failure, so today's report would be a FAIL. The criterion is scene-relative on purpose — absolute
+root z is meaningless on backgrounds whose floor sits 0.5-0.8 m below the origin. Open question this exposes: whether
+the stock/Galileo scene is genuinely unusable for a standing robot, or the spike should spawn on a GRScenes home
+(the scene the real SLAM/eval work uses).
 
 **Bug found by running it, not by reading:** the spike died every time at the reset stage with
 `TypeError: OrderEnforcing.reset() got an unexpected keyword argument 'env_ids'`, so the Arena gate was in fact

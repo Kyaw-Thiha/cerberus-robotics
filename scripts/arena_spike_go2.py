@@ -448,6 +448,15 @@ def _run(args: argparse.Namespace, plan: dict, report: dict, report_path: Path) 
             metrics["base_minus_foot_z_mean"] = round(
                 float((robot_z - foot_z.mean(dim=1)).mean()), 4
             )
+            # Use the measurement above instead of only reporting it: a Go2 standing on a floor keeps its base
+            # 0.25-0.35 m above its feet, a collapsed one ~0.1 m. Both 2026-10-05 EA and 2026-11-06 reported
+            # passed=true with a base BELOW the feet (the robot sunk through the Galileo background floor), so a
+            # PASS that ignores this is a rubber stamp. Scene-relative on purpose: absolute root z is meaningless
+            # on stock backgrounds whose floor sits ~0.5-0.8 m below the origin.
+            if metrics["base_minus_foot_z_mean"] <= 0.15:
+                reasons.append(
+                    f"base is {metrics['base_minus_foot_z_mean']} m above the feet (standing Go2: 0.25-0.35)"
+                )
     except Exception as e:  # noqa: BLE001
         metrics["foot_z_error"] = repr(e)
 

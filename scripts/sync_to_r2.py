@@ -60,15 +60,40 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import re
 import subprocess
 import tempfile
 from pathlib import Path
 
 REQUIRED_ENV_VARS = ["R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET"]
 REMOTE = "cerberus_r2"  # rclone remote name, only referenced via env vars below -- never written to disk
+# The `Cloudflare` S3 provider set in _rclone_env needs rclone >= 1.59; older builds reject it with
+# `s3: s3 provider "Cloudflare" not known`, which reads like a credentials problem. Seen 2026-10-07 on the
+# v6-rel image, whose distro rclone is 1.58.1 -- every R2 upload from that image failed.
+RCLONE_MIN_VERSION = (1, 59)
+
+
+def check_rclone() -> None:
+    """Fail fast when rclone is missing or too old for the R2 remote configured here."""
+    try:
+        proc = subprocess.run(["rclone", "version"], capture_output=True, text=True, timeout=30, check=False)
+    except (OSError, subprocess.SubprocessError) as e:
+        raise SystemExit(f"rclone is required for R2 syncs but could not be run: {e}")
+    first = (proc.stdout or "").strip().splitlines()
+    first = first[0] if first else ""
+    found = re.search(r"rclone v(\d+)\.(\d+)", first)
+    if not found or tuple(int(p) for p in found.groups()) < RCLONE_MIN_VERSION:
+        want = ".".join(str(p) for p in RCLONE_MIN_VERSION)
+        raise SystemExit(
+            f"rclone >= {want} required (it must know the 'Cloudflare' S3 provider; older builds are rejected); "
+            f"found: {first or 'not installed'}. Upgrade with `curl -fsSL https://rclone.org/install.sh | bash`."
+        )
 
 
 def _require_env() -> dict[str, str]:
+    # Preflight the tool as well as the env vars: this function is the single entry point both upload paths
+    # (and fetch_grscenes_to_r2.py) go through, so one check covers every R2 write.
+    check_rclone()
     missing = [v for v in REQUIRED_ENV_VARS if not os.environ.get(v)]
     if missing:
         raise SystemExit(

@@ -44,11 +44,14 @@
 #     skipped, leaving the pod running for whatever comes next.
 #
 # Requires: R2_* vars (see scripts/sync_to_r2.py) sourced into the
-# environment already, and RUNPOD_POD_ID + RUNPOD_API_KEY for the
-# self-terminate step -- docker/start.sh writes these to /etc/cerberus_env.sh
-# at container start (PID 1 has them from RunPod, but a plain `ssh host
+# environment already, and RUNPOD_POD_ID for the self-terminate step --
+# docker/remote*/start.sh writes the RUNPOD_* vars to /etc/cerberus_env.sh at
+# container start (PID 1 has them from RunPod, but a plain `ssh host
 # "command"` session doesn't inherit them on its own -- see start.sh's
 # comment), sourced here explicitly rather than relying on PAM/profile.d.
+# start.sh deliberately EXCLUDES RUNPOD_API_KEY from that file (it gets
+# cat'd and sourced by agents), so the API-key branch below only fires if
+# the key was exported into this shell some other way.
 set -u
 
 if [[ -f /etc/cerberus_env.sh ]]; then

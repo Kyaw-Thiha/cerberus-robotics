@@ -1,0 +1,70 @@
+%YAML:1.0
+# OpenCV-FileStorage-format camera settings for multicam_slam's ORB_SLAM2::System
+# constructor (--ros-args -p settings_file:=<this file>) -- NOT a ros2-params-style
+# YAML like fast_lio2's sim_config.yaml, matching third_party/slam/multicam_slam/
+# OtherFiles/multi.yaml's own real format (confirmed from the vendored reference
+# example, not guessed).
+#
+# Intrinsics computed from common/cerberus_description/sensors/sensor_configs.py's
+# _FRONT_CAM_SPAWN (shared by all four CAMERA_STEREO_SUITE cameras -- front/rear,
+# left/right all use the identical PinholeCameraCfg): focal_length=24.0mm,
+# horizontal_aperture=20.955mm, resolution 640x480 (square pixels, so fx=fy):
+#   fx = fy = focal_length_mm * width_px / horizontal_aperture_mm
+#          = 24.0 * 640 / 20.955 = 732.9967...
+# cx/cy are the image center (320, 240). k1/k2/p1/p2/k3 are all 0 -- Isaac Lab's
+# pinhole camera model has no lens distortion.
+
+Camera.fx: 732.9967
+Camera.fy: 732.9967
+Camera.cx: 320.0
+Camera.cy: 240.0
+
+Camera.k1: 0.0
+Camera.k2: 0.0
+Camera.p1: 0.0
+Camera.p2: 0.0
+Camera.k3: 0.0
+
+Camera.width: 640
+Camera.height: 480
+
+# Matches FRONT_CAMERA_LEFT_CFG/REAR_CAMERA_LEFT_CFG's update_period=1/30 (sensor_configs.py).
+Camera.fps: 30.0
+
+# Camera.bf: baseline_m * fx, the same quantity a real stereo rig would report --
+# used by ORB_SLAM2's RGBD ThDepth far/close-point threshold logic even though this
+# is RGBD mode, not native stereo matching (our depth comes from
+# stereo_to_depth_node.py's own real block matching over the same 0.12m baseline,
+# not ORB_SLAM2's built-in stereo matcher). 0.12 * 732.9967 = 87.9596.
+Camera.bf: 87.9596
+
+# Color order: Isaac Lab's camera publishes rgb8 (see sensor_msg_builders.py), not bgr8.
+Camera.RGB: 1
+
+# Baseline-multiples close/far threshold -- kept at multi.yaml's own reference default.
+ThDepth: 40.0
+
+# Matches stereo_to_depth_node.py's 16UC1/millimeters encoding exactly (see that
+# module's own docstring: "pixel value / 1000.0 = depth in meters") -- this is the
+# one value that MUST match stereo_to_depth_node.py's output convention, not a
+# free parameter.
+DepthMapFactor: 1000.0
+
+# ORB extractor / viewer params left at multi.yaml's own reference defaults --
+# nothing sim-specific about these.
+ORBextractor.nFeatures: 1000
+ORBextractor.scaleFactor: 1.2
+ORBextractor.nLevels: 8
+ORBextractor.iniThFAST: 20
+ORBextractor.minThFAST: 7
+
+Viewer.KeyFrameSize: 0.05
+Viewer.KeyFrameLineWidth: 1
+Viewer.GraphLineWidth: 0.9
+Viewer.PointSize: 2
+Viewer.CameraSize: 0.08
+Viewer.CameraLineWidth: 3
+Viewer.ViewpointX: 0
+Viewer.ViewpointY: -0.7
+Viewer.ViewpointZ: -1.8
+Viewer.ViewpointF: 500

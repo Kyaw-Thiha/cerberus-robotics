@@ -1,0 +1,67 @@
+/**:
+  ros__parameters:
+    common:
+      img_topic: "/front_camera/rgb"
+      lid_topic: "/lidar/points"
+      imu_topic: "/imu/data"
+      img_en: 1
+      lidar_en: 1
+      ros_driver_bug_fix: false
+
+    extrin_calib:
+      # IMU-to-Lidar extrinsic (same param names/meaning as fast_lio2's
+      # mapping.extrinsic_T/R): LIDAR_CFG is offset (0,0,0.05) from the base
+      # prim; IMU_CFG has no offset -- see
+      # common/cerberus_description/sensors/sensor_configs.py. Both share
+      # the base's orientation, so extrinsic_R is identity.
+      extrinsic_T: [0.0, 0.0, 0.05]
+      extrinsic_R: [1.0, 0.0, 0.0, 0.0, 1.0, 0.0, 0.0, 0.0, 1.0]
+
+      # Camera-to-Lidar extrinsic (Rcl/Pcl, separate from the IMU-Lidar pair
+      # above -- confirmed via LIVMapper.cpp's own declare_parameter calls
+      # for "extrin_calib.Pcl"/"extrin_calib.Rcl"). Derived by hand from
+      # FRONT_CAMERA_LEFT_CFG's mount (offset=(0.32,-0.06,0.05),
+      # rotation_wxyz=(0.5,-0.5,0.5,-0.5), convention="ros") composed with
+      # LIDAR_CFG's mount (offset=(0,0,0.05), identity rotation), both
+      # relative to the same base prim:
+      #   R_cam_from_base (from the wxyz quat above) =
+      #     [[0,0,1],[-1,0,0],[0,-1,0]]
+      #   Rcl = R_cam_from_base  (lidar has identity rotation from base)
+      #   Pcl = R_cam_from_base @ (T_lidar_in_base - T_cam_in_base)
+      #       = R_cam_from_base @ [-0.32, 0.06, 0.0] = [0.0, 0.32, -0.06]
+      # NOT independently verified -- this is the single highest-uncertainty
+      # value in this config. Isaac Lab's CameraCfg `convention="ros"` flag
+      # may apply its own additional frame remapping beyond a plain
+      # wxyz-quat-to-matrix conversion that this derivation doesn't account
+      # for; a wrong Rcl/Pcl won't crash VIO, it will silently degrade or
+      # diverge it. Confirm by visualizing projected lidar points against
+      # the camera image on a real pod before trusting VIO accuracy from
+      # this backend -- a clean launch + odometry output alone does not
+      # confirm this is right.
+      Rcl: [0.0, 0.0, 1.0,
+            -1.0, 0.0, 0.0,
+            0.0, -1.0, 0.0]
+      Pcl: [0.0, 0.32, -0.06]
+
+    time_offset:
+      imu_time_offset: 0.0
+      img_time_offset: 0.0
+      exposure_time_init: 0.0
+
+    preprocess:
+      point_filter_num: 1
+      filter_size_surf: 0.1
+      lidar_type: 2  # Velodyne -- our synthetic point cloud is wire-compatible
+                     # with velodyne_ros::Point (see
+                     # slam/slam/ground_truth/sensor_msg_builders.py's
+                     # _POINT_STEP comment; this codebase registers the same
+                     # struct in include/preprocess.h)
+      scan_line: 100  # must match LIDAR_CFG.pattern_cfg.channels
+      blind: 0.5
+
+    vio:
+      max_iterations: 5
+      outlier_threshold: 1000
+      img_point_cov: 1000
+
+    filter_size_map: 0.3

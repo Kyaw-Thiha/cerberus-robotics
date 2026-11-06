@@ -1,0 +1,60 @@
+%YAML:1.0
+
+#--------------------------------------------------------------------------------------------
+# Camera Parameters -- computed from common/cerberus_description/sensors/sensor_configs.py's
+# _FRONT_CAM_SPAWN (focal_length=24.0mm, horizontal_aperture=20.955mm, 640x480):
+#   fx = fy = focal_length * width / horizontal_aperture = 24.0 * 640 / 20.955 ~= 733.00
+#   cx = width/2 = 320, cy = height/2 = 240
+# k1/k2/p1/p2/k3 = 0: Isaac Lab's PinholeCameraCfg has no lens distortion.
+#--------------------------------------------------------------------------------------------
+File.version: "1.0"
+
+Camera.type: "PinHole"
+
+Camera1.fx: 733.00
+Camera1.fy: 733.00
+Camera1.cx: 320.0
+Camera1.cy: 240.0
+
+Camera1.k1: 0.0
+Camera1.k2: 0.0
+Camera1.p1: 0.0
+Camera1.p2: 0.0
+Camera1.k3: 0.0
+
+# Matches FRONT_CAMERA_LEFT_CFG's update_period = 1/30.
+Camera.fps: 30
+
+# orb_slam3_node.cpp's imageCallback requests cv_bridge::toCvShare(msg, BGR8)
+# regardless of our sim's own rgb8 wire encoding -- cv_bridge converts on the
+# way in, so by the time ORB_SLAM3 itself sees the frame it is already BGR.
+# 0 = BGR, 1 = RGB (ignored for grayscale).
+Camera.RGB: 0
+
+Camera.width: 640
+Camera.height: 480
+
+#--------------------------------------------------------------------------------------------
+# ORB Parameters -- stock defaults, unmodified from the vendored TUM1.yaml example.
+#--------------------------------------------------------------------------------------------
+ORBextractor.nFeatures: 1000
+ORBextractor.scaleFactor: 1.2
+ORBextractor.nLevels: 8
+ORBextractor.iniThFAST: 20
+ORBextractor.minThFAST: 7
+
+#--------------------------------------------------------------------------------------------
+# Viewer Parameters -- unused (ros2_wrapper's OrbSlam3Node constructs
+# ORB_SLAM3::System with bUseViewer=false), kept only because System's
+# settings loader reads this section unconditionally.
+#--------------------------------------------------------------------------------------------
+Viewer.KeyFrameSize: 0.05
+Viewer.KeyFrameLineWidth: 1.0
+Viewer.GraphLineWidth: 0.9
+Viewer.PointSize: 2.0
+Viewer.CameraSize: 0.08
+Viewer.CameraLineWidth: 3.0
+Viewer.ViewpointX: 0.0
+Viewer.ViewpointY: -0.7
+Viewer.ViewpointZ: -1.8
+Viewer.ViewpointF: 500.0

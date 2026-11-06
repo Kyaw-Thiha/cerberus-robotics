@@ -1,5 +1,5 @@
 """Fail-loud sensor-suite/algorithm compatibility check. Extends
-plans/sensor_setup_handoff.md §4's `validate()` sketch: instead of a
+the original `validate()` sketch: instead of a
 hardcoded package->sensor manifest, requirements come from whichever
 `AlgorithmCfg` each package is configured to run (see
 config/sensor_profiles.yaml's `algorithms` block and each module's own
@@ -24,8 +24,7 @@ def validate_sensor_requirements(
     `package_requirements`: {package_name: AlgorithmCfg.sensor_requirements}
     for every package about to be launched. Raises `SensorSuiteMismatchError`
     naming exactly which package needed exactly which missing sensor --
-    turns a silently-hanging subscriber into a startup error, per
-    sensor_setup_handoff.md §4's stated goal.
+    turns a silently-hanging subscriber into a startup error.
     """
     missing = []
     for package, requirements in package_requirements.items():

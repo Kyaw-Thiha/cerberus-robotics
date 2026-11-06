@@ -17,6 +17,7 @@ lidar_camera:
     front_camera: true
     rear_camera: false
     wrist_camera: false
+    imu: true
   algorithms:
     slam: fast_lio2
     terrain_perception: delta
@@ -29,13 +30,39 @@ camera_only:
     front_camera: true
     rear_camera: true
     wrist_camera: false
+    imu: false
   algorithms:
-    # Both perception.md SLAM candidates (FAST-LIO2, FAST-LIVO2) require
-    # LiDAR -- no camera-only-rig SLAM candidate is documented yet.
-    slam: null
+    # Camera-only-rig SLAM candidate -- registered in slam/slam/core/algorithms.py
+    # (stereo visual SLAM, no LiDAR required).
+    slam: orb_slam3
     terrain_perception: delta
     # Both perception.md local-planner candidates (SCAN-Planner, VOP-Nav)
     # require LiDAR -- no camera-only-rig local-planner candidate is
     # documented yet.
+    local_planner: null
+    global_planner: hipan
+
+# Same coarse sensors block as camera_only (front_camera/rear_camera both
+# true -- multicam_slam's declared sensor_requirements, like orb_slam3's, only
+# gate at that level, see slam/slam/core/algorithms.py) but mirrors
+# common/cerberus_description/sensors/sensor_configs.py's CAMERA_STEREO_SUITE
+# instead of CAMERA_ONLY_SUITE: front_camera/rear_camera are genuine stereo
+# pairs (front_camera_right/rear_camera_right also populated) here, not a
+# single LEFT-only camera per position. That extra wiring has no key in this
+# `sensors` block (mirrors active_sensors()'s shape exactly, which
+# deliberately excludes it too -- see sensor_suite.py) since no
+# sensor_requirements manifest gates on it; it's how multicam_slam gets real
+# stereo-computed depth (slam/slam/backends/multicam_slam/stereo_to_depth_node.py)
+# instead of orb_slam3's privileged-depth-capable single camera.
+camera_stereo:
+  sensors:
+    lidar: false
+    front_camera: true
+    rear_camera: true
+    wrist_camera: false
+    imu: false
+  algorithms:
+    slam: multicam_slam
+    terrain_perception: delta
     local_planner: null
     global_planner: hipan

@@ -31,19 +31,19 @@ def _load_profiles() -> dict:
 def test_sensor_profiles_yaml_exists_and_parses():
     profiles = _load_profiles()
     assert isinstance(profiles, dict)
-    assert set(profiles) == {"lidar_camera", "camera_only"}
+    assert set(profiles) == {"lidar_camera", "camera_only", "camera_stereo"}
 
 
-@pytest.mark.parametrize("profile_name", ["lidar_camera", "camera_only"])
+@pytest.mark.parametrize("profile_name", ["lidar_camera", "camera_only", "camera_stereo"])
 def test_profile_has_sensors_and_algorithms_blocks(profile_name):
     profile = _load_profiles()[profile_name]
     assert "sensors" in profile
     assert "algorithms" in profile
-    assert set(profile["sensors"]) == {"lidar", "front_camera", "rear_camera", "wrist_camera"}
+    assert set(profile["sensors"]) == {"lidar", "front_camera", "rear_camera", "wrist_camera", "imu"}
     assert set(profile["algorithms"]) == set(_ALGORITHM_MODULES)
 
 
-@pytest.mark.parametrize("profile_name", ["lidar_camera", "camera_only"])
+@pytest.mark.parametrize("profile_name", ["lidar_camera", "camera_only", "camera_stereo"])
 @pytest.mark.parametrize("package_name", list(_ALGORITHM_MODULES))
 def test_recommended_algorithm_matches_a_known_candidate_or_is_null(profile_name, package_name):
     # The more likely drift direction: an algorithm gets renamed or removed

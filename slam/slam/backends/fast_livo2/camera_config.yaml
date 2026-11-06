@@ -1,0 +1,26 @@
+/**:
+  ros__parameters:
+    # Loaded into a separate `demo_nodes_cpp parameter_blackboard` node (see
+    # launch_algorithm.sh) -- fastlivo_mapping reads these via a cross-node
+    # parameter client, matching third_party/slam/fast_livo2/launch/
+    # mapping_avia_marslvig.launch.py's own real launch topology (confirmed
+    # by reading that file directly, not guessed).
+    cam_model: Pinhole
+    cam_width: 640
+    cam_height: 480
+    scale: 1.0
+    # fx = fy = focal_length_mm * width_px / horizontal_aperture_mm
+    #    = 24.0 * 640 / 20.955 ~= 733.0
+    # (square pixels, aspect-consistent vertical_aperture -- see
+    # common/cerberus_description/sensors/sensor_configs.py's
+    # _FRONT_CAM_SPAWN). cx/cy are the image center for a synthetic
+    # pinhole with no principal-point offset.
+    cam_fx: 733.0
+    cam_fy: 733.0
+    cam_cx: 320.0
+    cam_cy: 240.0
+    # Synthetic pinhole camera, no lens distortion modeled.
+    cam_d0: 0.0
+    cam_d1: 0.0
+    cam_d2: 0.0
+    cam_d3: 0.0

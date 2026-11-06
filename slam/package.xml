@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>slam</name>
+  <version>0.1.0</version>
+  <description>Pluggable multi-backend SLAM: registry, ground-truth export, eval, adapters</description>
+  <maintainer email="k.thiha10.mail@gmail.com">Kevin</maintainer>
+  <license>MIT</license>
+  <depend>rclpy</depend>
+  <depend>nav_msgs</depend>
+  <depend>geometry_msgs</depend>
+  <depend>sensor_msgs</depend>
+  <depend>std_msgs</depend>
+  <depend>tf2_ros</depend>
+  <depend>cerberus_msgs</depend>
+  <!-- stereo_to_depth_node.py: message_filters (stereo pair sync), python3-opencv
+       (cv2.StereoSGBM_create) -->
+  <depend>message_filters</depend>
+  <depend>python3-opencv</depend>
+  <export>
+    <build_type>ament_python</build_type>
+  </export>
+</package>

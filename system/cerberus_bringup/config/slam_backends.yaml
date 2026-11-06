@@ -1,0 +1,41 @@
+# LiDAR only. Xu et al. 2022 (IEEE T-RO).
+#   - GitHub: https://github.com/hku-mars/FAST_LIO
+#   - Paper:  https://arxiv.org/abs/2107.06829
+fast_lio2:
+  image: kevinkyawthiha/cerberus-slam-fast-lio2:v1
+  adapter: slam.slam.backends.fast_lio2.adapter_launch
+
+# LiDAR only. Pfreundschuh et al. 2026 (RSS). Native ROS2 build — no ros1_bridge.
+#   - GitHub: https://github.com/ethz-asl/BIEVR-LIO
+#   - Paper:  https://arxiv.org/abs/2604.14421
+bievr_lio:
+  image: kevinkyawthiha/cerberus-slam-bievr-lio:v1
+  adapter: slam.slam.backends.bievr_lio.adapter_launch
+
+# LiDAR + front camera. Zheng et al. 2024 (IEEE T-RO).
+#   - GitHub: https://github.com/hku-mars/FAST-LIVO2
+#   - Paper:  https://arxiv.org/abs/2408.14035
+fast_livo2:
+  image: kevinkyawthiha/cerberus-slam-fast-livo2:v1
+  adapter: slam.slam.backends.fast_livo2.adapter_launch
+
+# LiDAR + front camera. Hong et al. 2025.
+#   - GitHub: https://github.com/HKUST-Aerial-Robotics/GS-LIVO
+#   - Paper:  https://arxiv.org/abs/2501.08672
+gs_livo:
+  image: kevinkyawthiha/cerberus-slam-gs-livo:v1
+  adapter: slam.slam.backends.gs_livo.adapter_launch
+
+# Front stereo only. Campos et al. 2021 (IEEE T-RO).
+#   - GitHub: https://github.com/UZ-SLAMLab/ORB_SLAM3
+#   - Paper:  https://arxiv.org/abs/2007.11898
+orb_slam3:
+  image: kevinkyawthiha/cerberus-slam-orb-slam3:v1
+  adapter: slam.slam.backends.orb_slam3.adapter_launch
+  
+# Front + rear stereo. Li, Pang, Hu 2024. Paper is RGB-D multi-cam; repo is ORB-SLAM2-based, README generic — read src/ directly.
+#   - GitHub: https://github.com/AlterPang/Multi_ORB_SLAM
+#   - Paper:  https://arxiv.org/abs/2406.06374
+multicam_slam:
+  image: kevinkyawthiha/cerberus-slam-multicam-slam:v1
+  adapter: slam.slam.backends.multicam_slam.adapter_launch

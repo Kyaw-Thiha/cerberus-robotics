@@ -1,0 +1,50 @@
+# BIEVR-LIO's own sensor-config file (see
+# third_party/slam/bievr_lio/config/sensor_configs/*.yaml for the vendored
+# examples this is modeled on). Passed to process_topics via
+# `--sensor_config_file` (an absolute path, per
+# interfaces/ros2/launch/process_topics.launch.py's resolve_config()) --
+# layered on top of the package's own default config/params.yaml, whose
+# generic map/preprocess/optimization/imu tuning needs no sim-specific
+# override (see this backend's launch_algorithm.sh).
+#
+# BLOCKED, not just unverified: BIEVR-LIO's point-cloud parser reads a
+# field literally named "time" and treats it as float32 SECONDS
+# unconditionally -- no config knob (grepped its parser source directly).
+# /lidar/points' shared wire convention was evaluated across all three
+# lidar-consuming backends in one pass and settled on MICROSECONDS instead
+# (FAST-LIVO2 and GS-LIVO both hardcode microseconds-in with no override
+# either, and are the majority; FAST-LIO2 tolerates either via its own
+# configurable preprocess.timestamp_unit). BIEVR-LIO is therefore the one
+# backend this repo's shared sensor bridge does NOT currently feed correct
+# units to -- every scan's per-point curvature will come out wrong by 6
+# orders of magnitude until this is actually fixed, not just configured
+# around. Two real fixes exist, neither done yet: (a) patch BIEVR-LIO's
+# vendored parser to add a configurable scale factor (needs a Docker
+# rebuild of this backend's image), or (b) add a small per-backend
+# unit-rescaling ROS2 node between /lidar/points and this backend's own
+# topics.pointcloud. Do not smoke-test this backend's actual SLAM output
+# until one of those lands -- a clean launch/construction here does NOT
+# mean correct behavior.
+topics:
+  pointcloud: "/lidar/points"
+  imu: "/imu/data"
+
+# T_IMU_LIDAR (LiDAR -> IMU): LIDAR_CFG is offset (0, 0, 0.05) from the robot
+# base prim; IMU_CFG has no offset (mounted at the base prim origin) -- see
+# common/cerberus_description/sensors/sensor_configs.py. Both share the
+# base's orientation (no rotation offset on either), so rotation is
+# identity. Same physical relationship as fast_lio2/sim_config.yaml's
+# mapping.extrinsic_T/extrinsic_R, expressed in BIEVR-LIO's own
+# calibration.translation/rotation keys. Mandatory in this config format --
+# a missing/incomplete section is a hard error (see config_loader.h's
+# extrinsicFromVectors()), unlike fast_lio2's dangerous live-TF-lookup
+# fallback that this repo already had to route around.
+calibration:
+  translation: [0.0, 0.0, 0.05]
+  rotation: [1.0, 0.0, 0.0,
+             0.0, 1.0, 0.0,
+             0.0, 0.0, 1.0]
+
+lidar:
+  min_range_m: 0.5   # matches fast_lio2/sim_config.yaml's preprocess.blind -- filters the robot's own body
+  max_range_m: 150    # matches fast_lio2/sim_config.yaml's mapping.det_range

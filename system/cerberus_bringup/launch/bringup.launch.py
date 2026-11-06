@@ -8,8 +8,8 @@ robot identity from the standard /robot_description parameter.
 
 Also resolves --sensor_profile (config/sensor_profiles.yaml) and validates
 it against each perception/SLAM/planning package's configured algorithm, and
-against the chosen locomotion_mode's own sensor_requirements (platforms.yaml)
--- see plans/sensor_setup_handoff.md §4-5. No real slam/terrain_perception/
+against the chosen locomotion_mode's own sensor_requirements (platforms.yaml).
+No real slam/terrain_perception/
 local_planner/global_planner ROS2 nodes exist yet, so this only validates
 and logs the resolved choice; adding the actual Node(...) entries for a
 package is a one-line addition to `nodes` below once that package's real

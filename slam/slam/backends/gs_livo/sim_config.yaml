@@ -1,0 +1,145 @@
+laser_mapping_node:
+  ros__parameters:
+    common:
+      # Confirmed via LIVMapper.cpp: these ARE read to construct the node's
+      # subscriptions directly (this->get_parameter("common.lid_topic", lid_topic)
+      # etc., then create_subscription(..., lid_topic, ...)) -- unlike
+      # fast_lio2's spark_fast_lio, which hardcodes "lidar"/"imu" and needs
+      # CLI -r remaps instead. No remaps needed here.
+      lid_topic: "/lidar/points"
+      imu_topic: "/imu/data"
+      img_topic: "/front_camera/rgb"
+      img_en: 1
+      lidar_en: 1
+      ros_driver_bug_fix: false
+
+    extrin_calib:
+      # Lidar-to-IMU: LIDAR_CFG is offset (0,0,0.05) from the robot base
+      # prim; IMU_CFG has no offset (mounted at the base prim origin) --
+      # see common/cerberus_description/sensors/sensor_configs.py. Both
+      # share the base's orientation, so extrinsic_R is identity.
+      extrinsic_T: [0.0, 0.0, 0.05]
+      extrinsic_R: [1, 0, 0, 0, 1, 0, 0, 0, 1]
+      # Lidar-to-camera (see vio.cpp: Rci = Rcl * Rli, Pci = Rcl * Pli + Pcl
+      # -- confirms Rcl/Pcl transform a LIDAR-frame point INTO the camera
+      # frame: p_camera = Rcl * p_lidar + Pcl). Derived, not guessed, from
+      # FRONT_CAMERA_LEFT_CFG's real mount (offset (0.32,-0.06,0.05),
+      # rotation quat (w=0.5,x=-0.5,y=0.5,z=-0.5), convention="ros") composed
+      # against the lidar mount above. The resulting structure
+      # ([[0,-1,0],[0,0,-1],[1,0,0]]) matches the vendored AVIA example
+      # config's own real-calibrated Rcl almost exactly (its values are ~0,
+      # ~-1, ~-1, ~1 give or take real calibration noise) -- strong
+      # cross-validation that this derivation and the Rcl sign/direction
+      # convention are both correct, not just dimensionally plausible.
+      Rcl: [0, -1, 0,
+            0, 0, -1,
+            1, 0, 0]
+      Pcl: [-0.06, 0.0, -0.32]
+
+    time_offset:
+      imu_time_offset: 0.0
+      img_time_offset: 0.0
+      exposure_time_init: 0.0
+
+    preprocess:
+      point_filter_num: 1
+      filter_size_surf: 0.1
+      lidar_type: 2               # Velodyne -- our synthetic point cloud is wire-compatible
+                                   # with velodyne_ros::Point (see sensor_msg_builders.py),
+                                   # confirmed against this fork's own preprocess.cpp
+                                   # (pcl::PointCloud<velodyne_ros::Point>, .ring/.time fields).
+      scan_line: 100               # -> N_SCANS, must match LIDAR_CFG.pattern_cfg.channels
+      blind: 0.5                   # meters -- filters points inside the robot's own body
+
+    vio:
+      max_iterations: 5
+      outlier_threshold: 1000
+      img_point_cov: 100
+      patch_size: 8
+      patch_pyrimid_level: 4
+      normal_en: true
+      raycast_en: false
+      inverse_composition_en: false
+      exposure_estimate_en: true
+      inv_expo_cov: 0.1
+
+    imu:
+      imu_en: true
+      imu_int_frame: 30
+      acc_cov: 0.1
+      gyr_cov: 0.1
+      b_acc_cov: 0.0001
+      b_gyr_cov: 0.0001
+
+    lio:
+      max_iterations: 5
+      dept_err: 0.02
+      beam_err: 0.05
+      min_eigen_value: 0.0025
+      voxel_size: 0.5
+      max_layer: 2
+      max_points_num: 50
+      layer_init_num: [5, 5, 5, 5, 5]
+
+    local_map:
+      map_sliding_en: false
+      half_map_size: 100
+      sliding_thresh: 8
+
+    uav:
+      imu_rate_odom: false
+      gravity_align_en: false
+
+    publish:
+      dense_map_en: true
+      pub_effect_point_en: false
+      pub_plane_en: false
+      pub_scan_num: 1
+      blind_rgb_points: 0.0
+
+    evo:
+      seq_name: "cerberus_sim"
+      pose_output_en: false
+
+    pcd_save:
+      pcd_save_en: false           # eval cares about odometry, not map persistence to disk
+      colmap_output_en: false
+      filter_size_pcd: 0.15
+      interval: -1
+
+    gs:
+      gs_iterations: 40
+      gs_position_lr: 0.01
+      gs_feature_lr: 0.01
+      gs_opacity_lr: 0.1
+      gs_scaling_lr: 1.8
+      gs_rotation_lr: 0.01
+    # publish.gs_save_en (the gated async .ply export this backend's own
+    # adapter_launch.py docstring describes) is intentionally left at its
+    # compiled-in default (off) -- not set here, so no map-persistence
+    # write path is exercised for this eval, matching pcd_save_en above.
+
+    scale_factor: 0.035
+    GS_voxel_size: 1
+    root_voxel_size: 0.01
+    octree_max_level: 3
+
+    # Camera intrinsics, computed from common/cerberus_description/sensors/
+    # sensor_configs.py's _FRONT_CAM_SPAWN (focal_length=24.0mm,
+    # horizontal_aperture=20.955mm) at the real 640x480 render resolution:
+    # fx = fy = focal_length * width / horizontal_aperture = 24 * 640 / 20.955
+    # (square pixels, aspect-consistent vertical_aperture -- Isaac Lab
+    # derives vertical_aperture from the aspect ratio when not given
+    # explicitly). cx/cy are the image center. No lens distortion in sim.
+    cam_model: "Pinhole"
+    cam_width: 640
+    cam_height: 480
+    scale: 1.0
+    cam_fx: 733.0
+    cam_fy: 733.0
+    cam_cx: 320.0
+    cam_cy: 240.0
+    cam_d0: 0.0
+    cam_d1: 0.0
+    cam_d2: 0.0
+    cam_d3: 0.0

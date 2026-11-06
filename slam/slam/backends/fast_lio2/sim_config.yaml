@@ -1,0 +1,66 @@
+/**:
+  ros__parameters:
+    common:
+      map_frame: "odom"
+      lidar_frame: "lidar"
+      # Non-empty base_frame makes spark_fast_lio.cpp's constructor look up
+      # the lidar->base_frame extrinsic via a LIVE tf2 transform instead of
+      # trusting mapping.extrinsic_T/extrinsic_R below -- and ABORT
+      # construction entirely (constructor returns early) if that transform
+      # never appears, which it never will here since nothing in this sim
+      # bridge publishes a base_link TF frame. Confirmed by hitting exactly
+      # this ("Failed to lookup transform", node otherwise silently
+      # non-functional) against a real pod run. Empty base_frame skips that
+      # whole lookupBaseExtrinsics() branch, so the yaml extrinsic below is
+      # used directly, which is what we want -- it's already hand-computed
+      # from the real sim mount offsets.
+      base_frame: ""
+      imu_frame: "imu"
+      visualization_frame: "imu"
+      time_sync_en: false
+
+    preprocess:
+      lidar_type: 2               # Velodyne -- our synthetic point cloud is wire-compatible
+                                   # with velodyne_ros::Point (see sensor_msg_builders.py)
+      scan_line: 100               # must match common/cerberus_description/sensors/sensor_configs.py's LIDAR_CFG.pattern_cfg.channels
+      scan_rate: 10                # matches LIDAR_CFG.update_period = 1/10
+      timestamp_unit: 2            # microseconds -- matches /lidar/points' shared wire convention
+                                   # (see sensor_msg_builders.py's _SCAN_PERIOD_US comment: FAST-LIVO2
+                                   # and GS-LIVO both hardcode this field as microseconds with no
+                                   # config override, while FAST-LIO2's own scale factor is
+                                   # configurable -- this is the one setting on our side)
+      blind: 0.5                  # meters -- filters points inside the robot's own body
+
+    mapping:
+      acc_cov: 0.1
+      gyr_cov: 0.1
+      b_acc_cov: 0.0001
+      b_gyr_cov: 0.0001
+      fov_degree: 360.0            # matches LIDAR_CFG.pattern_cfg.horizontal_fov_range
+      det_range: 150.0
+      extrinsic_est_en: false      # fixed, known extrinsic -- no online estimation needed in sim
+
+      # LIDAR_CFG is offset (0, 0, 0.05) from the robot base prim; IMU_CFG has
+      # no offset (mounted at the base prim origin) -- see
+      # common/cerberus_description/sensors/sensor_configs.py. Both share the
+      # base's orientation (no rotation offset on either), so extrinsic_R is
+      # identity.
+      extrinsic_T: [0.0, 0.0, 0.05]
+      extrinsic_R: [1.0, 0.0, 0.0,
+                    0.0, 1.0, 0.0,
+                    0.0, 0.0, 1.0]
+
+    filter_size_map: 0.3
+
+    publish:
+      path_en: true
+      scan_publish_en: true
+      dense_publish_en: true
+      scan_lidarframe_pub_en: true
+      scan_bodyframe_pub_en: true
+      scan_baseframe_pub_en: false
+
+    pcd_save:
+      pcd_save_en: false           # eval cares about odometry, not map persistence to disk
+
+    verbose: true

@@ -42,6 +42,13 @@ TRAIN_TIMEOUT="${TRAIN_TIMEOUT:-600}"; PLAY_TIMEOUT="${PLAY_TIMEOUT:-600}"; SPIK
 # Driver 595 crashes or hangs ~half of Kit launches (measured 2026-11-06: the spike crashed twice in a row while
 # train and play launched first try). Four attempts makes that a non-issue; worst case is 4 x timeout per step.
 ATTEMPTS="${ATTEMPTS:-4}"
+# The spike step: a ground plane, not Arena's `stock` background. `--backend arena --scene stock` spawns the Galileo
+# background, whose floor the robot sinks through (base below its own feet, 2026-11-06), so the standing check added to
+# arena_spike_go2.py fails it by design -- a permanently red step is worse than no step. plain_usd `stock` is a real
+# GroundPlaneCfg, so it checks "env builds, robot stands, 100 steps on GPU" with no scene dataset and no Arena.
+# For real Arena coverage override e.g. SPIKE_ARGS="--backend arena --scene lightwheel:1:1" (needs the Lightwheel SDK
+# download and exercises Arena's ResetBackgroundPhysics path, which reset_all exists for).
+SPIKE_ARGS="${SPIKE_ARGS:---backend plain_usd --scene stock}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -119,7 +126,8 @@ fi
 # ---- 3. Arena spike (stock scene) -- the PASS that previously had no artifact -----------------------------------
 if skipped spike; then record spike SKIP "-"; else
     SPIKE_JSON="$REPORT_DIR/arena_spike_go2.json"
-    run_isaac spike "$SPIKE_TIMEOUT" "$ATTEMPTS" -- "$LAB" -p scripts/arena_spike_go2.py --scene stock --num_envs 16 --steps 100 --headless --report "$SPIKE_JSON"
+    # shellcheck disable=SC2086  # SPIKE_ARGS is intentionally word-split into separate flags
+    run_isaac spike "$SPIKE_TIMEOUT" "$ATTEMPTS" -- "$LAB" -p scripts/arena_spike_go2.py $SPIKE_ARGS --num_envs 16 --steps 100 --headless --report "$SPIKE_JSON"
     rc=$?
     if [[ $DRY -eq 1 ]]; then record spike DRYRUN "-"; else
         if [[ -z "$PYTHON" ]]; then record spike FAIL "no python interpreter to read $SPIKE_JSON"

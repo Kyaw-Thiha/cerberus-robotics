@@ -1248,9 +1248,12 @@ meaningful" for the EA run on 2026-10-05 (base-minus-foot -0.04), versus the mea
 (+0.216). The script already measured `base_minus_foot_z_mean` and documented the intended reading in a comment
 ("standing Go2 ~0.25-0.35 m, collapsed ~0.1 m") but never consulted it when setting `passed`. It now does: a value
 <= 0.15 m is a failure, so today's report would be a FAIL. The criterion is scene-relative on purpose — absolute
-root z is meaningless on backgrounds whose floor sits 0.5-0.8 m below the origin. Open question this exposes: whether
-the stock/Galileo scene is genuinely unusable for a standing robot, or the spike should spawn on a GRScenes home
-(the scene the real SLAM/eval work uses).
+root z is meaningless on backgrounds whose floor sits 0.5-0.8 m below the origin. Resolution (same session): not a code
+problem and not worth chasing. `run_ga_smoke_pod.sh` now runs its spike step as `--backend plain_usd --scene stock`,
+which is a real `GroundPlaneCfg` (the robot stands, no scene dataset needed), and `SPIKE_ARGS` overrides it — e.g.
+`--backend arena --scene lightwheel:1:1` for genuine Arena coverage, which is also the path that exercises Arena's
+`ResetBackgroundPhysics` (the reason `reset_all` exists). Arena's `stock`/Galileo background is left alone as a
+known-bad control.
 
 **Bug found by running it, not by reading:** the spike died every time at the reset stage with
 `TypeError: OrderEnforcing.reset() got an unexpected keyword argument 'env_ids'`, so the Arena gate was in fact

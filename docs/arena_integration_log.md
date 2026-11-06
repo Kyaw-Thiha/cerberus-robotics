@@ -1227,3 +1227,39 @@ NOT verified: other GRScenes homes (only the one known-good scene was re-rendere
 `play_training_progression.py` (patched the same way as the flat showcase, but there is no rough checkpoint to run them with), `train.py --video`, the ROS2 bridge on
 Sim 6.x, old Lab 2.3.2 checkpoints under rsl-rl 5.x, any render on a 580.x driver. The `body_ids` `isinstance(..., list)` pattern in `push_impulse_event.py` /
 `push_recovery_event.py` is a latent bug at the old pin and at GA (Lab finalizes `body_ids` to a tensor for manager terms); not changed.
+
+## GA smoke + the Arena spike's missing artifact — 2026-11-06
+
+Ran `scripts/run_ga_smoke_pod.sh` on one A5000 pod (driver 595.91.07, CA-MTL-1, $0.27/h), on the `v6-ga` image.
+This closes the two gaps left by the 2026-10-25 session: it produced the Arena spike artifact that run lost, and it
+exercised the code changed in `fd35698` (task configs imported from `isaaclab_tasks.core`) and `65d6e19` (rsl-rl
+3.x branches removed).
+
+| Step | Result |
+|---|---|
+| `train.py --config smoke_test` | PASS, 59 s, `model_2.pt` written, 3 iterations at ~1.1 s each |
+| `play.py --headless --video ... --num_envs 8` | PASS, exit 0, `clip_0000.mp4` h264 1280x720 100 frames, plus `exported/policy.pt` and `policy.onnx` (+`.data`) |
+| `arena_spike_go2.py --scene stock`, 16 envs, 100 steps | PASS on the 2nd launch: `passed: true`, build 13.3 s, reset 202 s |
+
+**Bug found by running it, not by reading:** the spike died every time at the reset stage with
+`TypeError: OrderEnforcing.reset() got an unexpected keyword argument 'env_ids'`, so the Arena gate was in fact
+broken on GA before this session. `common/cerberus_compat/reset.py::reset_all` computed the unwrapped env for
+`num_envs`/`device` but then called `env.reset(env_ids=...)` on the gym *wrapper*; gymnasium's `OrderEnforcing.reset`
+is `reset(*, seed=None, options=None)` and rejects the id tensor that this helper exists to pass. `reset_all` now
+retries on the unwrapped env and repairs the wrappers' `_has_reset` flag (without that, the next `env.step()` raises
+"before calling env.reset()"). Regression test added; it fails against the old code.
+
+**NOT verified:** the `Lightwheel` kitchen path (the spike used `--scene stock`, so Arena's `ResetBackgroundPhysics`
+slice bug was not exercised here), `annotate`/`generate` on GA, the other GRScenes homes, the SLAM eval end to end,
+and `BestCheckpointOnPolicyRunner`'s reward-bucket saving (3 iterations never triggered `model_best_*`).
+
+**Driver 595 flake rate, measured on this pod:** across 5 smoke steps, 1 train launch crashed, 1 spike launch crashed
+at `omniCoreStart` (SIGSEGV), and 1 spike launch hung until its 600 s cap — 3 of 7 launches bad, matching the "about
+half" seen on 2026-10-25. Two attempts per step is not enough: the first end-to-end run failed at the spike on two
+crashes in a row, so `run_ga_smoke_pod.sh` now defaults to `ATTEMPTS=4`, and the passing run needed attempt 2 for
+the spike after attempt 1 hung.
+
+Artifacts: `data/reports/ga_smoke_20261106T214925Z/` locally (train/play/spike all PASS) and
+`r2:migration/ga_smoke_20261106T214925Z/` — JSON, per-attempt logs, `summary.txt` and the video. The earlier,
+partly-failed run is kept at `r2:migration/ga_smoke_20261106T213400Z/` as the evidence for the `reset_all` bug.
+This is the first time the Arena spike PASS has an artifact.

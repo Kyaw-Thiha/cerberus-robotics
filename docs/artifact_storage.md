@@ -63,6 +63,27 @@ single known-key fetch (`rclone cat cerberus_r2:<bucket>/locomotion/unitree_go2_
 instead of listing and sorting run folders — useful for eval, and later for
 the ROS2 inference node picking up a fresh checkpoint.
 
+### Non-training prefixes
+
+The layout above is training-run shaped. Three other prefixes exist, written by their own scripts rather than by
+`sync-run`'s checkpoint handling:
+
+```
+r2://<bucket>/
+  worlds/grscenes/                  # GRScenes scene mirror (private; CC BY-NC-SA 4.0 -- never publish)
+    admission.json                    # admission manifest: pass/fail per scene + validated spawn poses
+    home/{Materials,models,scenes/<id>_usd}/   # only ADMITTED scenes; shared assets deduplicated
+  scene_admission/                  # this module's reports, via `sync-run --module scene_admission`
+    reports/scene_admission/...       # (the doubled name is sync-run nesting under reports/<dir basename>)
+  slam/                             # one run per SLAM eval mission, see the slam/ package
+```
+
+- **Scene mirror + manifest**: `python3 scripts/fetch_grscenes_to_r2.py` (its upload step; `--from-tree` uploads
+  only the admitted scenes). `admission.json` is the file Phase 1 and the SLAM eval read for `--spawn-index`.
+- **Admission reports** (child JSONs and logs, about 19 MB per sweep):
+  `python3 scripts/sync_to_r2.py sync-run --module scene_admission --run-dir data/reports/scene_admission`.
+  Verified 2026-10-12; the same call is what the unattended sweep supervisor runs at the end.
+
 ## Two subcommands: sync-run vs sync-eval
 
 Eval doesn't always run alongside training — often later, sometimes on a
@@ -103,7 +124,7 @@ this session (both subcommands, uploaded + inspected via `rclone tree` +
 cleaned up via `rclone delete`/`rmdirs` — `rclone purge`'s bucket-versioning
 preflight check 403's under this account's API token scope, unrelated to the
 actual delete, which works fine). **rclone is already present on the local
-machine but not yet in `docker/Dockerfile.remote`.** Since the artifacts live
+machine but not yet in `docker/remote/Dockerfile`.** Since the artifacts live
 on the pod, the natural place to run this is on the pod itself (right before
 killing it), which means `rclone` needs adding to the Dockerfile before this
 is usable end-to-end there. A local install is only needed for testing, or

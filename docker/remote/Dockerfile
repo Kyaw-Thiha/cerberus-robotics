@@ -10,7 +10,7 @@
 #   https://github.com/isaac-sim/IsaacLab/blob/v2.3.2/docker/.env.base
 #   https://github.com/isaac-sim/IsaacLab/blob/v2.3.2/source/isaaclab_rl/setup.py
 #
-# SSH portability across providers (see docker/start.sh for the implementation):
+# SSH portability across providers (see docker/remote/start.sh for the implementation):
 #   - RunPod / vast.ai are container-native: their platform launches THIS
 #     image directly, so it has to carry its own sshd or you're locked out.
 #     RunPod expects the image to consume $PUBLIC_KEY itself (what start.sh
@@ -25,7 +25,24 @@
 ARG ISAACSIM_VERSION=5.1.0
 ARG ISAACLAB_VERSION=v2.3.2
 
+# rclpy for the ROS2-relay half of the sim-to-ROS2 bridge (slam/slam/
+# ground_truth/ros2_bridge_relay.py) -- provisioned via pixi's sim-ros2
+# environment (root pixi.toml), same pattern as docker/slam/*/Dockerfile,
+# and deliberately NOT installed into Isaac Sim's own bundled Python below
+# (a separate interpreter/ABI entirely -- see pixi.toml's sim-ros2 feature
+# comment and sim_ipc.py's module docstring for why the bridge is two
+# processes talking over a local zmq socket instead of one).
+FROM ghcr.io/prefix-dev/pixi:noble AS pixi-build
+
+WORKDIR /pixi-project
+COPY pixi.toml pixi.lock ./
+RUN pixi install -e sim-ros2 --locked
+RUN pixi shell-hook -e sim-ros2 --shell bash > /pixi-project/activate.sh
+
 FROM nvcr.io/nvidia/isaac-sim:${ISAACSIM_VERSION}
+
+COPY --from=pixi-build /pixi-project/.pixi/envs/sim-ros2 /pixi-project/.pixi/envs/sim-ros2
+COPY --from=pixi-build /pixi-project/activate.sh /pixi-project/activate.sh
 
 # The base image defaults to a non-root `isaac-sim` user (uid 1234), which
 # can't apt-get/pip-install or bind sshd. Root throughout matches RunPod's
@@ -76,55 +93,14 @@ RUN --mount=type=cache,target=/root/.cache/pip \
 
 WORKDIR /workspace
 
-# OmniGibson (BEHAVIOR-1K monorepo) -- scene-loading/decryption layer only,
-# not its own Environment/robot/step loop. No isaacsim dependency in its
-# setup.py, so installing omnigibson/bddl directly (skipping their setup.sh)
-# avoids duplicating the base image's Isaac Sim.
-ENV BEHAVIOR1K_PATH=/workspace/behavior-1k
-RUN git clone --branch v3.9.2 --depth 1 \
-    https://github.com/StanfordVL/BEHAVIOR-1K.git ${BEHAVIOR1K_PATH}
-
-# omnigibson/envs/__init__.py unconditionally imports lerobot, which we
-# never use and which conflicts with Isaac Lab's huggingface-hub/packaging
-# pins. Deleting the import line (vs. stubbing a fake lerobot package) fails
-# loudly if a future OmniGibson version needs it elsewhere, instead of
-# silently masking a real dependency.
-RUN sed -i '/from omnigibson\.envs\.lerobot_data_wrapper import LeRobotDataWrapper, LeRobotPlaybackWrapper/d' \
-    ${BEHAVIOR1K_PATH}/OmniGibson/omnigibson/envs/__init__.py
-
-# --no-deps is load-bearing, not an optimization: OmniGibson's real
-# dependency resolution pulls in packaging/pillow/huggingface-hub versions
-# that conflict with Isaac Lab's pins, and uninstalling packaging breaks
-# Isaac Sim's own pip/torch (both vendor it via symlinks). The explicit
-# installs below are the safe subset actually needed at runtime.
-# numpy/numba/opencv-python are pinned because their latest releases require
-# numpy>=2, breaking isaaclab's numpy<2 pin. `av` is needed by
-# omnigibson.eval.utils.obs_utils, imported unconditionally even though we
-# don't use its video-writing path.
-RUN --mount=type=cache,target=/root/.cache/pip \
-    /workspace/isaaclab/_isaac_sim/python.sh -m pip install -e ${BEHAVIOR1K_PATH}/bddl3 && \
-    /workspace/isaaclab/_isaac_sim/python.sh -m pip install --no-deps -e ${BEHAVIOR1K_PATH}/OmniGibson --no-build-isolation && \
-    /workspace/isaaclab/_isaac_sim/python.sh -m pip install \
-        gymnasium scipy GitPython transforms3d networkx addict ipython future trimesh h5py cryptography \
-        "opencv-python==4.11.0.86" nest_asyncio termcolor progressbar pymeshlab click aenum rtree graphviz \
-        matplotlib lxml "numba==0.59.1" "llvmlite==0.42.0" "numpy<2" omegaconf pyyaml-include jsonlines av \
-        cffi==1.17.1 "websockets>=15.0.1"
-
-# Dataset download (>30GB) + scene prune in this ONE layer -- a later
-# layer's deletion wouldn't shrink the image. accept_license=True is a
-# considered decision given the dataset's "non-commercial academic research"
-# EULA clause, not an oversight.
-COPY docker/fetch_omnigibson_assets.py /tmp/fetch_omnigibson_assets.py
-RUN /workspace/isaaclab/_isaac_sim/python.sh /tmp/fetch_omnigibson_assets.py
-
 # Additive packages layered onto Isaac Sim's bundled Python interpreter --
-# see docker/requirements.txt for what's in it and why (wandb for
+# see docker/remote/requirements.txt for what's in it and why (wandb for
 # train.py's default logger, imageio[ffmpeg] for core/video_capture.py's
 # direct frame writing). Pinned there, not inline here, so the exact
 # resolved set is reproducible on rebuild -- pixi.lock's equivalent for this
 # additive layer (pixi itself doesn't fit -- it owns/creates its own
 # interpreter, it doesn't attach to Isaac Sim's).
-COPY docker/requirements.txt /tmp/requirements.txt
+COPY docker/remote/requirements.txt /tmp/requirements.txt
 RUN --mount=type=cache,target=/root/.cache/pip \
     /workspace/isaaclab/_isaac_sim/python.sh -m pip install -r /tmp/requirements.txt
 
@@ -144,7 +120,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && mkdir -p /var/run/sshd \
     && rm -rf /var/lib/apt/lists/*
 
-COPY docker/start.sh /start.sh
+COPY docker/remote/start.sh /start.sh
 RUN chmod +x /start.sh
 
 # The base image sets its own ENTRYPOINT (/isaac-sim/runheadless.sh) — CMD

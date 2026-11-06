@@ -34,7 +34,7 @@ already-pulled-down logs) is local.
   bring-up and any live/interactive debugging session — it removes setup
   friction, not compute cost (it brokers the same underlying GPU market as
   direct providers, so it isn't inherently cheaper).
-- **Direct provider (Lambda / RunPod / vast.ai) + own `Dockerfile.remote`**
+- **Direct provider (Lambda / RunPod / vast.ai) + own `docker/remote/Dockerfile`**
   for unattended, long, parallel-env training runs (the expensive Phase 0/1
   PPO jobs). No streaming needed for headless training, so shop whichever
   provider is cheapest that week — the Dockerfile is reusable across all

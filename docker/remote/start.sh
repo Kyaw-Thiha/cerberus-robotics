@@ -4,7 +4,7 @@
 # Built FROM nvcr.io/nvidia/isaac-sim, not a runpod/* base, so unlike an
 # official Runpod image (which ships its own /start.sh) this container has to
 # set up SSH itself or a container-native provider locks you out entirely —
-# see docker/Dockerfile.remote's header comment for the per-vendor rundown.
+# see docker/remote/Dockerfile's header comment for the per-vendor rundown.
 set -eu
 
 mkdir -p ~/.ssh
@@ -34,6 +34,13 @@ ssh-keygen -A
 # is actually invoked, does NOT run as a login shell and so does NOT source
 # /etc/profile.d/* either), write these explicitly to a file our own scripts
 # source themselves -- see scripts/run_remote_job.sh.
-env | grep '^RUNPOD_' | sed 's/^/export /' > /etc/cerberus_env.sh
+# Dockerfile-baked ENV vars (e.g. ISAACLAB_PATH) are not inherited by
+# `ssh host "command"` sessions either, so export those too, along with
+# anything else a future SSH-invoked script (scripts/run_slam_eval_remote.sh
+# included) might need at runtime.
+# RUNPOD_API_KEY is deliberately excluded: this file gets cat'd and sourced by agents
+# and the key leaked into a transcript once (2026-10-05). Pod self-termination from a
+# pod shell must use the key from the container env, never from this file.
+env | grep -E '^(RUNPOD_|ISAACLAB_PATH)' | grep -v '^RUNPOD_API_KEY=' | sed 's/^/export /' > /etc/cerberus_env.sh
 
 exec /usr/sbin/sshd -D

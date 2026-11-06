@@ -72,6 +72,12 @@ platform):
    the embodiment config rather than inlined — the CBF/QP *formulation* code
    survives a swap even though its numeric parameters don't.
 
+URDF/xacro is the canonical embodiment description, feeding both ROS and
+sim: `common/cerberus_description/urdf/go2.urdf.xacro` (with its `sim`
+argument) is merged with the arm by `scripts/build_go2_arx5_urdf.py` and
+converted to USD with Isaac Lab `UrdfConverter`. See
+`docs/embodiment_asset_composition.md`.
+
 Checkpoint naming follows the same principle: prefix with the embodiment id
 (`go2_arx5_...`, not just `go2_...`) once the arm is in the loop, so a future
 combo's checkpoints don't collide with or shadow this one's (see "Checkpoint
@@ -89,16 +95,26 @@ cerberus/
 ├── common/                        # shared, dependency-only, no standalone behavior
 │   ├── cerberus_msgs/               # custom msg/srv/action defs
 │   └── cerberus_description/        # UNITREE_GO2_CFG + ARX5_CFG, composed into
-│                                       # GO2_ARX5_CFG — see embodiment config pattern above
+│       │                               # GO2_ARX5_CFG — see embodiment config pattern above
+│       ├── embodiment.py              # EmbodimentCfg (lazy entry point, joint_groups by name)
+│       │                                 # + compose_embodiments(); pure python
+│       ├── urdf/go2.urdf.xacro        # Go2 description; `sim` arg (default false = ROS; true =
+│       │                                 # root link `base`, no rotors/sensors/gazebo, for sim)
+│       └── xacro_expand.py            # expands xacro without an ament index; pure python
 │
-├── worlds/                        # mission environment scenes — pulled from external
-│   │                                 # libraries, not authored here; gitignored like data/
-│   ├── household/                   # BEHAVIOR-1K/OmniGibson scenes — Phase 1/2 primary, see
-│   │                                 # docs/omnigibson.md for scene list + train/test split
-│   ├── retail_restaurant_office/    # same asset family — secondary missions, near-zero
-│   │                                 # marginal cost over household
-│   └── fetch_scenes.py                # loads scenes via OmniGibson (required for decryption —
-│                                       # see docs/omnigibson.md); not a plain USD pull
+│   ├── cerberus_worlds/             # world-backend abstraction — see docs/worlds.md
+│   │   ├── base.py                    # WorldBackend: list_scenes, load_scene,
+│   │   │                                 # register_embodiment, build_env
+│   │   ├── registry.py                # get_backend(): explicit arg > WORLD_BACKEND env > error,
+│   │   │                                 # no silent default; lazy "module:Class" registration
+│   │   ├── admission.py               # scene admission manifest (pass/fail + validated spawn poses)
+│   │   ├── arena_assets/              # out-of-tree Arena embodiments/backgrounds + scene discovery
+│   │   └── backends/                    # never imported outside registry
+│   │       ├── arena_backend.py         # Isaac Lab Arena (Lightwheel kitchens etc.)
+│   │       └── plain_usd_backend.py     # generic USD scenes (GRScenes-100), configurable preprocess
+│
+│   ├── cerberus_compat/             # Isaac Lab 2.x <-> 3.0 adapters (quat, Warp data, rsl-rl, launcher);
+│   │                                   # all Isaac-touching code goes through these
 │
 ├── perception/
 │   ├── terrain_perception/          # ROS2 pkg: terrain/obstacle perception for nav
@@ -119,7 +135,7 @@ cerberus/
 │   │   │   ├── train_adversary.py       # trains adversary policy vs. frozen candidate checkpoint
 │   │   │   ├── attack_env.py            # wrapper env: frozen locomotion policy in the loop
 │   │   │   └── eval/                    # adversarial vulnerability report, robustify/reattack results
-│   │   └── checkpoints/               # candidate → robustified → final, versioned (see Phase 0.5 handoff)
+│   │   └── checkpoints/               # candidate → robustified → final, versioned
 │   ├── manipulation/                # Phase 2, owns the Phase 4 training loop
 │   │   ├── demo_collection/           # Isaac Lab Mimic
 │   │   ├── algorithms/                # BC, Diffusion Policy, ACT
@@ -146,16 +162,45 @@ cerberus/
 │
 ├── docs/                             # architecture.svg, pipeline diagram, this file,
 │                                       # isaac_lab_workflow.md, manipulator.md (VLM/VLA plan),
-│                                       # omnigibson.md (scenes/splits/docker),
-│                                       # omnigibson_handoff.md (coding-agent handoff)
+│                                       # worlds.md (scene sources/splits/backends),
+│                                       # arena_integration_log.md (W0-W4 gate log)
 ├── docker/
-│   └── Dockerfile.remote             # Isaac Lab base image + pinned extras, built on rented GPU box
+│   ├── remote/                       # OLD stack image (Sim 5.1 / Lab 2.3.2 / Py 3.11): Dockerfile, start.sh
+│   ├── remote_v6/                    # NEW stack image (Sim 6.2 / Lab v3.0.0 GA / Py 3.12 + Arena main + pixi sim-ros2)
+│   └── slam/                         # one SLAM backend image per subdirectory
 ├── scripts/                          # cross-cutting ops tooling, not owned by one stack component
-│   └── sync_to_r2.py                   # permanent artifact storage — see docs/artifact_storage.md
+│   ├── sync_to_r2.py                   # permanent artifact storage — see docs/artifact_storage.md
+│   ├── build_go2_arx5_urdf.py          # merge sim Go2 + patched X5A arm -> go2_arx5 URDF (offline)
+│   ├── convert_go2_arx5_urdf_to_usd.py # UrdfConverter -> flattened USD + checks (pod)
+│   ├── compare_go2_urdf_to_usd.py      # URDF vs USD mass/CoM/inertia/limits (offline)
+│   └── tests/                          # colocated tests for the scripts above
 ├── data/                             # gitignored — demos, trajectories
 ├── outputs/                          # gitignored — checkpoints, logs, videos, wandb runs
 └── README.md
 ```
+
+## Test layout
+
+Tests live in a `tests/` subdirectory of the thing they test — one directory,
+not a repo-wide `tests/` tree. `common/cerberus_worlds/backends/tests/`,
+`slam/slam/eval/tests/`, `scripts/tests/`, and so on. ROS2/ament packages keep
+`<pkg>/test/` instead, because colcon and `setup.py` already expect that name.
+
+Rules that keep this working without `__init__.py` files or a plugin:
+
+- **Test module basenames must be unique repo-wide.** `pytest`'s default
+  `prepend` import mode keys modules by basename, so two `test_algorithms.py`
+  files collide. This is why the per-package ones are named
+  `test_<package>_algorithms.py`.
+- **`pytest.ini` sets `pythonpath = . scripts`**, so `from common.x import y`
+  (repo root) and `import build_lidar_proxy` (bare script imports) both resolve
+  regardless of the current directory.
+- **Moving a test one level deeper changes its `__file__` anchors.** Every
+  `Path(__file__).parents[n]` and `Path(__file__).parent` used to reach repo
+  root, the package, or a sibling module needs `n + 1` / `.parent.parent`.
+- `policy/locomotion_policy/conftest.py` is intentionally empty: it exists only
+  to put that package on `sys.path` for its `locomotion_policy.*` imports. Do
+  not switch pytest to `--import-mode=importlib` without replacing it.
 
 ## Why `locomotion` and `manipulation` nest under `policy/` instead of root
 
@@ -220,6 +265,15 @@ checkpoints under `policy/manipulation/` switch to an embodiment-prefixed
 scheme (`go2_arx5_...`) per the "Embodiment configuration pattern" section
 above, so a future arm or platform swap gets its own checkpoint lineage
 rather than colliding with this one's.
+
+## Rule 7: world backends are pluggable
+
+Scene source and sim-env composition sit behind `common/cerberus_worlds/`. Policy, perception
+and safety code never import a backend directly, so a new scene library or env framework is a
+new file in `backends/`, not a rewrite. Scene assets are fetched to gitignored `data/scenes/`.
+Nobody imports `common.cerberus_worlds.backends.*` directly; everything goes through
+`registry.get_backend`, and an AST-scan test enforces it. OmniGibson was evaluated and dropped
+(see `docs/worlds.md`).
 
 ## Open item
 

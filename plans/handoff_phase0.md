@@ -3,6 +3,10 @@
 Read `docs/cerberus_project_context.md` and `docs/project_structure.md` first for
 full context. This doc is the actionable spec for this phase only.
 
+**Caveat added 2026-10-12:** the retraining target is no longer settled as the stock flat+rough task — the user may
+train a perception-conditioned / visual-navigation policy instead (see `arena_integration_handoff.md` section 3). If so,
+this phase's task definition, observation space and expected compute change; read that section before starting.
+
 ## Objective
 
 Prove the whole remote-compute + Isaac Lab pipeline runs end to end, and

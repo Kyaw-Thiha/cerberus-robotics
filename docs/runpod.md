@@ -11,12 +11,13 @@ Use the RunPod MCP tools (`create-pod`, `get-pod`, `list-pods`, `delete-pod`,
 `stream-pod-logs`) rather than shelling out to `runpodctl` when they're
 available — structured, no auth-string parsing.
 
-- **Image**: `kevinkyawthiha/cerberus-remote:v1` (built from
-  `docker/Dockerfile.remote`), GPU `NVIDIA GeForce RTX 4090`, `SECURE` cloud
-  tier, 40GB container disk, port `22/tcp` exposed, SSH public key from the
-  dedicated automation key (see "SSH access" below).
-- **Cold start is unpredictable, not stuck**: pulling the ~7.5GB image takes
-  anywhere from ~1 to ~5+ minutes depending on host/network. `get-pod`
+- **Image**: `kevinkyawthiha/cerberus-remote:v3` (old stack; the new family is in "New image family" below) (built from
+  `docker/remote/Dockerfile`: Isaac Sim + Isaac Lab, no scene dataset), GPU `NVIDIA GeForce RTX 4090`,
+  `SECURE` cloud tier, 40GB container disk, port `22/tcp` exposed, SSH public
+  key from the dedicated automation key (see "SSH access" below).
+- **Cold start is unpredictable, not stuck**: pulling the ~18.7GB image (down
+  from 20.3GB before OmniGibson was removed) takes anywhere from ~1 to ~5+ minutes depending on
+  host/network. `get-pod`
   returning `runtime: null` for a while is normal. Check
   `stream-pod-logs(source="system", tail=5, maxWaitMs=3000)` for actual
   download progress before concluding anything is wrong — don't re-roll on a
@@ -35,26 +36,140 @@ available — structured, no auth-string parsing.
 
 ## Building and pushing the image
 
-No CI — build and push manually when `docker/Dockerfile.remote`,
-`docker/requirements.txt`, or `docker/fetch_omnigibson_assets.py` changes:
+`docker/` is organized as one nested directory per image, not a flat list of
+`Dockerfile.<name>` files (restructured 2026-09-21 once SLAM backend images
+joined `remote` as a second image family — see below):
+
+```
+docker/
+├── remote/            # Isaac Lab (Dockerfile, requirements.txt, start.sh)
+└── slam/               # one SLAM backend per subdirectory
+    ├── shared/start_slam_backend.sh   # common entrypoint, one copy
+    ├── fast_lio2/Dockerfile
+    ├── bievr_lio/Dockerfile
+    ├── fast_livo2/Dockerfile
+    ├── orb_slam3/Dockerfile
+    ├── multicam_slam/Dockerfile
+    └── gs_livo/Dockerfile
+```
+
+No CI — build and push manually when a Dockerfile or its associated files
+change. The `remote` image:
 
 ```bash
-docker build -t kevinkyawthiha/cerberus-remote:v2 -f docker/Dockerfile.remote .
-docker push kevinkyawthiha/cerberus-remote:v2
+docker build -t kevinkyawthiha/cerberus-remote:v3 -f docker/remote/Dockerfile .
+docker push kevinkyawthiha/cerberus-remote:v3
 ```
+
+A SLAM backend image (run `python scripts/fetch_slam_backends.py <name>`
+first — each backend's Dockerfile `COPY`s locally-vendored source, it does
+not `git clone` inside the Dockerfile the way `remote` does):
+
+```bash
+docker build -t kevinkyawthiha/cerberus-slam-fast-lio2:v1 -f docker/slam/fast_lio2/Dockerfile .
+docker push kevinkyawthiha/cerberus-slam-fast-lio2:v1
+```
+
+(substitute the backend name in both the tag and `-f` path for any of the
+other five — `bievr_lio`, `fast_livo2`, `orb_slam3`, `multicam_slam`,
+`gs_livo`).
 
 Bumping the tag vs. overwriting `v1` is free either way (Docker Hub doesn't
 charge for public-repo storage, and layers dedupe by content hash) — bump for
 rollback safety, or overwrite for simplicity; update the tag referenced in
 pod-create calls either way.
 
-**Rebuild needed for:** Dockerfile changes, `requirements.txt` changes, or
-changing which OmniGibson scenes are kept (that list is applied at build
-time — pruned scenes are deleted from the image layer, not re-evaluated per
-pod). **Not a rebuild trigger:** any Cerberus code change (`policy/`,
-`scripts/`, etc.) — that's synced per pod via `tar`/`git`, separate from the
-image. Needs 120GB+ container disk to build once OmniGibson's dataset
-download step is in the image.
+**Rebuild needed for:** Dockerfile changes, `requirements.txt` changes,
+`start.sh` changes. **Not a rebuild
+trigger:** any Cerberus code change (`policy/`, `scripts/`, etc.) — that's
+synced per pod via `tar`/`git`, separate from the image.
+
+
+## New image family: `docker/remote_v6` (2026-10-05)
+
+Sim 6.1.0 base at first (`nvcr.io/nvidia/isaac-sim:6.1.0`; now 6.2.0, both pullable anonymously), Python 3.12, plus a pixi `sim-ros2` stage (re-added 2026-10-06: `rclpy` for the sim-to-ROS2 relay and `evo` for scoring).
+Old `cerberus-remote:v3` (Sim 5.1.0 / Lab 2.3.2 / Py 3.11) is kept as the stack all locomotion results were produced on; it is no longer needed to build the fused USD (the URDF workflow builds it on Lab 2.3.2 or 3.0 EA, see `docs/embodiment_asset_composition.md`).
+
+- `kevinkyawthiha/cerberus-remote-v6:v6-dev`, digest `sha256:81d8ff200a5952e417743cf9ad4da2b4a16c5ad47af26759546e3b87e9a13929`,
+  35.4 GB. Isaac Lab commit `bb0c8e1b9` (Arena main's pin, pkg 16.4.0), Arena main `311d0f0fc`, rsl-rl-lib 5.4.1, torch 2.11.0+cu128,
+  lightwheel-sdk 1.0.3, numpy 2.3.5.
+- `kevinkyawthiha/cerberus-remote-v6:v6-ea-dev` (superseded), digest
+  `sha256:4377062efde6d1b83798374db8efba5b8233ddbc1f4348442f4c656abefb99c3`, 35.0 GB. Isaac Lab `v3.0.0-EA`
+  (`ae37b028e`, pkg 17.0.2).
+- **`kevinkyawthiha/cerberus-remote-v6:v6-ga` (current, 2026-10-25)**, 34.4 GB, digest
+  `sha256:da1dc4cf73cb1955f062921d35147bf8fc7519d8c7bca26dbde790a16367b19c`. Sim 6.2.0, Isaac Lab `v3.0.0` (`e3f7d9ff`, pkg 28.0.0), Arena `main` `276d9731`,
+  rsl-rl-lib 5.5.1, torch 2.11.0+cu130, Python 3.12.14. Pod-verified, including scene render and video capture: see `docs/arena_integration_log.md`
+  "Lab 3.0 GA upgrade". All pods drawn on 2026-10-25 had driver 595.91.07 (see the driver section there); set `CERBERUS_ALLOW_BAD_DRIVER_RENDER=1` to
+  render on it and wrap every launch in `timeout`. Build: `TAG=v6-ga PUSH=1 docker/remote_v6/build.sh`.
+- `kevinkyawthiha/cerberus-remote-v6:v6-rel2` (previous, 2026-10-11, rollback), 35.1 GB, digest
+  `sha256:5ab14c76a0230f4ef533991ff5be3b7682c3d4195e91485eaabc8a4a72a81b1b`. Same Isaac Lab / Arena / rsl-rl / torch
+  as `v6-rel` (`/etc/cerberus_versions.json` is byte-identical), plus a pinned, sha256-verified **rclone 1.75.1** and
+  `lightwheel-sdk==1.0.3`: no per-pod rclone workaround any more. Verified after the push: `rclone version` v1.75.1,
+  pixi `sim-ros2` imports (`rclpy`, `zmq`, `msgpack`) and `evo_ape` work. `v6-rel` (below) is kept as the rollback.
+- `kevinkyawthiha/cerberus-remote-v6:v6-rel` (previous), 35.1 GB, digest
+  `sha256:c3443f44003dff5389e29d3d386c292e7a7330db602902207de6ab1960833e5c`. Isaac Lab `release/3.0.0`
+  (`dcabdcda`, pkg 27.0.1) + Arena `main` (`34bb35a85`), rsl-rl-lib 5.5.1, **torch 2.12.0+cu130**.
+  Two operational consequences found on 2026-10-06: (1) the CUDA 13 build needs a host driver >= 580, so create
+  these pods with `--min-cuda-version 13.0` (driver 580.159.04 on an RTX A5000 renders and steps fine); (2) the
+  pixi `sim-ros2` stage is back in the image (rclpy, pyzmq, msgpack, `evo` 1.37.1), which is what the SLAM eval's
+  relay and scoring need — `build.sh` now also copies `pixi.toml`/`pixi.lock` into the build context.
+  Third consequence found on 2026-10-07: **this image's `rclone` is v1.58.1, too old for the R2 remote** — it
+  rejects the `Cloudflare` S3 provider with `s3 provider "Cloudflare" not known`, which reads like a credentials
+  problem, and it breaks *every* R2 write (scene fetch/mirror, and `scripts/sync_to_r2.py`, whose failure
+  `run_slam_eval_remote.sh` treats as fatal and refuses to self-terminate). The Dockerfile now installs a pinned
+  rclone 1.75.1 (built into `v6-rel2`), and `scripts/sync_to_r2.py` preflights the version (fail-fast with an explicit
+  message). Only a pod created from `v6-rel` still needs `curl -fsSL https://rclone.org/install.sh | bash` once
+  before anything that writes to R2 (~20 s). Gotcha found building `v6-rel2`: a Dockerfile `ARG` is an env var inside
+  `RUN`, and rclone parses every `RCLONE_*` env var as a flag, so the args are named `CERB_RCLONE_*`.
+
+Build and push with the script (env vars `TAG`, `ISAACLAB_REF`, `ARENA_REF`, `PUSH=1`), not a bare `docker build`:
+
+```bash
+TAG=v6-dev ISAACLAB_REF=bb0c8e1b9af381bf13064ec3303e17db79e4b6ef ARENA_REF=311d0f0fc6724eb953313f04765f76d947982c40 PUSH=1 docker/remote_v6/build.sh
+TAG=v6-ea-dev ISAACLAB_REF=ae37b028ea415c91ea2bc32609efcd759ed2b974 PUSH=1 docker/remote_v6/build.sh
+```
+
+`build.sh` builds from a minimal temp context (the repo root has no `.dockerignore`); the exact args used per build are in `data/reports/overnight/docker_build_v6_*.log` (the lines above are reconstructed from NOTES.md, not copied from the logs). `build.sh` comments mention `docker login nvcr.io`, but the base image pulled anonymously.
+Dockerfile fixes found: `ARG ISAACSIM_VERSION` must be redeclared after `FROM`; version-JSON distribution names need normalization.
+At 35 GB the image needs container disk >= 80 GB (the old 40 GB default is too small).
+
+## Pod-run findings (overnight run, 2026-10-05)
+
+- **CPU pods cap container disk at 20-30 GB and ignore the volume**, so large extractions cannot run there. The GRScenes zip extraction
+  ran on an A5000 GPU pod (160 GB disk, $0.27/h, about 3 h). 7z reads the split zip (`.z01`...) directly (170,029 members).
+- **Driver vs renderer**: driver 595.91.07 + Sim 5.1 RTX rendering segfaults (`librtx.scenedb.plugin.so` at Hydra engine creation; `play --video`
+  blocked by the guard); physics without cameras is fine. On Sim 6.1, drivers 570.195.03 and 580 passed the render smoke (Isaac RTX camera RGB).
+  595 on Sim 6.1 was not tested.
+- **Env for SDK/Isaac `isaaclab.sh`** over non-tty ssh: set `ISAACLAB_PATH` and `TERM` explicitly; do not rely on the login environment.
+- **Never `cat /etc/cerberus_env.sh`.** `start.sh` writes all `RUNPOD_*` env there, including the Runpod API key. That happened once overnight
+  and the key appeared in an agent transcript: it must be rotated (security note, no value recorded). Recommended fix, not yet applied: filter
+  `RUNPOD_API_KEY` out of that file in `start.sh` (only `ISAACLAB_PATH` and non-secret vars are needed).
+- **Lab 3.0 `--headless`**: `AppLauncher` no longer registers `--headless` / `--enable_cameras` (use `--viz`); Lab's `annotate_demos.py` reads
+  `args_cli.headless` and breaks, so we use our in-process annotate port.
+- **`play.py` without `--video` has no end condition**; it only stops via `timeout` (expected, not a failure).
+- **Cost and cleanup discipline**: every session used a hard wall-clock cap, explicit `delete-pod`, then `list-pods` to verify deletion. Each GPU
+  session cost under about $1.1. Pods named `dqn-*` belong to another project and were never touched. Balance fell 35.30 -> 16.00 overnight but
+  other-project pods were running, so that delta is not attributable to Cerberus. One pod agent overran its cap; the orchestrator killed it and
+  deleted the pod explicitly.
+
+## Pod-ops lessons from the 2026-10-06 SLAM-readiness session
+
+- **`pkill -f` / `pgrep -f` on a pattern that also appears in your own `ssh ... "<command>"` kills the ssh session** (the bash
+  running your command matches it). Kill by numeric PID, or use the `[v]alidate_scenes` bracket trick.
+- **Sync in small batches** (`tar czf - <paths> | ssh ... "tar xzf - -C /workspace/cerberus"`) with `-o ServerAliveInterval=10
+  -o ConnectTimeout=20`; one big sync to a loaded shared host reset the connection and cost 28 minutes. Resync only the files
+  that changed. Remember the sync excludes `policy/locomotion/checkpoints`: copy the one ONNX/`.pt` you need explicitly.
+- **`runpodctl pod create --wait` can block 10+ min on the 35 GB image pull.** Create without `--wait` and poll ssh in a bounded
+  loop (`for i in $(seq 1 40); do ssh ... echo up && break; sleep 20; done`).
+- **Pull logs and artifacts BEFORE deleting a pod.** The crash dumps and child logs that would have diagnosed the admission
+  failures were lost with the first pod. For admission runs pull `data/reports/scene_admission/`; for SLAM runs pull
+  `slam/slam/eval/results/<run>/` (the bag is GBs: take `smoke_check.json`, `sim_loop_report.json`, `videos/` unless you need it).
+- **Launch Isaac with cameras enabled** (`args.enable_cameras = True` on the Lab 3.0 launcher) on the v6 image family (`v6-rel2`/`v6-rel`): every launch without it
+  died within ~1 s at startup in these sessions. Do not import `pxr` before the app launches (it breaks `omni.usd`); use a child
+  interpreter (`scene_geometry.main`) for anything that needs `pxr` early.
+- **Hugging Face rate-limits range reads** (HTTP 429). `scripts/remote_zip.py` paces them (`REMOTE_ZIP_RPS`, default 6/s).
+- **Sim speed varies by host**: the same 21 s mission took ~15 min on one A5000 host and ~14 min on a loaded one (load average 58);
+  give smoke runs a 35-45 min cap, not 10.
 
 ## SSH access
 
@@ -86,6 +201,19 @@ physical machine RunPod allocates brings its own driver.
   before committing pod time to an expensive run that only renders at the
   very end — much cheaper than discovering a crash after paying for the
   training part first.
+
+## Operational gotchas found on the W1.5a pod runs
+
+- `$ISAACLAB_PATH/isaaclab.sh` fails instantly (`'ansi+tabs': unknown terminal type`) when run from a
+  non-tty `ssh host "cmd"`. `export TERM=xterm` first.
+- `SimulationApp.close()` terminates the process with exit code 0 (so a `finally: close()` hides tracebacks and
+  failures) and has hung for 10+ minutes at shutdown on a pod. In one-shot scripts, write results to disk, flush
+  and `os._exit(code)` instead (see `scripts/spawn_hold_go2_arx5.py`).
+- `runpodctl pod create --env '{"PUBLIC_KEY":"<pub key>"}'` works with this image's `start.sh`; `--wait` returned
+  after about 3 minutes including the image pull. `runpodctl` has no `--terminate-after`: delete the pod explicitly.
+- Do not `pkill -f python3` over ssh: the pattern matches the ssh command itself and kills the session.
+- Driver 595.91.07 (the branch marked bad above for RTX rendering) ran headless physics with no cameras fine;
+  rendering on it was not tested.
 
 ## Syncing code to a pod
 

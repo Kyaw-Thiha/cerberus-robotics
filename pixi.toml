@@ -15,8 +15,179 @@ matplotlib = "*"
 pandas = "*"
 ros-jazzy-xacro = ">=2.1.1,<3"
 onnxruntime = ">=1.29.0,<2"
+py-opencv = ">=5.0.0,<6"
+# For local unit-testing of slam/slam/ground_truth/sim_ipc.py's wire-format
+# encode/decode logic and ros2_bridge_relay.py's dispatch logic, without
+# needing the sim-ros2 Docker-only environment.
+msgpack-python = "*"
+pyzmq = "*"
 
 [tasks]
 build = "colcon build --symlink-install"
 lint = "ruff check ."
 test = "pytest"
+
+# --- SLAM Docker-only environments -----------------------------------------
+# Deliberately NOT part of `[dependencies]`/`default` -- these provision the
+# ROS2 layer for docker/slam/<name>/Dockerfile (replacing apt-get install
+# ros-jazzy-*), and none of it is needed for local dev/test. Confirmed via
+# `pixi search -c robostack-jazzy -c conda-forge` and an actual successful
+# `docker build` (fast_lio2 prototype, 2026-09-21) before adding here.
+# `binutils`/`make` are required alongside cxx-compiler/c-compiler: current
+# conda-forge gcc-15.x packaging only puts triplet-prefixed archiver/linker
+# tools on PATH, not plain ar/ld/nm/ranlib, and cxx-compiler/c-compiler don't
+# themselves provide a make binary -- both omissions fail CMake's link step
+# opaquely, found by hitting the actual failure, not by reading docs.
+[feature.slam-base.dependencies]
+python = "3.12.*"
+ros-jazzy-ros-base = "*"
+colcon-common-extensions = "*"
+# Pinned to 3.4.x, NOT "*" -- conda-forge's latest is Eigen 5.0.1, which
+# breaks source compatibility with code written against Eigen 3.x's
+# internal API (confirmed by an actual build failure: rpg_vikit's
+# vikit_common fails to compile against 5.0.1 with "no type named
+# 'non_const_type' in 'struct Eigen::internal::ref_selector<...>'", an
+# internal typename Eigen 5.x removed/renamed). 3.4.x is also what ROS
+# Jazzy's own target platform (Ubuntu 24.04) ships as its system Eigen, so
+# pinning here keeps every pixi-based SLAM image consistent with what the
+# apt-based images implicitly built against all along.
+eigen = "3.4.*"
+cmake = "*"
+make = "*"
+cxx-compiler = "*"
+c-compiler = "*"
+binutils = "*"
+
+# cv_bridge/OpenCV: for orb_slam3, multicam_slam, fast_livo2. Declaring this
+# as an explicit, locked pixi dependency (rather than letting cv_bridge get
+# pulled from a stray cached conda package with its own baked-in
+# OpenCV_CONFIG_PATH) is what fixes the real conflict documented in
+# third_party/slam/{orb_slam3,multicam_slam}/ros2_wrapper/README.md's
+# "Known environment quirks" sections.
+[feature.slam-cv.dependencies]
+ros-jazzy-cv-bridge = "*"
+opencv = "*"
+
+# PCL: for fast_lio2, fast_livo2.
+[feature.slam-pcl.dependencies]
+ros-jazzy-pcl-ros = "*"
+ros-jazzy-pcl-conversions = "*"
+
+# Boost (serialization etc.): for orb_slam3, multicam_slam, fast_livo2.
+[feature.slam-boost.dependencies]
+libboost-devel = "*"
+
+# Ceres: for bievr_lio. Replaces that backend's from-source Ceres 2.2.0
+# build script outright -- conda-forge ships the exact same 2.2.0. tbb-devel
+# is a genuine separate requirement (not a Ceres transitive dep): bievr_lio's
+# own CMakeLists.txt calls find_package(TBB REQUIRED) directly and links
+# TBB::tbb -- confirmed via an actual build failure ("Could not find a
+# package configuration file provided by TBB") once the LANGUAGES-C gap
+# (see docker/slam/bievr_lio/Dockerfile) was fixed and this was the next
+# real error, not a guess.
+[feature.slam-ceres.dependencies]
+ceres-solver = "*"
+tbb-devel = "*"
+
+# OpenSSL (libcrypto): for orb_slam3 only. Its core System.cc includes
+# <openssl/md5.h> and uses MD5_Init/Update/Final directly (settings-file
+# checksum), and CMakeLists.txt line 161 links -lcrypto -- a genuine build
+# requirement, not just an apt habit carried over. multicam_slam has no such
+# dependency (confirmed by grep -rniE "openssl|libssl|libcrypto" over its
+# vendored tree -- no hits).
+[feature.slam-openssl.dependencies]
+openssl = "*"
+
+# fmt/jsoncpp: for fast_livo2.
+[feature.slam-fmt-json.dependencies]
+fmt = "*"
+jsoncpp = "*"
+
+# image_transport: for fast_livo2's fast_livo package itself (publishes
+# rectified/debug images) -- confirmed via an actual build failure
+# ("image_transport... not found") after the rest of its dependency chain
+# (Sophus, Livox-SDK2, livox_ros_driver2, rpg_vikit) all built successfully.
+[feature.slam-image-transport.dependencies]
+ros-jazzy-image-transport = "*"
+
+# gs_livo-only: tf2/tf2_geometry_msgs (fast_livo2 only needed tf2_ros),
+# plus the GPU-specific chain (CUDA nvcc/toolkit, LibTorch CUDA build, and
+# a pinned gcc/g++ 12 toolchain -- CUDA 12.x's nvcc rejects host compilers
+# newer than GCC 12, and slam-base's cxx-compiler/c-compiler resolve to
+# GCC 15 by default, which would silently produce a broken build only nvcc
+# catches; pin the compiler feature-wide here rather than relying on a
+# separate, easy-to-forget flag on each nvcc invocation). cuda-toolkit
+# pinned to 12.9.* to match libtorch's cuda129 build tag -- an unpinned
+# resolve could otherwise pick a newer CUDA runtime than libtorch was
+# actually built against.
+[feature.slam-gs-livo-extra.dependencies]
+ros-jazzy-tf2 = "*"
+ros-jazzy-tf2-geometry-msgs = "*"
+gcc = "12.*"
+gxx = "12.*"
+cuda-toolkit = "12.9.*"
+libtorch = "*"
+# lib3dgs's own dependency chain, confirmed via its CMakeLists.txt: tinyply
+# is NOT on conda-forge (stays a from-source build, see the Dockerfile),
+# but nlohmann_json/glm/yaml-cpp/tbb-devel all are.
+nlohmann_json = "*"
+glm = "*"
+yaml-cpp = "*"
+tbb-devel = "*"
+
+# Sophus: for fast_livo2 only. `pixi search -c robostack-jazzy -c
+# conda-forge sophus` (2026-09-21) shows conda-forge does NOT carry the
+# 1.22.10 tag fast_livo2/rpg_vikit's README pins -- only 22.04.1, 22.10 and
+# 1!1.24.6 exist. Verified by actually building fast_livo2 against 1.24.6
+# (a header-only Lie-group math library; the vendored CMakeLists.txt
+# already handles modern Sophus's target-based config, see its
+# `TARGET Sophus::Sophus` fallback) rather than assuming a minor-version
+# bump is safe -- see docker/slam/fast_livo2/Dockerfile's header comment
+# for the outcome. Replaces that backend's from-source Sophus
+# clone+FindEigen3.cmake-patch step outright.
+[feature.slam-sophus.dependencies]
+sophus = "*"
+
+# --- Remote sim image ROS2 layer --------------------------------------------
+# For docker/remote_v6/Dockerfile: lets an Isaac Lab step loop running on that
+# image publish ground-truth pose + raw sensor topics to ROS2 (see
+# slam/slam/ground_truth/sim_ground_truth_loop.py). ros-jazzy-ros-base alone
+# is enough -- it already carries rclpy, tf2_ros, and the common_interfaces
+# set (sensor_msgs, nav_msgs, geometry_msgs), same as slam-base above (which
+# never separately declares those either). No cv_bridge here: the Image/
+# PointCloud2 messages this script builds are constructed directly from
+# numpy arrays (see sensor_msg_builders.py), not routed through cv_bridge's
+# Python bindings, deliberately avoiding the OpenCV_CONFIG_PATH quirk
+# documented in third_party/slam/{orb_slam3,multicam_slam}/ros2_wrapper/
+# README.md's "Known environment quirks" sections.
+[feature.sim-ros2.dependencies]
+python = "3.12.*"
+ros-jazzy-ros-base = "*"
+# IPC transport to the separate Isaac-Sim-interpreter process (see
+# slam/slam/ground_truth/sim_ipc.py) -- rclpy cannot be installed into Isaac
+# Sim's own bundled Python (docker/remote_v6/Dockerfile's
+# /workspace/isaaclab/_isaac_sim/python.sh, a different interpreter/ABI
+# entirely from this pixi env's Python 3.12), so ground-truth pose and raw
+# sensor data cross process boundaries over a local zmq socket instead of
+# living in one process. pyzmq/msgpack are also added to
+# docker/remote_v6/requirements.txt for the Isaac-Sim-interpreter side.
+pyzmq = "*"
+msgpack-python = "*"
+
+# `evo` (evo_ape/evo_rpe CLIs) scores a recorded mission bag against ground truth
+# (slam/slam/eval/score_with_evo.py shells out to them). Lives in this env so the
+# remote image carries it; run_slam_eval_remote.sh puts this env's bin/ on PATH.
+[feature.sim-ros2.pypi-dependencies]
+evo = "*"
+
+[environments]
+slam-fast-lio2 = { features = ["slam-base", "slam-pcl"], no-default-feature = true }
+slam-bievr-lio = { features = ["slam-base", "slam-ceres"], no-default-feature = true }
+slam-orb-slam3 = { features = ["slam-base", "slam-cv", "slam-boost", "slam-openssl"], no-default-feature = true }
+slam-multicam-slam = { features = ["slam-base", "slam-cv", "slam-boost"], no-default-feature = true }
+slam-fast-livo2 = { features = ["slam-base", "slam-cv", "slam-pcl", "slam-boost", "slam-fmt-json", "slam-sophus", "slam-image-transport"], no-default-feature = true }
+slam-gs-livo = { features = ["slam-base", "slam-cv", "slam-pcl", "slam-boost", "slam-fmt-json", "slam-sophus", "slam-image-transport", "slam-gs-livo-extra"], no-default-feature = true }
+sim-ros2 = { features = ["sim-ros2"], no-default-feature = true }
+
+[pypi-dependencies]
+usd-core = ">=26.8, <27"

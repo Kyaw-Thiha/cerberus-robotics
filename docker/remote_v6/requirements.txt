@@ -1,0 +1,22 @@
+# Pinned additive packages for the NEW (Isaac Sim 6.1.0 / Python 3.12 / Isaac
+# Lab 3.0 line) remote image, installed into Isaac Sim's bundled interpreter.
+# Carried over from docker/remote/requirements.txt (old stack); every pin has
+# a py3.12-compatible release on PyPI (checked 2026-10-05). Installed AFTER
+# Isaac Lab and Arena, so a conflicting pin fails the build loudly rather than
+# being silently overridden.
+#
+# NOT carried over: nothing dropped except the ROS2 bridge env (see the
+# Dockerfile header). Isaac Lab's installer uninstalls imageio-ffmpeg
+# (robomimic's optional video backend), so it is re-added here on purpose:
+# core/video_capture.py needs it.
+#
+# wandb -- default experiment logger for policy/locomotion/train.py.
+# imageio[ffmpeg] -- direct frame-writing for core/video_capture.py.
+# pyzmq/msgpack -- IPC out of this interpreter for
+#   slam/slam/ground_truth/sim_ground_truth_loop.py (cheap; kept so those
+#   scripts import unchanged on the new image).
+wandb==0.29.0
+imageio==2.37.4
+imageio-ffmpeg==0.6.0
+pyzmq==27.1.0
+msgpack==1.1.2

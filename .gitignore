@@ -24,9 +24,34 @@ policy/locomotion/eval/results/
 policy/locomotion/runs/*_analysis/
 policy/locomotion/runs/*_videos/
 
+# vendored SLAM backend source (scripts/fetch_slam_backends.py) -- large,
+# external, never authored here.
+third_party/
+
+# SLAM eval run artifacts (rosbags, evo score .zips) -- large, regenerable,
+# synced to R2 by record_mission_bag.py/run_slam_eval_remote.sh, same
+# convention as policy/locomotion/eval/results/ above.
+slam/slam/eval/results/
+
+# local extraction output of scripts/extract_slam_backend_artifact.sh:
+# pulled straight out of an already-pushed Docker image, regenerable,
+# machine-specific.
+artifacts/
+
 # python
 __pycache__/
 *.pyc
 
 # secrets
 .env
+
+# large vendored ORB vocabulary files, extracted locally from
+# third_party/slam/<backend>/Vocabulary/ORBvoc.txt.tar.gz so they sync to a
+# pod via the normal repo tar-over-SSH rather than needing a Docker image
+# rebuild -- not secrets, just too large (138MB each) to commit.
+slam/slam/backends/orb_slam3/ORBvoc.txt
+slam/slam/backends/multicam_slam/ORBvoc.txt
+
+# local tool state -- never commit (ruff writes its own inner .gitignore, .superpowers only has a nested one)
+.superpowers/
+.ruff_cache/

@@ -1,0 +1,32 @@
+<?xml version="1.0"?>
+<package format="3">
+  <name>vikit_ros</name>
+  <version>0.0.0</version>
+
+  <description>The vikit_ros package (patched: dropped spurious rosidl deps)</description>
+
+  <maintainer email="forster@ifi.uzh.ch">cforster</maintainer>
+  <license>GPLv3</license>
+
+  <!-- Patched from upstream: removed <buildtool_depend>rosidl_default_generators</buildtool_depend>,
+       <exec_depend>rosidl_default_runtime</exec_depend>, and
+       <member_of_group>rosidl_interface_packages</member_of_group>. This
+       package does not generate any .msg/.srv/.idl files (verified: src/
+       contains only output_helper.cpp + camera_loader.cpp), so it must not
+       declare rosidl as a build/run dependency. The corresponding CMakeLists.txt
+       edits drop ament_export_dependencies(rosidl_default_runtime) and the
+       undefined ${cpp_typesupport_target} reference. -->
+  <buildtool_depend>ament_cmake</buildtool_depend>
+
+  <depend>rclcpp</depend>
+  <depend>vikit_common</depend>
+  <depend>tf2</depend>
+  <depend>visualization_msgs</depend>
+  <depend>eigen</depend>
+  <depend>libopencv-dev</depend>
+  <depend>libsophus-dev</depend>
+
+  <export>
+    <build_type>ament_cmake</build_type>
+  </export>
+</package>

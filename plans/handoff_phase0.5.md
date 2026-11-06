@@ -107,6 +107,13 @@ randomization (which the Phase 0 candidate does) — only combinations of two
 or more modalities succeed. Force + command is the cheapest pair to
 implement (force reuses Phase 0's existing push-injection mechanism; command
 override reuses the existing velocity-command input channel). **Do not
+**Reopened 2026-10-12 (user): the retraining target may be perception-conditioned / visual navigation, not the stock
+flat+rough recipe** (see `arena_integration_handoff.md` section 3). If that is the path taken, this phase's scope changes
+materially: the policy would consume perception, so the **observation/state-estimator attack stops being a deferred
+stretch goal and becomes arguably the most relevant modality** — perturbing what the policy sees is then the natural
+attack, and the perturbation-force + command-space pair alone would understate the vulnerability. Re-read the gate's
+scope when the retraining target is settled, before implementing.
+
 implement the observation/state-estimator attack modality in this pass** — it
 requires a state estimator with realistic noise characteristics already in
 the loop, which is a larger prerequisite not yet built. Leave it as a

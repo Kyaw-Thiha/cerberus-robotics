@@ -29,7 +29,7 @@ assumed absent forever.
 | **Wrist-adjacent RGB-D (arm camera)** | **In — Phase 2, placeholder for now** | `CameraCfg`, mounted ~10cm proximal from the ARX5 wrist joint, not on the gripper, to avoid arm self-occlusion (per a quadruped-manipulator EAS design paper). RGB-D matches the Diffusion Policy/ACT baselines Phase 2 implements faithfully — though a 2026 paper (SCDP) found single-RGB can match or beat wrist-camera+RGB-D setups on manipulation benchmarks, which is a candidate additional Phase 2 ablation, not resolved here. |
 | **Radar** | **Out (for now)** | No native Isaac Lab sensor class for batched parallel RL envs (`isaacsim.sensors.experimental.rtx.Radar` is a raw Isaac Sim / Replicator API, single-prim, not batched for parallel RL envs). Requires Motion BVH for the Doppler effect, which materially raises VRAM/render cost stack-wide. Radar's actual value proposition (fog/dust/smoke penetration) doesn't organically appear in a clean sim scene without deliberately building obscurant scenarios to exercise it. **Revisit only if** a dedicated perceptual-degradation ablation scenario is built later. |
 
-See `docs/sensor_setup_handoff.md` for concrete Isaac Lab configs, the
+See `common/cerberus_description/sensors/` for concrete Isaac Lab configs, the
 sensor-suite composition pattern, and how algorithms declare and validate
 their required sensor inputs.
 
@@ -43,18 +43,18 @@ Three sensor configs, two candidates each (baseline vs. latest), so each config
 gets its own ablation rather than one algorithm being picked project-wide. Full
 implementation detail — repo links, ROS versions, the pluggable-backend
 architecture, Docker/`ros1_bridge` strategy, ground-truth export, and the
-eval/viz pipeline — lives in `docs/slam_handoff.md`; this is the short version.
+eval/viz pipeline — lives in the `slam/` package; this is the short version.
 
 | Sensor config | Baseline | Latest |
 |---|---|---|
 | LiDAR only (primary rig, LiDAR-only algorithm) | FAST-LIO2 | BIEVR-LIO |
-| LiDAR + camera (primary rig, fused algorithm) | FAST-LIVO2 | LVI-Q |
+| LiDAR + camera (primary rig, fused algorithm) | FAST-LIVO2 | GS-LIVO (replaces LVI-Q, 2026-09-21) |
 | Camera-only (ablation rig) | ORB-SLAM3 (stereo, no IMU) | ORB-SLAM3 + Multicam-SLAM fusion |
 
 RGB-D was considered as a possible fourth config and rejected: a systematic
 quadruped SLAM benchmark (Corlito et al., KIT/Freiburg, 2026) found stereo
 consistently outperforms RGB-D on a legged platform — this confirms the
-`sensor_setup_handoff.md` stereo-over-RGB-D decision independently rather than
+stereo-over-RGB-D decision independently rather than
 contradicting it.
 
 ---
@@ -140,13 +140,13 @@ Same underlying techniques as §2 (Terrain Understanding), viewed from the "how 
 | Module | Candidate A | Candidate B | What the ablation tests |
 |---|---|---|---|
 | SLAM (LiDAR-only) | FAST-LIO2 | BIEVR-LIO | Does BIEVR-LIO's degeneracy handling (bump-image voxel maps) actually matter in our flat, hallway-heavy household scenes? |
-| SLAM (LiDAR + camera) | FAST-LIVO2 | LVI-Q | Does LVI-Q's joint-kinematics fusion — free, already on the ROS2 bus — meaningfully help over camera+LiDAR alone? |
+| SLAM (LiDAR + camera) | FAST-LIVO2 | GS-LIVO | Does GS-LIVO's real-time Gaussian-splat mapping (built on FAST-LIVO2's own IESKF backbone) meaningfully improve on plain point-cloud mapping? Note: GS-LIVO's differentiator (the 3D Gaussian-splat map) is purely in-process memory (`sub_GSMap` + octree in `gsmap_manager->gs_map_`) — no ROS interface and no file persistence upstream. This fork adds an async, gated-by-default persistence path (`publish.gs_save_en`, writes 3DGS PLY files to `Log/GSMap/`) so the map can be loaded into rerun post-hoc; flag off = upstream behavior (no disk writes, zero SLAM impact). See `cerberus_msgs/msg/TaggedMap.msg` for the contract-side notes on `TaggedMap.map_type`. |
 | SLAM (camera-only) | ORB-SLAM3 (single stereo pair) | ORB-SLAM3 + Multicam-SLAM fusion | Does true front+rear fusion beat a single stereo pair enough to justify the extra integration work? |
 | Terrain understanding | AME-2 (dense attention) | DELTA (sparse deformable attention) | Does DELTA's resolution-independent cost trade away any accuracy vs. AME-2, given our compute budget? |
 | Local planner | SCAN-Planner (optimization, static/structured) | VOP-Nav (learned, dynamic/crowded) | Does either degrade badly in the other's regime (SCAN-Planner with moving pedestrians; VOP-Nav on a staircase with overhangs)? If both degrade meaningfully, that argues for a switched/blended local-planner layer rather than picking one — a stronger systems finding than either paper alone claims. |
 | Global planner | RAEM (or TARE, if RAEM/its twin stay codeless) | HiPAN (mapless, learned) | Classical-vs-learned navigation, directly on your stated PhD interest in what should be classical vs. learned in a deployed system. |
 | Uncertainty modeling | AME-2's Bayesian winner-take-all (in-domain, cheap) | UP-Fuse-style learned uncertainty gating (general, more robust under degradation) | Is the cheaper in-domain approach "good enough," or does the more general gating mechanism earn its extra complexity? |
-| **Sensor rig** | **LiDAR + front stereo camera** | **Front + rear stereo camera, no LiDAR** | What does LiDAR actually buy over a well-designed camera-only rig, on our own household scenes? See `docs/sensor_setup_handoff.md` for the concrete configs and how algorithms declare which rig they require. |
+| **Sensor rig** | **LiDAR + front stereo camera** | **Front + rear stereo camera, no LiDAR** | What does LiDAR actually buy over a well-designed camera-only rig, on our own household scenes? See `common/cerberus_description/sensors/` for the concrete configs and how algorithms declare which rig they require. |
 
 ---
 
@@ -157,16 +157,16 @@ Per earlier scoping discussion, these are real components of the eventual stack 
 - **Last-resort safety filter** (CBF/shielding) — needs a mature, composed policy stack to wrap and concrete failure modes to constrain against; premature before Phase 1+2 are done.
 - **Object-level perception** (6D pose for grasp targets) — Phase 2 (manipulation), different job from Phase 1's "don't hit things while navigating."
 - **Radar** — see Sensor Modalities table above.
-- **Wrist/arm camera** — Phase 2; see `docs/sensor_setup_handoff.md` for the reserved config placeholder.
+- **Wrist/arm camera** — Phase 2; see `common/cerberus_description/sensors/sensor_configs.py` for the reserved config placeholder.
 
 ---
 
 ## Open Decisions
 
 - Final pick (or ablation scope) per module — this doc deliberately doesn't lock these in; see Proposed Ablations.
-- SLAM: full architecture, ROS versions, Docker strategy, and eval/viz pipeline are in `docs/slam_handoff.md`, not here.
+- SLAM: full architecture, ROS versions, Docker strategy, and eval/viz pipeline are in the `slam/` package, not here.
 - Whether SCAN-Planner's now-confirmed-live repo is far enough along to build on for the Local Planner ablation, or still needs more releases to land.
 - Whether RAEM (or its uncoded twin) ever releases code before Phase 1's global planner work starts, or whether TARE is the permanent stand-in.
 - Whether to pursue the VOP-Nav / SCAN-Planner blended-local-planner idea as a real deliverable, or treat the ablation as purely diagnostic.
 - Whether UP-Fuse's gating mechanism is worth reimplementing standalone, or whether AME-2's native uncertainty handling is sufficient given compute constraints.
-- Exact stereo camera specs (baseline, resolution) not yet tuned against a specific real-hardware reference — see `docs/sensor_setup_handoff.md` §7 for current placeholders.
+- Exact stereo camera specs (baseline, resolution) not yet tuned against a specific real-hardware reference — see `common/cerberus_description/sensors/sensor_configs.py` for current placeholders.

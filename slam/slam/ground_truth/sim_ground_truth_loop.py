@@ -466,7 +466,7 @@ def _load_policy(kind: str, path: str, env, agent_cfg):
         make_runner,
     )
 
-    # clear error if this is a rsl-rl 3.x (model_state_dict) file on rsl-rl 5.x: use the exported .onnx instead
+    # clear error if this is an unsupported rsl-rl 3.x (model_state_dict) file: use the exported .onnx instead
     check_checkpoint_format(path)
     runner = make_runner(env, agent_cfg, log_dir=None, device=agent_cfg.device)
     runner.load(path)

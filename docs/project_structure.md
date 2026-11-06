@@ -173,6 +173,7 @@ cerberus/
 │   ├── build_go2_arx5_urdf.py          # merge sim Go2 + patched X5A arm -> go2_arx5 URDF (offline)
 │   ├── convert_go2_arx5_urdf_to_usd.py # UrdfConverter -> flattened USD + checks (pod)
 │   ├── compare_go2_urdf_to_usd.py      # URDF vs USD mass/CoM/inertia/limits (offline)
+│   ├── run_ga_smoke_pod.sh             # one-session GA-stack smoke: train, play+video, Arena spike
 │   └── tests/                          # colocated tests for the scripts above
 ├── data/                             # gitignored — demos, trajectories
 ├── outputs/                          # gitignored — checkpoints, logs, videos, wandb runs

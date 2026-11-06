@@ -101,6 +101,9 @@ Old `cerberus-remote:v3` (Sim 5.1.0 / Lab 2.3.2 / Py 3.11) is kept as the stack 
   rsl-rl-lib 5.5.1, torch 2.11.0+cu130, Python 3.12.14. Pod-verified, including scene render and video capture: see `docs/arena_integration_log.md`
   "Lab 3.0 GA upgrade". All pods drawn on 2026-10-25 had driver 595.91.07 (see the driver section there); set `CERBERUS_ALLOW_BAD_DRIVER_RENDER=1` to
   render on it and wrap every launch in `timeout`. Build: `TAG=v6-ga PUSH=1 docker/remote_v6/build.sh`.
+  Off-pod-unverifiable changes are checked by `scripts/run_ga_smoke_pod.sh` (train smoke -> play `--video` on the
+  checkpoint it just wrote -> Arena spike), which judges each step from its artifact and writes
+  `data/reports/ga_smoke_<stamp>/`; `--upload` copies it to `r2:migration/ga_smoke_<stamp>/`.
 - `kevinkyawthiha/cerberus-remote-v6:v6-rel2` (previous, 2026-10-11, rollback), 35.1 GB, digest
   `sha256:5ab14c76a0230f4ef533991ff5be3b7682c3d4195e91485eaabc8a4a72a81b1b`. Same Isaac Lab / Arena / rsl-rl / torch
   as `v6-rel` (`/etc/cerberus_versions.json` is byte-identical), plus a pinned, sha256-verified **rclone 1.75.1** and

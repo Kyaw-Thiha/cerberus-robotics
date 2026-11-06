@@ -138,13 +138,13 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         runner = make_runner(env, agent_cfg, log_dir=None, device=agent_cfg.device)
     else:
         raise ValueError(f"Unsupported runner class: {agent_cfg.class_name}")
-    # clear error if the checkpoint is a rsl-rl 3.x (model_state_dict) file on rsl-rl 5.x or vice versa
+    # clear error, naming both formats, if the checkpoint is an unsupported rsl-rl 3.x (model_state_dict) file
     check_checkpoint_format(resume_path)
     runner.load(resume_path)
 
     policy = runner.get_inference_policy(device=env.unwrapped.device)
 
-    # rsl-rl 3.x: runner.alg.policy / alg.actor_critic; rsl-rl 5.x: the actor model (runner.alg.get_policy())
+    # the deployed policy: the actor (or student) model behind runner.alg.get_policy()
     policy_nn = get_policy_for_export(runner)
 
     export_model_dir = os.path.join(os.path.dirname(resume_path), "exported")

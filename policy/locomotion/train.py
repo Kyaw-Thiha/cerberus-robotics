@@ -195,7 +195,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     runner.add_git_repo_to_log(__file__)
     if agent_cfg.resume or agent_cfg.algorithm.class_name == "Distillation":
         print(f"[INFO]: Loading model checkpoint from: {resume_path}")
-        # clear error if the checkpoint is a rsl-rl 3.x (model_state_dict) file on rsl-rl 5.x or vice versa
+        # clear error, naming both formats, if the checkpoint is an unsupported rsl-rl 3.x (model_state_dict) file
         check_checkpoint_format(resume_path)
         runner.load(resume_path)
 

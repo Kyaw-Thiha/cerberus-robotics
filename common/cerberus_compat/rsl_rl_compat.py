@@ -1,15 +1,12 @@
-"""rsl-rl adapters spanning the old and the new Isaac Lab line.
+"""rsl-rl adapters for the Isaac Lab 3.0 line (rsl-rl-lib >= 4).
 
-* OLD stack: Isaac Lab v2.3.2, rsl-rl-lib 3.1.2 (``runner.alg.policy`` is one ActorCritic, the runner owns
-  ``log``/``save``, checkpoints hold ``model_state_dict``).
-* NEW stack: Isaac Lab 3.0 line, rsl-rl-lib 5.x (``runner.alg.get_policy()`` is the actor model, logging moved
-  to ``runner.logger``, checkpoints hold ``actor_state_dict`` + ``critic_state_dict`` or
-  ``student_state_dict`` + ``teacher_state_dict``). rsl-rl 4.x already has the new API, so every
-  branch below is ``major >= 4`` vs ``major < 4``.
+rsl-rl >= 4 (the 5.x series on the v6 image) has ``runner.alg.get_policy()`` returning the actor model,
+logging on ``runner.logger``, and split checkpoints (``actor_state_dict`` + ``critic_state_dict`` or
+``student_state_dict`` + ``teacher_state_dict``). rsl-rl 3.x (Isaac Lab 2.3.2, the old image) is no longer
+supported: ``make_runner`` raises on it, and ``check_checkpoint_format`` rejects its legacy checkpoints.
 
 Everything that touches ``rsl_rl``, ``isaaclab`` or ``torch`` is imported lazily inside functions, so this
-module imports on a machine without any of them. Branches for ``major >= 4`` are not exercised on this
-repo's old-stack CI; they are marked ``# UNVERIFIED:`` and must be checked on a Lab 3.0 pod.
+module imports on a machine without any of them.
 """
 
 from __future__ import annotations
@@ -21,8 +18,8 @@ import sys
 from collections.abc import Mapping
 
 RSL_RL_DIST_NAME = "rsl-rl-lib"
-NEW_API_MIN_MAJOR = 4
-"""First rsl-rl major with the split logger / actor+critic models / split checkpoint keys."""
+MIN_SUPPORTED_MAJOR = 4
+"""First rsl-rl major with the split logger / actor+critic models / split checkpoint keys. Older is unsupported."""
 
 LEGACY_CHECKPOINT_KEY = "model_state_dict"
 SPLIT_CHECKPOINT_KEYS = (
@@ -69,9 +66,15 @@ def rsl_rl_major() -> int:
     return int(digits)
 
 
-def uses_new_rsl_rl_api(major: int | None = None) -> bool:
-    """True for rsl-rl >= 4 (``runner.logger``, split checkpoints, model-based policy)."""
-    return (rsl_rl_major() if major is None else major) >= NEW_API_MIN_MAJOR
+def require_supported_rsl_rl() -> None:
+    """Raise a clear error if the installed rsl-rl-lib predates the split-model API (< 4)."""
+    major = rsl_rl_major()
+    if major < MIN_SUPPORTED_MAJOR:
+        raise RuntimeError(
+            f"rsl-rl-lib {rsl_rl_version()} (major {major}) is not supported: Cerberus needs rsl-rl-lib >= "
+            f"{MIN_SUPPORTED_MAJOR} (the Isaac Lab 3.0 stack, image cerberus-remote-v6). The old Lab 2.3.2 / "
+            "rsl-rl 3.x stack was retired."
+        )
 
 
 # --------------------------------------------------------------------------------------
@@ -158,15 +161,10 @@ def _looks_migrated(agent_cfg) -> bool:
 def migrate_agent_cfg(agent_cfg):
     """Apply Lab's ``handle_deprecated_rsl_rl_cfg`` to a runner cfg object for the installed rsl-rl.
 
-    No-op on rsl-rl 3.x (the old stack passes the cfg through untouched, as before). On >= 4 it delegates
-    to ``isaaclab_rl.rsl_rl.handle_deprecated_rsl_rl_cfg`` (mutates and returns ``agent_cfg``) rather than
-    re-implementing the ``policy`` -> ``actor``/``critic`` + ``distribution_cfg`` conversion; skipped if that
-    helper does not exist or the cfg was already migrated.
+    Delegates to ``isaaclab_rl.rsl_rl.handle_deprecated_rsl_rl_cfg`` (mutates and returns ``agent_cfg``) rather
+    than re-implementing the ``policy`` -> ``actor``/``critic`` + ``distribution_cfg`` conversion; skipped if
+    that helper does not exist or the cfg was already migrated.
     """
-    major = rsl_rl_major()
-    if major < NEW_API_MIN_MAJOR:
-        return agent_cfg
-    # UNVERIFIED: new-stack branch, needs Isaac Lab 3.0 + rsl-rl-lib 5.x.
     try:
         from isaaclab_rl.rsl_rl import handle_deprecated_rsl_rl_cfg
     except ImportError:
@@ -187,25 +185,24 @@ def _cfg_to_dict(agent_cfg) -> dict:
 
 
 def make_runner(env, agent_cfg_dict, log_dir, device, runner_cls=None):
-    """Build an ``OnPolicyRunner`` (or ``DistillationRunner``, or ``runner_cls``) for either rsl-rl major.
+    """Build an ``OnPolicyRunner`` (or ``DistillationRunner``, or ``runner_cls``) on rsl-rl >= 4.
 
     Args:
         env: ``RslRlVecEnvWrapper``-wrapped environment.
-        agent_cfg_dict: Either the runner cfg *object* (``RslRlBaseRunnerCfg``; preferred -- on rsl-rl >= 4
-            it is first migrated in place with Lab's ``handle_deprecated_rsl_rl_cfg`` and then converted with
+        agent_cfg_dict: Either the runner cfg *object* (``RslRlBaseRunnerCfg``; preferred -- it is first migrated in place with Lab's ``handle_deprecated_rsl_rl_cfg`` and then converted with
             ``.to_dict()``) or an already-converted/migrated ``dict`` (used as is: no migration is possible
             on a dict).
         log_dir: Run directory, or None for inference.
         device: Torch device string for the runner.
         runner_cls: Runner class to instantiate, e.g. ``BestCheckpointOnPolicyRunner``. If None, chosen
             from the cfg's ``class_name`` (``OnPolicyRunner`` / ``DistillationRunner``).
-
-    On rsl-rl 3.x this is exactly ``runner_cls(env, cfg.to_dict(), log_dir=log_dir, device=device)``.
+    Raises:
+        RuntimeError: If the installed rsl-rl-lib is older than 4 (see :func:`require_supported_rsl_rl`).
     """
+    require_supported_rsl_rl()
     if isinstance(agent_cfg_dict, Mapping):
         train_cfg = agent_cfg_dict
     else:
-        # UNVERIFIED: the migration is a no-op on 3.x and only does work on the new stack.
         agent_cfg_dict = migrate_agent_cfg(agent_cfg_dict)
         train_cfg = _cfg_to_dict(agent_cfg_dict)
 
@@ -233,24 +230,9 @@ def _default_runner_cls(train_cfg: Mapping):
 def get_policy_for_export(runner):
     """The torch module that carries the deployed policy and has ``reset(dones)``.
 
-    rsl-rl 3.x: ``runner.alg.policy`` (older: ``runner.alg.actor_critic``), an ActorCritic / StudentTeacher.
-    rsl-rl >= 4: ``runner.alg.get_policy()``, the actor (or student) model.
+    ``runner.alg.get_policy()``: the actor (or student) model.
     """
-    if rsl_rl_major() < NEW_API_MIN_MAJOR:
-        try:
-            return runner.alg.policy
-        except AttributeError:
-            return runner.alg.actor_critic
-    # UNVERIFIED: new stack.
     return runner.alg.get_policy()
-
-
-def _legacy_obs_normalizer(policy_nn):
-    if hasattr(policy_nn, "actor_obs_normalizer"):
-        return policy_nn.actor_obs_normalizer
-    if hasattr(policy_nn, "student_obs_normalizer"):
-        return policy_nn.student_obs_normalizer
-    return None
 
 
 def export_policy(
@@ -261,24 +243,10 @@ def export_policy(
 ) -> None:
     """Export the runner's policy as TorchScript and ONNX into ``out_dir``.
 
-    rsl-rl 3.x: Lab's ``export_policy_as_jit`` / ``export_policy_as_onnx`` with the actor/student obs normalizer,
-    exactly as the old play script did. rsl-rl >= 4: the runner's own ``export_policy_to_jit`` /
-    ``export_policy_to_onnx`` (what Isaac Lab 3.0's play entrypoint calls); Lab 3.0's ``export_policy_as_*``
-    expect a module with ``.actor`` and are not used because the 5.x models export themselves.
+    Uses the runner's own ``export_policy_to_jit`` / ``export_policy_to_onnx`` (what Isaac Lab 3.0's play
+    entrypoint calls); Lab 3.0's ``export_policy_as_*`` expect a module with ``.actor`` and are not used
+    because the rsl-rl >= 4 models export themselves.
     """
-    if rsl_rl_major() < NEW_API_MIN_MAJOR:
-        from isaaclab_rl.rsl_rl import export_policy_as_jit, export_policy_as_onnx
-
-        policy_nn = get_policy_for_export(runner)
-        normalizer = _legacy_obs_normalizer(policy_nn)
-        export_policy_as_jit(
-            policy_nn, normalizer=normalizer, path=out_dir, filename=jit_filename
-        )
-        export_policy_as_onnx(
-            policy_nn, normalizer=normalizer, path=out_dir, filename=onnx_filename
-        )
-        return
-    # UNVERIFIED: new stack.
     runner.export_policy_to_jit(path=out_dir, filename=jit_filename)
     runner.export_policy_to_onnx(path=out_dir, filename=onnx_filename)
 
@@ -299,15 +267,12 @@ def detect_checkpoint_format(loaded) -> str:
     return CHECKPOINT_FORMAT_UNKNOWN
 
 
-def check_checkpoint_format(path: str, major: int | None = None) -> str:
+def check_checkpoint_format(path: str) -> str:
     """Fail fast, with a message naming both formats, if ``path`` cannot load on the installed rsl-rl.
 
     Loads the file on CPU (``torch.load(..., map_location='cpu', weights_only=False)``, same trust level as
-    the runner's own load) and compares its keys with the installed major:
-
-    * legacy (rsl-rl 3.x: ``model_state_dict``) opened on rsl-rl >= 4 -> :class:`CheckpointFormatError`
-    * split (rsl-rl >= 4: ``actor_state_dict``/``critic_state_dict`` or ``student_state_dict``) opened on
-      rsl-rl 3.x -> :class:`CheckpointFormatError`
+    the runner's own load). A legacy rsl-rl 3.x checkpoint (``model_state_dict``) raises
+    :class:`CheckpointFormatError`: the supported rsl-rl (>= 4) expects the split format.
 
     Returns the detected format (``'legacy'``/``'split'``/``'unknown'``). Unreadable or unrecognised files
     return ``'unknown'`` and are left for ``runner.load`` to report.
@@ -319,7 +284,6 @@ def check_checkpoint_format(path: str, major: int | None = None) -> str:
         raise FileNotFoundError(f"Checkpoint not found: {path}")
     import torch
 
-    major = rsl_rl_major() if major is None else major
     try:
         loaded = torch.load(path, map_location="cpu", weights_only=False)
     except Exception as e:  # noqa: BLE001 -- corrupt file etc: let runner.load raise its own, more specific error
@@ -329,20 +293,12 @@ def check_checkpoint_format(path: str, major: int | None = None) -> str:
         return CHECKPOINT_FORMAT_UNKNOWN
 
     fmt = detect_checkpoint_format(loaded)
-    new_api = major >= NEW_API_MIN_MAJOR
-    if fmt == CHECKPOINT_FORMAT_LEGACY and new_api:
+    if fmt == CHECKPOINT_FORMAT_LEGACY:
         raise CheckpointFormatError(
             f"Checkpoint '{path}' is in the LEGACY rsl-rl 3.x format (single '{LEGACY_CHECKPOINT_KEY}' key), but "
-            f"rsl-rl-lib {rsl_rl_version()} (new stack, major {major}) expects the SPLIT format "
+            f"rsl-rl-lib {rsl_rl_version()} expects the SPLIT format "
             "('actor_state_dict' + 'critic_state_dict', or 'student_state_dict' for distillation). Legacy "
-            "checkpoints do not load on the new stack: run/export it on the OLD stack (Isaac Sim 5.1.0, "
-            "Isaac Lab v2.3.2, rsl-rl-lib 3.1.2) or retrain."
-        )
-    if fmt == CHECKPOINT_FORMAT_SPLIT and not new_api:
-        raise CheckpointFormatError(
-            f"Checkpoint '{path}' is in the SPLIT rsl-rl >= 4 format ('actor_state_dict' / 'critic_state_dict' / "
-            f"'student_state_dict'), but rsl-rl-lib {rsl_rl_version()} (old stack, major {major}) expects the "
-            f"LEGACY format (single '{LEGACY_CHECKPOINT_KEY}' key). Load it on the NEW stack (Isaac Sim 6.1.0, "
-            "Isaac Lab 3.0, rsl-rl-lib 5.x) instead."
+            "checkpoints do not load here: retrain, or use a policy exported to ONNX from the retired "
+            "Lab 2.3.2 stack (rsl-rl-lib 3.1.2)."
         )
     return fmt

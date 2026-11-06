@@ -8,10 +8,10 @@ PlatformCfg instance (platform.py), not hardcoded here.
 
 from isaaclab.managers import CurriculumTermCfg as CurrTerm
 from isaaclab.utils import configclass
-from isaaclab_tasks.manager_based.locomotion.velocity.config.go2.flat_env_cfg import (
+from isaaclab_tasks.core.velocity.config.go2.flat_env_cfg import (
     UnitreeGo2FlatEnvCfg,
 )
-from isaaclab_tasks.manager_based.locomotion.velocity.config.go2.rough_env_cfg import (
+from isaaclab_tasks.core.velocity.config.go2.rough_env_cfg import (
     UnitreeGo2RoughEnvCfg,
 )
 

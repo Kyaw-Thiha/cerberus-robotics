@@ -112,9 +112,6 @@ import torch
 from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper
 
 import isaaclab_tasks  # noqa: F401
-from common.cerberus_compat.isaaclab_tasks import install_legacy_task_path_aliases
-
-install_legacy_task_path_aliases()
 import policy.locomotion  # noqa: F401  -- registers the Cerberus Go2 tasks
 
 from policy.cli_common import resolve_task_id

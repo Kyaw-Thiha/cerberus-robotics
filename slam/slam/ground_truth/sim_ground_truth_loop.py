@@ -272,10 +272,8 @@ def _run_in_sim(args: argparse.Namespace, plan: RunPlan) -> int:
 
 
 def _simulate(args: argparse.Namespace, plan: RunPlan, report: dict) -> None:
-    from common.cerberus_compat.isaaclab_tasks import install_legacy_task_path_aliases
     from common.cerberus_compat.rsl_rl_compat import hydra_task_config
 
-    install_legacy_task_path_aliases()  # the Cerberus Go2 cfg imports Lab 2.x task paths
     from slam.slam.eval.sim_env_cfg import register_slam_eval_tasks
 
     register_slam_eval_tasks()

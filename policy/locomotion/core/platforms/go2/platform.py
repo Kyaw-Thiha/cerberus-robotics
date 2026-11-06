@@ -4,7 +4,7 @@ core/platforms/registry.py for the field contract every platform must
 satisfy.
 """
 
-from isaaclab_tasks.manager_based.locomotion.velocity.config.go2.agents.rsl_rl_ppo_cfg import (
+from isaaclab_tasks.core.velocity.config.go2.agents.rsl_rl_ppo_cfg import (
     UnitreeGo2FlatPPORunnerCfg,
     UnitreeGo2RoughPPORunnerCfg,
 )

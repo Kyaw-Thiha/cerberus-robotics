@@ -114,9 +114,6 @@ from isaaclab.utils.io import dump_yaml
 from isaaclab_rl.rsl_rl import RslRlBaseRunnerCfg, RslRlVecEnvWrapper
 
 import isaaclab_tasks  # noqa: F401
-from common.cerberus_compat.isaaclab_tasks import install_legacy_task_path_aliases
-
-install_legacy_task_path_aliases()
 import policy.locomotion  # noqa: F401  -- registers the Cerberus Go2 tasks
 from isaaclab_tasks.utils import get_checkpoint_path
 from policy.cli_common import resolve_task_id

@@ -39,10 +39,12 @@ from isaaclab.app import AppLauncher
 _REPO_ROOT = str(Path(__file__).resolve().parents[3])
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
-sys.path.insert(0, os.path.join(os.environ["ISAACLAB_PATH"], "scripts", "reinforcement_learning", "rsl_rl"))
 
-import cli_args  # isort: skip
-from policy.cli_common import add_platform_args, check_gpu_driver_for_rendering  # isort: skip
+from common.cerberus_compat.rsl_rl_compat import load_cli_args  # isort: skip
+from policy.cli_common import add_launcher_args, add_platform_args, check_gpu_driver_for_rendering  # isort: skip
+
+# Isaac Lab's RSL-RL cli_args (scripts dir on Lab 2.3.2, isaaclab_rl.entrypoints.backends on Lab 3.0).
+cli_args = load_cli_args()
 
 SUB_TERRAIN_TYPES = [
     "pyramid_stairs",
@@ -96,7 +98,7 @@ parser.add_argument(
     help="Where to write clips (default: <run_dir>/eval/push_recovery_showcase/ next to the loaded checkpoint).",
 )
 cli_args.add_rsl_rl_args(parser)
-AppLauncher.add_app_launcher_args(parser)
+add_launcher_args(parser)
 args_cli, hydra_args = parser.parse_known_args()
 sys.argv = [sys.argv[0]] + hydra_args
 
@@ -110,7 +112,7 @@ simulation_app = app_launcher.app
 
 import torch
 import gymnasium as gym
-from rsl_rl.runners import OnPolicyRunner
+
 
 from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import SceneEntityCfg
@@ -119,15 +121,18 @@ from isaaclab.utils.assets import retrieve_file_path
 from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper
 
 import isaaclab_tasks  # noqa: F401
+from common.cerberus_compat.isaaclab_tasks import install_legacy_task_path_aliases
+
+install_legacy_task_path_aliases()
 import policy.locomotion  # noqa: F401  -- registers the Cerberus Go2 tasks
 from isaaclab_tasks.utils import get_checkpoint_path
-from isaaclab_tasks.utils.hydra import hydra_task_config
+from common.cerberus_compat.rsl_rl_compat import check_checkpoint_format, hydra_task_config, make_runner
 from policy.cli_common import resolve_task_id
 from policy.locomotion.core.platforms.registry import get_platform
 from policy.locomotion.eval.push_recovery_event import apply_single_push
 from policy.locomotion.core.push_disturbance_cfg import IMPULSE_DURATION_S
 from policy.locomotion.core.push_impulse_event import clear_expired_push_impulses
-from policy.locomotion.core.script_utils import checkpoints_root
+from policy.locomotion.core.script_utils import checkpoints_root, ensure_capture_visualizer
 from policy.locomotion.core.terrain_pinning import pin_terrain, sub_terrain_column_for_type
 from policy.locomotion.core.video_capture import record_condition_clips
 
@@ -194,6 +199,7 @@ def main(env_cfg, agent_cfg):
     else:
         resume_path = get_checkpoint_path(log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint)
 
+    ensure_capture_visualizer(env_cfg)
     env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array")
 
     levels_per_env = [level for _, level, _ in conditions]
@@ -203,7 +209,8 @@ def main(env_cfg, agent_cfg):
     env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
 
     print(f"[INFO]: Loading model checkpoint from: {resume_path}")
-    runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
+    runner = make_runner(env, agent_cfg, log_dir=None, device=agent_cfg.device)
+    check_checkpoint_format(resume_path)
     runner.load(resume_path)
     policy = runner.get_inference_policy(device=env.unwrapped.device)
 

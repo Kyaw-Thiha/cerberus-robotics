@@ -15,7 +15,7 @@ Parallel Deep Reinforcement Learning"** (CoRL 2022). Code: `legged_gym`
 What we use: the whole PPO-via-`rsl_rl`, thousands-of-parallel-environments
 training recipe this phase follows is Rudin's. Isaac Lab's built-in
 `Isaac-Velocity-Flat/Rough-Unitree-Go2` tasks are themselves an implementation
-of this recipe — we start from them unmodified per the Phase 0 handoff.
+of this recipe — we start from them unmodified.
 
 What we deliberately did **not** use: Rudin's own push-perturbation method
 (`_push_robots` in `legged_robot.py` — sets base velocity directly, an

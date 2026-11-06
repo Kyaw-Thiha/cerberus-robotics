@@ -105,7 +105,7 @@ def terrain_level_max(env: ManagerBasedRLEnv, env_ids: torch.Tensor) -> torch.Te
     logs the MEAN (Curriculum/terrain_levels), which can't distinguish "no env
     has ever reached the top row" from "some envs reach it and get randomly
     cycled back down" -- the latter is the actual convergence signal per Rudin
-    et al. and plans/handoff_phase0.md's "Done when" criterion, and a plateaued
+    et al. and Phase 0's "Done when" criterion, and a plateaued
     mean well below the top row is consistent with either. Logged automatically
     under Curriculum/terrain_level_max by CurriculumManager, same mechanism as
     push_disturbance_curriculum's k_c above -- see REFERENCES.md."""

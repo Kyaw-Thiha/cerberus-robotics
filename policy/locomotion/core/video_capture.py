@@ -38,6 +38,8 @@ from typing import Callable
 import imageio
 import torch
 
+from policy.locomotion.core.script_utils import capture_viewport_frame, point_viewport_at_env
+
 
 def record_condition_clips(
     env,
@@ -65,11 +67,6 @@ def record_condition_clips(
     """
     output_dir.mkdir(parents=True, exist_ok=True)
     raw_env = env.unwrapped
-    camera = raw_env.viewport_camera_controller
-    if camera is None:
-        raise RuntimeError(
-            "No viewport camera controller available -- run with rendering enabled (--enable_cameras)."
-        )
     if raw_env.num_envs != len(condition_names):
         raise ValueError(
             f"condition_names has {len(condition_names)} entries but env has {raw_env.num_envs} envs -- "
@@ -80,7 +77,7 @@ def record_condition_clips(
     obs = env.get_observations()
     with torch.inference_mode():
         for env_idx, name in enumerate(condition_names):
-            camera.set_view_env_index(env_idx)
+            point_viewport_at_env(raw_env, env_idx)
             out_path = output_dir / f"{name}.mp4"
             writer = imageio.get_writer(str(out_path), fps=fps)
             for local_step in range(steps_per_clip):
@@ -88,9 +85,7 @@ def record_condition_clips(
                 obs, _, _, _ = env.step(actions)
                 if on_window_step is not None:
                     on_window_step(env_idx, local_step)
-                frame = raw_env.render()
-                if frame is not None:
-                    writer.append_data(frame)
+                writer.append_data(capture_viewport_frame(raw_env))
             writer.close()
             written_paths.append(out_path)
             print(f"[INFO] Wrote {out_path}")

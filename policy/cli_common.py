@@ -11,8 +11,14 @@ Isaac Lab modules that aren't safe to touch that early.
 from __future__ import annotations
 
 import argparse
+import os
 import subprocess
 
+from common.cerberus_compat.launcher import (  # noqa: F401
+    add_launcher_args,
+    headless_requested,
+    local_rank,
+)
 from policy.config_presets import load_preset_overrides
 
 # R590 branch (595.x) crashes Isaac Sim 5.1.0's RTX renderer during any
@@ -51,7 +57,9 @@ def check_gpu_driver_for_rendering() -> None:
 
     driver_version = result.stdout.strip()
     branch = driver_version.split(".")[0]
-    if branch in INCOMPATIBLE_DRIVER_BRANCHES:
+    if branch in INCOMPATIBLE_DRIVER_BRANCHES and os.environ.get("CERBERUS_ALLOW_BAD_DRIVER_RENDER") == "1":
+        print(f"[WARNING] GPU driver {driver_version} is on a branch known to crash Sim 5.1 rendering; continuing (override set).")
+    elif branch in INCOMPATIBLE_DRIVER_BRANCHES:
         raise SystemExit(
             f"GPU driver {driver_version} is on the R590 branch, which crashes Isaac Sim 5.1.0's RTX "
             "renderer during rendering/video capture (segfault in librtx.scenedb.plugin.so -- see "
@@ -60,6 +68,19 @@ def check_gpu_driver_for_rendering() -> None:
             "this pod and provision a new one; a different host draw may have a compatible driver."
         )
     print(f"[INFO] GPU driver {driver_version} OK for rendering.")
+
+
+def prepare_rendering(args_cli: argparse.Namespace) -> None:
+    """Call right after parsing, before AppLauncher: --video implies enable_cameras and gets the GPU-driver
+    pre-check (the block train.py/play.py each used to carry inline). Runs that never record video do not
+    get the check, headless or not -- `headless_requested` (re-exported above, handles Lab 2.x --headless and
+    Lab 3.0 --viz/HEADLESS) is available to scripts that need to branch on a visible viewport.
+    """
+    if args_cli.video:
+        args_cli.enable_cameras = True
+        # fails fast if the host's GPU driver is known to crash Isaac Sim's RTX
+        # renderer, rather than paying the full boot only to hit the same crash
+        check_gpu_driver_for_rendering()
 
 
 def add_common_args(parser: argparse.ArgumentParser, task_help: str, video_help: str) -> None:

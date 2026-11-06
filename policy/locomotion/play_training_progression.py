@@ -23,7 +23,6 @@
 
 import argparse
 import glob
-import os
 import re
 import sys
 from pathlib import Path
@@ -33,10 +32,17 @@ from isaaclab.app import AppLauncher
 _REPO_ROOT = str(Path(__file__).resolve().parents[2])
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
-sys.path.insert(0, os.path.join(os.environ["ISAACLAB_PATH"], "scripts", "reinforcement_learning", "rsl_rl"))
 
-import cli_args  # isort: skip
-from policy.cli_common import add_platform_args, check_gpu_driver_for_rendering  # isort: skip
+from common.cerberus_compat.rsl_rl_compat import (  # isort: skip
+    check_checkpoint_format,
+    hydra_task_config,
+    load_cli_args,
+    make_runner,
+)
+from policy.cli_common import add_launcher_args, add_platform_args, check_gpu_driver_for_rendering  # isort: skip
+
+# Isaac Lab's RSL-RL cli_args (scripts dir on Lab 2.3.2, isaaclab_rl.entrypoints.backends on Lab 3.0).
+cli_args = load_cli_args()
 
 parser = argparse.ArgumentParser(description="Training-progression video: one clip per periodic checkpoint.")
 parser.add_argument(
@@ -86,7 +92,7 @@ parser.add_argument(
     help="Where to write clips (default: <run-dir>/training_progression/).",
 )
 cli_args.add_rsl_rl_args(parser)
-AppLauncher.add_app_launcher_args(parser)
+add_launcher_args(parser)
 args_cli, hydra_args = parser.parse_known_args()
 sys.argv = [sys.argv[0]] + hydra_args
 
@@ -101,14 +107,18 @@ simulation_app = app_launcher.app
 import imageio
 import gymnasium as gym
 import torch
-from rsl_rl.runners import OnPolicyRunner
+
 
 from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper
 
 import isaaclab_tasks  # noqa: F401
+from common.cerberus_compat.isaaclab_tasks import install_legacy_task_path_aliases
+
+install_legacy_task_path_aliases()
 import policy.locomotion  # noqa: F401  -- registers the Cerberus Go2 tasks
-from isaaclab_tasks.utils.hydra import hydra_task_config
+
 from policy.cli_common import resolve_task_id
+from policy.locomotion.core.script_utils import capture_viewport_frame, ensure_capture_visualizer
 from policy.locomotion.core.terrain_pinning import pin_terrain
 
 # now that policy.locomotion has registered every platform's gym tasks, resolve
@@ -142,6 +152,7 @@ def main(env_cfg, agent_cfg):
 
     env_cfg.scene.num_envs = 1
 
+    ensure_capture_visualizer(env_cfg)
     env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array")
     pin_terrain(env, [args_cli.terrain_level], [_column_for_fixed_type(env_cfg, args_cli.sub_terrain_type)])
     env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
@@ -163,7 +174,8 @@ def main(env_cfg, agent_cfg):
     with torch.inference_mode():
         for iteration, ckpt_path in checkpoints:
             print(f"[INFO] Loading checkpoint: {ckpt_path}")
-            runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
+            runner = make_runner(env, agent_cfg, log_dir=None, device=agent_cfg.device)
+            check_checkpoint_format(str(ckpt_path))
             runner.load(str(ckpt_path))
             policy = runner.get_inference_policy(device=raw_env.device)
 
@@ -175,9 +187,7 @@ def main(env_cfg, agent_cfg):
             for _ in range(args_cli.steps_per_clip):
                 actions = policy(obs)
                 obs, _, _, _ = env.step(actions)
-                frame = raw_env.render()
-                if frame is not None:
-                    writer.append_data(frame)
+                writer.append_data(capture_viewport_frame(raw_env))
             writer.close()
             print(f"[INFO] Wrote {out_path}")
 

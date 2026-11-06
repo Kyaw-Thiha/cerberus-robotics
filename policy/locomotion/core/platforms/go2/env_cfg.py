@@ -15,7 +15,11 @@ from isaaclab_tasks.manager_based.locomotion.velocity.config.go2.rough_env_cfg i
     UnitreeGo2RoughEnvCfg,
 )
 
-from policy.locomotion.core.curriculum import terrain_level_frac_at_max, terrain_level_max
+from common.cerberus_compat.physics import pin_physx
+from policy.locomotion.core.curriculum import (
+    terrain_level_frac_at_max,
+    terrain_level_max,
+)
 from policy.locomotion.core.platforms.go2.platform import GO2
 from policy.locomotion.core.push_disturbance_cfg import add_push_disturbance
 
@@ -24,6 +28,8 @@ from policy.locomotion.core.push_disturbance_cfg import add_push_disturbance
 class UnitreeGo2FlatCerberusEnvCfg(UnitreeGo2FlatEnvCfg):
     def __post_init__(self):
         super().__post_init__()
+        # Lab 3.0's stock Go2 task defaults to Newton physics; every Cerberus checkpoint is PhysX.
+        pin_physx(self.sim)
         add_push_disturbance(
             self,
             peak_force_n=GO2.push_peak_force_n,
@@ -46,6 +52,14 @@ class UnitreeGo2FlatCerberusEnvCfg_PLAY(UnitreeGo2FlatCerberusEnvCfg):
         # (policy/locomotion/eval/), not exercised during a play/visualization run
         self.events.base_external_force_torque = None
         self.events.push_disturbance = None
+        # push_disturbance_clear is the per-step pair that zeroes out any expired
+        # push's forces/torques (degenerate (step_dt, step_dt) interval -- see
+        # push_disturbance_cfg.py + push_impulse_event.py). Without nulling it,
+        # it fires every step regardless of push_disturbance being disabled, and
+        # touches asset.permanent_wrench_composer.set_forces_and_torques() --
+        # suspected cause of an env.step() post-reset timeline-stop + NoneType
+        # physx-view crash. nulled 2026-09-29.
+        self.events.push_disturbance_clear = None
         # the curriculum term references push_disturbance above; must go too
         self.curriculum.push_disturbance_curriculum = None
 
@@ -66,6 +80,8 @@ class UnitreeGo2FlatCerberusEnvCfg_PLAY(UnitreeGo2FlatCerberusEnvCfg):
 class UnitreeGo2RoughCerberusEnvCfg(UnitreeGo2RoughEnvCfg):
     def __post_init__(self):
         super().__post_init__()
+        # Lab 3.0's stock Go2 task defaults to Newton physics; every Cerberus checkpoint is PhysX.
+        pin_physx(self.sim)
         add_push_disturbance(
             self,
             peak_force_n=GO2.push_peak_force_n,
@@ -93,7 +109,7 @@ class UnitreeGo2RoughCerberusEnvCfg(UnitreeGo2RoughEnvCfg):
 
         # Diagnostic-only curriculum terms (no effect on training): the stock
         # terrain_levels term above only logs the MEAN across envs, which can't
-        # confirm plans/handoff_phase0.md's actual "Done when" criterion --
+        # confirm Phase 0's actual "Done when" criterion --
         # envs reaching the curriculum's top row and cycling back down, not
         # just a high average. See curriculum.py's terrain_level_max /
         # terrain_level_frac_at_max docstrings.
@@ -132,6 +148,12 @@ class UnitreeGo2RoughCerberusEnvCfg_PLAY(UnitreeGo2RoughCerberusEnvCfg):
         # (policy/locomotion/eval/), not exercised during a play/visualization run
         self.events.base_external_force_torque = None
         self.events.push_disturbance = None
+        # push_disturbance_clear is the per-step pair that zeroes out any expired
+        # push's forces/torques (degenerate (step_dt, step_dt) interval). Same
+        # reasoning as in UnitreeGo2FlatCerberusEnvCfg_PLAY above; nulled to
+        # match -- leaving it active on one PLAY cfg but not the other would
+        # be an inconsistency, not a deliberate choice.
+        self.events.push_disturbance_clear = None
         self.curriculum.push_disturbance_curriculum = None
 
         # Follow-cam: the default viewer is a fixed world-space camera that

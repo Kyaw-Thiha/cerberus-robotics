@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: BSD-3-Clause
 #
 # Thin wrapper around Isaac Lab's canonical scripts/reinforcement_learning/rsl_rl/train.py
-# (verified against Isaac Lab v2.3.2's own copy) -- per the handoff's "don't
+# (verified against Isaac Lab v2.3.2's own copy) -- per the "don't
 # hand-tune beyond what's established" instruction, the PPO/OnPolicyRunner
 # training logic itself is unmodified. On top of that unmodified core:
 #   - registers our Cerberus Go2 tasks (policy.locomotion) and defaults --task
@@ -30,21 +30,31 @@ from pathlib import Path
 
 from isaaclab.app import AppLauncher
 
-# make `policy.config_presets` importable regardless of cwd, and add cli_args.py's
-# directory to sys.path -- both needed before the imports right below.
+# make `policy.config_presets` and `common.cerberus_compat` importable regardless of cwd -- needed
+# before the imports right below.
 _REPO_ROOT = str(Path(__file__).resolve().parents[2])
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
-sys.path.insert(0, os.path.join(os.environ["ISAACLAB_PATH"], "scripts", "reinforcement_learning", "rsl_rl"))
 
 # local imports
-import cli_args  # isort: skip
+from common.cerberus_compat.rsl_rl_compat import (  # isort: skip
+    check_checkpoint_format,
+    hydra_task_config,
+    load_cli_args,
+    make_runner,
+)
 from policy.cli_common import (  # isort: skip
     add_common_args,
+    add_launcher_args,
     add_platform_args,
     apply_config_preset,
-    check_gpu_driver_for_rendering,
+    local_rank,
+    prepare_rendering,
 )
+
+# Isaac Lab's RSL-RL cli_args: scripts/reinforcement_learning/rsl_rl/cli_args.py on Lab 2.3.2 (its directory
+# is put on sys.path), isaaclab_rl.entrypoints.backends.cli_args_rsl_rl on Lab 3.0.
+cli_args = load_cli_args()
 
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Train the Cerberus locomotion policy with RSL-RL.")
@@ -66,16 +76,13 @@ cli_args.add_rsl_rl_args(parser)
 # (which falls back to tensorboard-only) -- override with --logger tensorboard
 # for a quick local check that doesn't need network access.
 parser.set_defaults(logger="wandb", log_project_name="cerberus-robotics")
-# append AppLauncher cli args
-AppLauncher.add_app_launcher_args(parser)
+# append AppLauncher cli args (AppLauncher.add_app_launcher_args, plus a --headless compat flag on Lab 3.0)
+add_launcher_args(parser)
 args_cli, hydra_args = parser.parse_known_args()
 
-# always enable cameras to record video
-if args_cli.video:
-    args_cli.enable_cameras = True
-    # fails fast if the host's GPU driver is known to crash Isaac Sim's RTX
-    # renderer, rather than paying the full boot only to hit the same crash
-    check_gpu_driver_for_rendering()
+# always enable cameras to record video; fails fast if the host's GPU driver is known
+# to crash Isaac Sim's RTX renderer, rather than paying the full boot only to hit the same crash
+prepare_rendering(args_cli)
 
 # preset-provided overrides go first so explicit CLI overrides (already in
 # hydra_args) win for any key both specify.
@@ -94,7 +101,6 @@ import time
 
 import gymnasium as gym
 import torch
-from rsl_rl.runners import DistillationRunner
 
 from isaaclab.envs import (
     DirectMARLEnv,
@@ -108,12 +114,19 @@ from isaaclab.utils.io import dump_yaml
 from isaaclab_rl.rsl_rl import RslRlBaseRunnerCfg, RslRlVecEnvWrapper
 
 import isaaclab_tasks  # noqa: F401
+from common.cerberus_compat.isaaclab_tasks import install_legacy_task_path_aliases
+
+install_legacy_task_path_aliases()
 import policy.locomotion  # noqa: F401  -- registers the Cerberus Go2 tasks
 from isaaclab_tasks.utils import get_checkpoint_path
-from isaaclab_tasks.utils.hydra import hydra_task_config
 from policy.cli_common import resolve_task_id
 from policy.locomotion.core.best_checkpoint_runner import BestCheckpointOnPolicyRunner
-from policy.locomotion.core.script_utils import checkpoints_root, maybe_record_video, new_run_log_dir
+from policy.locomotion.core.script_utils import (
+    checkpoints_root,
+    configure_video_recorders,
+    maybe_record_video,
+    new_run_log_dir,
+)
 
 # now that policy.locomotion has registered every platform's gym tasks, resolve
 # --platform/--terrain to a concrete task id (unless --task was passed explicitly)
@@ -143,9 +156,9 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
         )
 
     if args_cli.distributed:
-        env_cfg.sim.device = f"cuda:{app_launcher.local_rank}"
-        agent_cfg.device = f"cuda:{app_launcher.local_rank}"
-        seed = agent_cfg.seed + app_launcher.local_rank
+        env_cfg.sim.device = f"cuda:{local_rank(app_launcher)}"
+        agent_cfg.device = f"cuda:{local_rank(app_launcher)}"
+        seed = agent_cfg.seed + local_rank(app_launcher)
         env_cfg.seed = seed
         agent_cfg.seed = seed
 
@@ -157,7 +170,8 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 
     env_cfg.log_dir = log_dir
 
-    env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
+    native_video = configure_video_recorders(env_cfg, args_cli, log_dir, phase="train")
+    env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video and not native_video else None)
 
     if isinstance(env.unwrapped, DirectMARLEnv):
         env = multi_agent_to_single_agent(env)
@@ -165,7 +179,7 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     if agent_cfg.resume or agent_cfg.algorithm.class_name == "Distillation":
         resume_path = get_checkpoint_path(log_root_path, agent_cfg.load_run, agent_cfg.load_checkpoint)
 
-    env = maybe_record_video(env, args_cli, log_dir, phase="train")
+    env = maybe_record_video(env, args_cli, log_dir, phase="train", native=native_video)
 
     start_time = time.time()
 
@@ -174,14 +188,18 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     if agent_cfg.class_name == "OnPolicyRunner":
         # BestCheckpointOnPolicyRunner instead of stock OnPolicyRunner: also
         # writes model_best_<easy|medium|hard>.pt -- see best_checkpoint_runner.py.
-        runner = BestCheckpointOnPolicyRunner(env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device)
+        runner = make_runner(
+            env, agent_cfg, log_dir=log_dir, device=agent_cfg.device, runner_cls=BestCheckpointOnPolicyRunner
+        )
     elif agent_cfg.class_name == "DistillationRunner":
-        runner = DistillationRunner(env, agent_cfg.to_dict(), log_dir=log_dir, device=agent_cfg.device)
+        runner = make_runner(env, agent_cfg, log_dir=log_dir, device=agent_cfg.device)
     else:
         raise ValueError(f"Unsupported runner class: {agent_cfg.class_name}")
     runner.add_git_repo_to_log(__file__)
     if agent_cfg.resume or agent_cfg.algorithm.class_name == "Distillation":
         print(f"[INFO]: Loading model checkpoint from: {resume_path}")
+        # clear error if the checkpoint is a rsl-rl 3.x (model_state_dict) file on rsl-rl 5.x or vice versa
+        check_checkpoint_format(resume_path)
         runner.load(resume_path)
 
     dump_yaml(os.path.join(log_dir, "params", "env.yaml"), env_cfg)

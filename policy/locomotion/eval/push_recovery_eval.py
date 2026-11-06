@@ -1,7 +1,7 @@
 # Copyright (c) 2022-2026, The Isaac Lab Project Developers.
 # SPDX-License-Identifier: BSD-3-Clause
 #
-# Push-recovery eval sweep (plans/handoff_phase0.md step 4). Loads a trained
+# Push-recovery eval sweep. Loads a trained
 # checkpoint, runs it against a magnitude x trials_per_cell grid of one-shot
 # horizontal pushes (see push_recovery_event.py), and writes a per-cell
 # success-rate CSV that plot_push_recovery.py turns into the curve.
@@ -39,10 +39,12 @@ from isaaclab.app import AppLauncher
 _REPO_ROOT = str(Path(__file__).resolve().parents[3])
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
-sys.path.insert(0, os.path.join(os.environ["ISAACLAB_PATH"], "scripts", "reinforcement_learning", "rsl_rl"))
 
-import cli_args  # isort: skip
-from policy.cli_common import add_platform_args  # isort: skip
+from common.cerberus_compat.rsl_rl_compat import load_cli_args  # isort: skip
+from policy.cli_common import add_launcher_args, add_platform_args  # isort: skip
+
+# Isaac Lab's RSL-RL cli_args (scripts dir on Lab 2.3.2, isaaclab_rl.entrypoints.backends on Lab 3.0).
+cli_args = load_cli_args()
 
 parser = argparse.ArgumentParser(description="Push-recovery eval sweep for a trained Cerberus checkpoint.")
 parser.add_argument(
@@ -91,7 +93,7 @@ parser.add_argument(
 )
 parser.add_argument("--output", type=str, default=None, help="Output CSV path (default: eval/results/<timestamp>.csv).")
 cli_args.add_rsl_rl_args(parser)
-AppLauncher.add_app_launcher_args(parser)
+add_launcher_args(parser)
 args_cli, hydra_args = parser.parse_known_args()
 sys.argv = [sys.argv[0]] + hydra_args
 
@@ -106,7 +108,7 @@ from datetime import datetime
 
 import gymnasium as gym
 import torch
-from rsl_rl.runners import OnPolicyRunner
+
 
 from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import SceneEntityCfg
@@ -116,9 +118,13 @@ from isaaclab.utils.math import euler_xyz_from_quat
 from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper
 
 import isaaclab_tasks  # noqa: F401
+from common.cerberus_compat.isaaclab_tasks import install_legacy_task_path_aliases
+
+install_legacy_task_path_aliases()
 import policy.locomotion  # noqa: F401  -- registers the Cerberus Go2 tasks
 from isaaclab_tasks.utils import get_checkpoint_path
-from isaaclab_tasks.utils.hydra import hydra_task_config
+from common.cerberus_compat.rsl_rl_compat import check_checkpoint_format, hydra_task_config, make_runner
+from common.cerberus_compat.isaac_data import as_tensor
 from policy.cli_common import resolve_task_id
 from policy.locomotion.core.platforms.registry import get_platform
 from policy.locomotion.eval.push_recovery_event import apply_single_push
@@ -210,7 +216,8 @@ def main(env_cfg, agent_cfg):
     env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
 
     print(f"[INFO]: Loading model checkpoint from: {resume_path}")
-    runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
+    runner = make_runner(env, agent_cfg, log_dir=None, device=agent_cfg.device)
+    check_checkpoint_format(resume_path)
     runner.load(resume_path)
     policy = runner.get_inference_policy(device=env.unwrapped.device)
 
@@ -292,7 +299,7 @@ def main(env_cfg, agent_cfg):
     # this logging measures the remaining effect directly (e.g. a real command that
     # still can't escape a "sticky" terrain type like pyramid_stairs_inv -- see
     # RUN_001.md's dynamics-asymmetry discussion) instead of arguing from geometry.
-    initial_pos_xy = asset.data.root_pos_w[:, :2].clone()
+    initial_pos_xy = as_tensor(asset.data.root_pos_w)[:, :2].clone()
     commanded_speed_mps = torch.norm(command_term.vel_command_b[:, :2], dim=1)
     max_displacement_m = torch.zeros(num_envs, device=device)
     displacement_at_push_m = torch.zeros(num_envs, device=device)
@@ -304,7 +311,7 @@ def main(env_cfg, agent_cfg):
             obs, _, dones, extras = env.step(actions)
             apply_command_floor()  # guard against any per-step internal re-zeroing (e.g. standing envs)
 
-            current_disp = torch.norm(asset.data.root_pos_w[:, :2] - initial_pos_xy, dim=1)
+            current_disp = torch.norm(as_tensor(asset.data.root_pos_w)[:, :2] - initial_pos_xy, dim=1)
             max_displacement_m = torch.maximum(max_displacement_m, current_disp)
             if step == push_step:
                 displacement_at_push_m = current_disp.clone()
@@ -325,13 +332,16 @@ def main(env_cfg, agent_cfg):
 
             if step >= sustain_start_step and step < window_end_step:
                 command = raw_env.command_manager.get_command("base_velocity")
-                actual_xy = asset.data.root_lin_vel_b[:, :2]
+                actual_xy = as_tensor(asset.data.root_lin_vel_b)[:, :2]
                 error_xy = torch.norm(command[:, :2] - actual_xy, dim=1)
                 tracking_error_max_in_sustain = torch.maximum(tracking_error_max_in_sustain, error_xy)
                 tracking_ok_sustained &= (error_xy < args_cli.tracking_error_threshold) | finished
 
             if step == window_end_step:
-                roll, pitch, _ = euler_xyz_from_quat(asset.data.root_quat_w)
+                # euler_xyz_from_quat and asset.data.root_quat_w share the stack's native convention (wxyz on Lab 2.3.2,
+                # xyzw on Lab 3.0 -- verified: isaaclab/utils/math.py @ v3.0.0-EA documents quat as (x, y, z, w)), so no
+                # conversion is needed; as_tensor unwraps the 3.0 ProxyArray.
+                roll, pitch, _ = euler_xyz_from_quat(as_tensor(asset.data.root_quat_w))
                 roll_final, pitch_final = roll, pitch
                 roll_pitch_ok_at_end = (roll.abs() < roll_pitch_bound_rad) & (pitch.abs() < roll_pitch_bound_rad)
 

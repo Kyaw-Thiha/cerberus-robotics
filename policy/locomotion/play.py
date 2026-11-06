@@ -21,21 +21,32 @@ from pathlib import Path
 
 from isaaclab.app import AppLauncher
 
-# make `policy.config_presets` importable regardless of cwd, and add cli_args.py's
-# directory to sys.path -- both needed before the imports right below.
+# make `policy.config_presets` and `common.cerberus_compat` importable regardless of cwd -- needed
+# before the imports right below.
 _REPO_ROOT = str(Path(__file__).resolve().parents[2])
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
-sys.path.insert(0, os.path.join(os.environ["ISAACLAB_PATH"], "scripts", "reinforcement_learning", "rsl_rl"))
 
 # local imports
-import cli_args  # isort: skip
+from common.cerberus_compat.rsl_rl_compat import (  # isort: skip
+    check_checkpoint_format,
+    export_policy,
+    get_policy_for_export,
+    hydra_task_config,
+    load_cli_args,
+    make_runner,
+)
 from policy.cli_common import (  # isort: skip
     add_common_args,
+    add_launcher_args,
     add_platform_args,
     apply_config_preset,
-    check_gpu_driver_for_rendering,
+    prepare_rendering,
 )
+
+# Isaac Lab's RSL-RL cli_args: scripts/reinforcement_learning/rsl_rl/cli_args.py on Lab 2.3.2 (its directory
+# is put on sys.path), isaaclab_rl.entrypoints.backends.cli_args_rsl_rl on Lab 3.0.
+cli_args = load_cli_args()
 
 # add argparse arguments
 parser = argparse.ArgumentParser(description="Play a trained Cerberus locomotion checkpoint with RSL-RL.")
@@ -51,11 +62,9 @@ parser.add_argument(
 )
 parser.add_argument("--real-time", action="store_true", default=False, help="Run in real-time, if possible.")
 cli_args.add_rsl_rl_args(parser)
-AppLauncher.add_app_launcher_args(parser)
+add_launcher_args(parser)
 args_cli, hydra_args = parser.parse_known_args()
-if args_cli.video:
-    args_cli.enable_cameras = True
-    check_gpu_driver_for_rendering()
+prepare_rendering(args_cli)
 
 hydra_args = apply_config_preset(args_cli, hydra_args)
 
@@ -70,7 +79,6 @@ import time
 
 import gymnasium as gym
 import torch
-from rsl_rl.runners import DistillationRunner, OnPolicyRunner
 
 from isaaclab.envs import (
     DirectMARLEnv,
@@ -81,14 +89,16 @@ from isaaclab.envs import (
 )
 from isaaclab.utils.assets import retrieve_file_path
 
-from isaaclab_rl.rsl_rl import RslRlBaseRunnerCfg, RslRlVecEnvWrapper, export_policy_as_jit, export_policy_as_onnx
+from isaaclab_rl.rsl_rl import RslRlBaseRunnerCfg, RslRlVecEnvWrapper
 
 import isaaclab_tasks  # noqa: F401
+from common.cerberus_compat.isaaclab_tasks import install_legacy_task_path_aliases
+
+install_legacy_task_path_aliases()
 import policy.locomotion  # noqa: F401  -- registers the Cerberus Go2 tasks
 from isaaclab_tasks.utils import get_checkpoint_path
-from isaaclab_tasks.utils.hydra import hydra_task_config
 from policy.cli_common import resolve_task_id
-from policy.locomotion.core.script_utils import checkpoints_root, maybe_record_video
+from policy.locomotion.core.script_utils import checkpoints_root, configure_video_recorders, maybe_record_video
 
 # now that policy.locomotion has registered every platform's gym tasks, resolve
 # --platform/--terrain to a concrete task id (unless --task was passed explicitly)
@@ -115,41 +125,33 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     log_dir = os.path.dirname(resume_path)
     env_cfg.log_dir = log_dir
 
-    env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video else None)
+    native_video = configure_video_recorders(env_cfg, args_cli, log_dir, phase="play", checkpoint_path=resume_path)
+    env = gym.make(args_cli.task, cfg=env_cfg, render_mode="rgb_array" if args_cli.video and not native_video else None)
 
     if isinstance(env.unwrapped, DirectMARLEnv):
         env = multi_agent_to_single_agent(env)
 
-    env = maybe_record_video(env, args_cli, log_dir, phase="play")
+    env = maybe_record_video(env, args_cli, log_dir, phase="play", native=native_video)
 
     env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
 
     print(f"[INFO]: Loading model checkpoint from: {resume_path}")
-    if agent_cfg.class_name == "OnPolicyRunner":
-        runner = OnPolicyRunner(env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
-    elif agent_cfg.class_name == "DistillationRunner":
-        runner = DistillationRunner(env, agent_cfg.to_dict(), log_dir=None, device=agent_cfg.device)
+    if agent_cfg.class_name in ("OnPolicyRunner", "DistillationRunner"):
+        # runner class picked from agent_cfg.class_name (OnPolicyRunner / DistillationRunner)
+        runner = make_runner(env, agent_cfg, log_dir=None, device=agent_cfg.device)
     else:
         raise ValueError(f"Unsupported runner class: {agent_cfg.class_name}")
+    # clear error if the checkpoint is a rsl-rl 3.x (model_state_dict) file on rsl-rl 5.x or vice versa
+    check_checkpoint_format(resume_path)
     runner.load(resume_path)
 
     policy = runner.get_inference_policy(device=env.unwrapped.device)
 
-    try:
-        policy_nn = runner.alg.policy
-    except AttributeError:
-        policy_nn = runner.alg.actor_critic
-
-    if hasattr(policy_nn, "actor_obs_normalizer"):
-        normalizer = policy_nn.actor_obs_normalizer
-    elif hasattr(policy_nn, "student_obs_normalizer"):
-        normalizer = policy_nn.student_obs_normalizer
-    else:
-        normalizer = None
+    # rsl-rl 3.x: runner.alg.policy / alg.actor_critic; rsl-rl 5.x: the actor model (runner.alg.get_policy())
+    policy_nn = get_policy_for_export(runner)
 
     export_model_dir = os.path.join(os.path.dirname(resume_path), "exported")
-    export_policy_as_jit(policy_nn, normalizer=normalizer, path=export_model_dir, filename="policy.pt")
-    export_policy_as_onnx(policy_nn, normalizer=normalizer, path=export_model_dir, filename="policy.onnx")
+    export_policy(runner, export_model_dir, jit_filename="policy.pt", onnx_filename="policy.onnx")
 
     dt = env.unwrapped.step_dt
 

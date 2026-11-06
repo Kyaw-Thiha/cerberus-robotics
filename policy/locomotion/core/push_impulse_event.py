@@ -31,6 +31,8 @@ from isaaclab.assets import Articulation, RigidObject
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.utils import math as math_utils
 
+from policy.locomotion.core.body_ids import num_target_bodies
+
 if TYPE_CHECKING:
     from isaaclab.envs import ManagerBasedEnv
 
@@ -67,7 +69,7 @@ def apply_push_impulse(
     `clear_expired_push_impulses`) instead of persisting until the next trigger.
     """
     asset: RigidObject | Articulation = env.scene[asset_cfg.name]
-    num_bodies = len(asset_cfg.body_ids) if isinstance(asset_cfg.body_ids, list) else asset.num_bodies
+    num_bodies = num_target_bodies(asset_cfg.body_ids, asset.num_bodies)
 
     size = (len(env_ids), num_bodies, 3)
     forces = math_utils.sample_uniform(*force_range, size, asset.device)
@@ -98,7 +100,7 @@ def clear_expired_push_impulses(
         return
     expired_ids = expired.nonzero(as_tuple=True)[0]
     asset: RigidObject | Articulation = env.scene[asset_cfg.name]
-    num_bodies = len(asset_cfg.body_ids) if isinstance(asset_cfg.body_ids, list) else asset.num_bodies
+    num_bodies = num_target_bodies(asset_cfg.body_ids, asset.num_bodies)
     zeros = torch.zeros((len(expired_ids), num_bodies, 3), device=asset.device)
     asset.permanent_wrench_composer.set_forces_and_torques(
         forces=zeros, torques=zeros, body_ids=asset_cfg.body_ids, env_ids=expired_ids

@@ -1,8 +1,7 @@
 """Global-planner candidate registry. Every known candidate is registered
 directly in this one file -- add one by adding a new
 `register_algorithm(AlgorithmCfg(...))` call below, not a new directory. See
-docs/perception.md's Global Planner section for sourcing and
-plans/sensor_setup_handoff.md for how this feeds sensor-suite compatibility
+docs/perception.md's Global Planner section for sourcing. This feeds sensor-suite compatibility
 checking (system/cerberus_bringup/cerberus_bringup/validate_sensor_suite.py).
 
 Built from common/algorithm_registry.py's generic factory -- this module's

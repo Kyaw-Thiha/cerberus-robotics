@@ -20,6 +20,8 @@ import statistics
 
 from rsl_rl.runners import OnPolicyRunner
 
+from common.cerberus_compat.rsl_rl_compat import rsl_rl_major
+
 # k_c bucket boundaries (k_c runs from K0=0.3 up to ~1.0, see curriculum.py).
 # Upper bound of the last bucket is >1.0 so k_c==1.0 itself still falls inside it.
 DIFFICULTY_BUCKETS: tuple[tuple[str, float, float], ...] = (
@@ -45,6 +47,15 @@ class BestCheckpointOnPolicyRunner(OnPolicyRunner):
         super().__init__(*args, **kwargs)
         self._last_mean_reward: float | None = None
         self._best_reward_by_bucket: dict[str, float] = {}
+        # rsl-rl >= 4 moved logging out of the runner (no `log` method any more; episode rewards live on
+        # `self.logger.rewbuffer`), so `log` below is only called on rsl-rl 3.x.
+        self._reward_from_logger = rsl_rl_major() >= 4
+
+    def _refresh_mean_reward_from_logger(self) -> None:
+        # UNVERIFIED: rsl-rl >= 4 branch (Logger.rewbuffer, rsl-rl v4.0.0 / v5.5.1); needs the new stack.
+        rewbuffer = getattr(getattr(self, "logger", None), "rewbuffer", None)
+        if rewbuffer is not None and len(rewbuffer) > 0:
+            self._last_mean_reward = statistics.mean(rewbuffer)
 
     def log(self, locs: dict, width: int = 80, pad: int = 35) -> None:
         super().log(locs, width, pad)
@@ -52,6 +63,8 @@ class BestCheckpointOnPolicyRunner(OnPolicyRunner):
             self._last_mean_reward = statistics.mean(locs["rewbuffer"])
 
     def save(self, path: str, infos: dict | None = None) -> None:
+        if self._reward_from_logger:
+            self._refresh_mean_reward_from_logger()
         super().save(path, infos)
 
         if self._last_mean_reward is None:

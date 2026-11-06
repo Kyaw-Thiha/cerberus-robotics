@@ -4,7 +4,7 @@ Unlike curriculum.py's training-time push_disturbance (random magnitude,
 random interval, x/y/z symmetric -- broad robustness training), this applies
 exactly ONE horizontal push per episode, at a precise simulation time, with a
 per-env magnitude fixed by the eval harness (see push_recovery_eval.py) --
-because the eval's job (plans/handoff_phase0.md step 4) is the classic
+because the eval's job is the classic
 "push recovery" curve: a controlled shove at a known magnitude, not the
 broader disturbance distribution training uses.
 
@@ -13,7 +13,7 @@ trials at the same magnitude sample different push angles, matching
 Rudin/Hwangbo's own push-test methodology. z is left at 0 -- vertical
 "payload" disturbance is a training-time robustness concern (see
 REFERENCES.md's "push direction" section), not what a push-*recovery* test
-means; the handoff itself frames this as "the base up to +-1 m/s in x/y."
+means; the intended disturbance is "the base up to +-1 m/s in x/y."
 
 Registered as an EventTerm with mode="interval" and a degenerate
 interval_range_s=(T, T) (min==max), so it fires exactly once per episode at
@@ -43,6 +43,7 @@ import torch
 from isaaclab.assets import Articulation, RigidObject
 from isaaclab.managers import SceneEntityCfg
 
+from policy.locomotion.core.body_ids import num_target_bodies
 from policy.locomotion.core.push_impulse_event import schedule_push_clear
 
 if TYPE_CHECKING:
@@ -72,7 +73,7 @@ def apply_single_push(
     core/curriculum.py's `env.push_curriculum_k_c`).
     """
     asset: RigidObject | Articulation = env.scene[asset_cfg.name]
-    num_bodies = len(asset_cfg.body_ids) if isinstance(asset_cfg.body_ids, list) else asset.num_bodies
+    num_bodies = num_target_bodies(asset_cfg.body_ids, asset.num_bodies)
 
     mags = magnitudes[env_ids]
     theta = torch.rand(len(env_ids), device=asset.device) * 2 * torch.pi

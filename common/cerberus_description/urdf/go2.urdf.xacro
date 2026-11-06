@@ -9,13 +9,32 @@
          sensor near a node whose IMU inputs are honestly-disclosed
          TODO(hardware) stubs, so it is gated off by default. -->
     <xacro:arg name="gazebo" default="false"/>
+    <!-- sim:=true emits the Isaac/URDF-importer variant of the robot: root link
+         `base` carrying the trunk inertial (no world/floating joint/trunk split),
+         no rotor links, no sensor/load links, no gazebo/transmission output,
+         foot mass 0.04 and absolute mesh paths ($(find ...) is resolved at
+         expansion time). Default (false) output is unchanged. -->
+    <xacro:arg name="sim" default="false"/>
+    <xacro:property name="sim_flag" value="$(arg sim)"/>
+    <xacro:property name="trunk_link" value="trunk"/>
+    <xacro:property name="mesh_prefix" value="package://cerberus_description/meshes"/>
+    <xacro:if value="${sim_flag}">
+        <xacro:property name="trunk_link" value="base"/>
+        <xacro:property name="mesh_prefix" value="$(find cerberus_description)/meshes"/>
+    </xacro:if>
 
     <xacro:include filename="$(find cerberus_description)/urdf/const.xacro"/>
     <xacro:include filename="$(find cerberus_description)/urdf/materials.xacro"/>
     <xacro:include filename="$(find cerberus_description)/urdf/leg.xacro"/>
     <!-- <xacro:include filename="$(find cerberus_description)/urdf/stairs.xacro"/> -->
-    <xacro:if value="$(arg gazebo)">
-        <xacro:include filename="$(find cerberus_description)/urdf/gazebo.xacro"/>
+    <xacro:unless value="${sim_flag}">
+        <xacro:if value="$(arg gazebo)">
+            <xacro:include filename="$(find cerberus_description)/urdf/gazebo.xacro"/>
+        </xacro:if>
+    </xacro:unless>
+    <!-- Sim variant: stock Isaac Go2 foot mass (0.04 kg, same as Unitree's go2_description). -->
+    <xacro:if value="${sim_flag}">
+        <xacro:property name="foot_mass" value="0.04"/>
     </xacro:if>
     <!-- <xacro:include filename="$(find go2_gazebo)/launch/stairs.urdf.xacro"/> -->
 
@@ -25,160 +44,193 @@
     <!-- Actually, the rotor will rotate and the joint is not fixed. Reduction ratio should be considered. -->
 
     <!-- Debug mode will hung up the robot, use "true" or "false" to switch it. -->
-    <xacro:if value="$(arg DEBUG)">
-        <link name="world"/>
-        <joint name="base_static_joint" type="fixed">
+    <xacro:if value="${sim_flag}">
+        <!-- Sim: single root link `base` with the trunk visual/collision/inertial.
+             The two Head_upper/Head_lower bodies of the stock Isaac Go2 USD are
+             omitted on purpose: each is 0.001 kg with ~1e-5 inertia (0.002 kg of
+             15.019 kg, 0.013%), i.e. numerically irrelevant placeholders. -->
+        <link name="base">
+            <visual>
+                <origin rpy="0 0 0" xyz="0 0 0"/>
+                <geometry>
+                    <mesh filename="${mesh_prefix}/base.dae" scale="1 1 1"/>
+                </geometry>
+                <!-- <material name="orange"/> -->
+            </visual>
+            <collision>
+                <origin rpy="0 0 0" xyz="0 0 0"/>
+                <geometry>
+                    <box size="${trunk_length} ${trunk_width} ${trunk_height}"/>
+                </geometry>
+            </collision>
+            <inertial>
+                <origin rpy="0 0 0" xyz="${trunk_com_x} ${trunk_com_y} ${trunk_com_z}"/>
+                <mass value="${trunk_mass}"/>
+                <inertia
+                    ixx="${trunk_ixx}" ixy="${trunk_ixy}" ixz="${trunk_ixz}"
+                    iyy="${trunk_iyy}" iyz="${trunk_iyz}"
+                    izz="${trunk_izz}"/>  
+            </inertial>
+        </link>
+    </xacro:if>
+    <xacro:unless value="${sim_flag}">
+        <xacro:if value="$(arg DEBUG)">
+            <link name="world"/>
+            <joint name="base_static_joint" type="fixed">
+                <origin rpy="0 0 0" xyz="0 0 0"/>
+                <parent link="world"/>
+                <child link="base"/>
+            </joint>
+        </xacro:if> 
+
+        <link name="base">
+            <visual>
+                <origin rpy="0 0 0" xyz="0 0 0"/>
+                <geometry>
+                    <box size="0.001 0.001 0.001"/>
+                </geometry>
+            </visual>
+        </link>
+
+        <joint name="floating_base" type="fixed">
             <origin rpy="0 0 0" xyz="0 0 0"/>
-            <parent link="world"/>
-            <child link="base"/>
+            <parent link="base"/>
+            <child link="trunk"/>
         </joint>
-    </xacro:if> 
 
-    <link name="base">
-        <visual>
+        <link name="trunk">
+            <visual>
+                <origin rpy="0 0 0" xyz="0 0 0"/>
+                <geometry>
+                    <mesh filename="${mesh_prefix}/base.dae" scale="1 1 1"/>
+                </geometry>
+                <!-- <material name="orange"/> -->
+            </visual>
+            <collision>
+                <origin rpy="0 0 0" xyz="0 0 0"/>
+                <geometry>
+                    <box size="${trunk_length} ${trunk_width} ${trunk_height}"/>
+                </geometry>
+            </collision>
+            <inertial>
+                <origin rpy="0 0 0" xyz="${trunk_com_x} ${trunk_com_y} ${trunk_com_z}"/>
+                <mass value="${trunk_mass}"/>
+                <inertia
+                    ixx="${trunk_ixx}" ixy="${trunk_ixy}" ixz="${trunk_ixz}"
+                    iyy="${trunk_iyy}" iyz="${trunk_iyz}"
+                    izz="${trunk_izz}"/>  
+            </inertial>
+        </link>
+
+        <joint name="imu_joint" type="fixed">
+            <parent link="trunk"/>
+            <child link="imu_link"/>
             <origin rpy="0 0 0" xyz="0 0 0"/>
-            <geometry>
-                <box size="0.001 0.001 0.001"/>
-            </geometry>
-        </visual>
-    </link>
+        </joint>
 
-    <joint name="floating_base" type="fixed">
-        <origin rpy="0 0 0" xyz="0 0 0"/>
-        <parent link="base"/>
-        <child link="trunk"/>
-    </joint>
+        <link name="imu_link">
+            <inertial>
+                <mass value="0.001"/>
+                <origin rpy="0 0 0" xyz="0 0 0"/>
+                <inertia ixx="0.0001" ixy="0" ixz="0" iyy="0.0001" iyz="0" izz="0.0001"/>
+            </inertial>
+            <visual>
+                <origin rpy="0 0 0" xyz="0 0 0"/>
+                <geometry>
+                    <box size="0.001 0.001 0.001"/>
+                </geometry>
+                <!-- <material name="red"/> -->
+            </visual>
+            <collision>
+                <origin rpy="0 0 0" xyz="0 0 0"/>
+                <geometry>
+                    <box size=".001 .001 .001"/>
+                </geometry>
+            </collision>
+        </link>
 
-    <link name="trunk">
-        <visual>
+        <joint name="front_camera_joint" type="fixed">
+            <parent link="trunk"/>
+            <child link="front_camera"/>
+            <origin rpy="0 0 0" xyz="0.32715 -0.00003 0.04297"/>
+        </joint>
+
+        <link name="front_camera">
+        </link>
+
+        <!-- Cerberus nav sensor rig. See common/cerberus_description/sensors/sensor_configs.py,
+             which these positions must match. "trunk" and Isaac Lab's "base" prim are
+             coincident (the floating_base joint below has zero offset), so mounting
+             here is equivalent to sensor_configs.py's Robot/base prim_path.
+             Orientation (rpy) intentionally left at zero, NOT yet converted from
+             sensor_configs.py's ROS optical frame quaternion. An incorrect guess
+             would be a silent TF bug, not a placeholder; position only is enough
+             for the frames to exist. Do the rotation as a follow up. -->
+        <joint name="front_cam_left_joint" type="fixed">
+            <parent link="trunk"/>
+            <child link="front_cam_left"/>
+            <origin rpy="0 0 0" xyz="0.32 -0.06 0.05"/>
+        </joint>
+        <link name="front_cam_left"/>
+
+        <joint name="front_cam_right_joint" type="fixed">
+            <parent link="trunk"/>
+            <child link="front_cam_right"/>
+            <origin rpy="0 0 0" xyz="0.32 0.06 0.05"/>
+        </joint>
+        <link name="front_cam_right"/>
+
+        <joint name="rear_cam_left_joint" type="fixed">
+            <parent link="trunk"/>
+            <child link="rear_cam_left"/>
+            <origin rpy="0 0 0" xyz="-0.32 -0.06 0.05"/>
+        </joint>
+        <link name="rear_cam_left"/>
+
+        <joint name="rear_cam_right_joint" type="fixed">
+            <parent link="trunk"/>
+            <child link="rear_cam_right"/>
+            <origin rpy="0 0 0" xyz="-0.32 0.06 0.05"/>
+        </joint>
+        <link name="rear_cam_right"/>
+
+        <joint name="lidar_joint" type="fixed">
+            <parent link="trunk"/>
+            <child link="lidar"/>
+            <origin rpy="0 0 0" xyz="0 0 0.05"/>
+        </joint>
+        <link name="lidar"/>
+
+        <!--
+        <joint name="load_joint" type="fixed">
+            <parent link="trunk"/>
+            <child link="load_link"/>
             <origin rpy="0 0 0" xyz="0 0 0"/>
-            <geometry>
-                <mesh filename="package://cerberus_description/meshes/base.dae" scale="1 1 1"/>
-            </geometry>
-            <!-- <material name="orange"/> -->
-        </visual>
-        <collision>
-            <origin rpy="0 0 0" xyz="0 0 0"/>
-            <geometry>
-                <box size="${trunk_length} ${trunk_width} ${trunk_height}"/>
-            </geometry>
-        </collision>
-        <inertial>
-            <origin rpy="0 0 0" xyz="${trunk_com_x} ${trunk_com_y} ${trunk_com_z}"/>
-            <mass value="${trunk_mass}"/>
-            <inertia
-                ixx="${trunk_ixx}" ixy="${trunk_ixy}" ixz="${trunk_ixz}"
-                iyy="${trunk_iyy}" iyz="${trunk_iyz}"
-                izz="${trunk_izz}"/>  
-        </inertial>
-    </link>
+        </joint>
 
-    <joint name="imu_joint" type="fixed">
-        <parent link="trunk"/>
-        <child link="imu_link"/>
-        <origin rpy="0 0 0" xyz="0 0 0"/>
-    </joint>
+        <link name="load_link">
+            <inertial>
+                <mass value="5"/>
+                <origin rpy="0 0 0" xyz="0 0 0"/>
+                <inertia ixx="0.01" ixy="0" ixz="0" iyy="0.01" iyz="0" izz="0.01"/>
+            </inertial>
+            <visual>
+                <origin rpy="0 0 0" xyz="0 0 0.2"/>
+                <geometry>
+                    <box size="0.5 0.3 0.2"/>
+                </geometry>
+            </visual>
+            <collision>
+                <origin rpy="0 0 0" xyz="0 0 0"/>
+                <geometry>
+                    <box size=".001 .001 .001"/>
+                </geometry>
+            </collision>
+        </link>
+    -->
 
-    <link name="imu_link">
-        <inertial>
-            <mass value="0.001"/>
-            <origin rpy="0 0 0" xyz="0 0 0"/>
-            <inertia ixx="0.0001" ixy="0" ixz="0" iyy="0.0001" iyz="0" izz="0.0001"/>
-        </inertial>
-        <visual>
-            <origin rpy="0 0 0" xyz="0 0 0"/>
-            <geometry>
-                <box size="0.001 0.001 0.001"/>
-            </geometry>
-            <!-- <material name="red"/> -->
-        </visual>
-        <collision>
-            <origin rpy="0 0 0" xyz="0 0 0"/>
-            <geometry>
-                <box size=".001 .001 .001"/>
-            </geometry>
-        </collision>
-    </link>
+    </xacro:unless>
 
-    <joint name="front_camera_joint" type="fixed">
-        <parent link="trunk"/>
-        <child link="front_camera"/>
-        <origin rpy="0 0 0" xyz="0.32715 -0.00003 0.04297"/>
-    </joint>
-
-    <link name="front_camera">
-    </link>
-
-    <!-- Cerberus nav sensor rig. See common/cerberus_description/sensors/sensor_configs.py,
-         which these positions must match. "trunk" and Isaac Lab's "base" prim are
-         coincident (the floating_base joint below has zero offset), so mounting
-         here is equivalent to sensor_configs.py's Robot/base prim_path.
-         Orientation (rpy) intentionally left at zero, NOT yet converted from
-         sensor_configs.py's ROS optical frame quaternion. An incorrect guess
-         would be a silent TF bug, not a placeholder; position only is enough
-         for the frames to exist. Do the rotation as a follow up. -->
-    <joint name="front_cam_left_joint" type="fixed">
-        <parent link="trunk"/>
-        <child link="front_cam_left"/>
-        <origin rpy="0 0 0" xyz="0.32 -0.06 0.05"/>
-    </joint>
-    <link name="front_cam_left"/>
-
-    <joint name="front_cam_right_joint" type="fixed">
-        <parent link="trunk"/>
-        <child link="front_cam_right"/>
-        <origin rpy="0 0 0" xyz="0.32 0.06 0.05"/>
-    </joint>
-    <link name="front_cam_right"/>
-
-    <joint name="rear_cam_left_joint" type="fixed">
-        <parent link="trunk"/>
-        <child link="rear_cam_left"/>
-        <origin rpy="0 0 0" xyz="-0.32 -0.06 0.05"/>
-    </joint>
-    <link name="rear_cam_left"/>
-
-    <joint name="rear_cam_right_joint" type="fixed">
-        <parent link="trunk"/>
-        <child link="rear_cam_right"/>
-        <origin rpy="0 0 0" xyz="-0.32 0.06 0.05"/>
-    </joint>
-    <link name="rear_cam_right"/>
-
-    <joint name="lidar_joint" type="fixed">
-        <parent link="trunk"/>
-        <child link="lidar"/>
-        <origin rpy="0 0 0" xyz="0 0 0.05"/>
-    </joint>
-    <link name="lidar"/>
-
-    <!--
-    <joint name="load_joint" type="fixed">
-        <parent link="trunk"/>
-        <child link="load_link"/>
-        <origin rpy="0 0 0" xyz="0 0 0"/>
-    </joint>
-
-    <link name="load_link">
-        <inertial>
-            <mass value="5"/>
-            <origin rpy="0 0 0" xyz="0 0 0"/>
-            <inertia ixx="0.01" ixy="0" ixz="0" iyy="0.01" iyz="0" izz="0.01"/>
-        </inertial>
-        <visual>
-            <origin rpy="0 0 0" xyz="0 0 0.2"/>
-            <geometry>
-                <box size="0.5 0.3 0.2"/>
-            </geometry>
-        </visual>
-        <collision>
-            <origin rpy="0 0 0" xyz="0 0 0"/>
-            <geometry>
-                <box size=".001 .001 .001"/>
-            </geometry>
-        </collision>
-    </link>
--->
     <xacro:leg name="FR" mirror="-1" mirror_dae= "False" front_hind="1"  front_hind_dae="True"  />
     <xacro:leg name="FL" mirror="1"  mirror_dae="True"   front_hind="1"  front_hind_dae="True"  />
     <xacro:leg name="RR" mirror="-1" mirror_dae="False"  front_hind="-1" front_hind_dae="False" />

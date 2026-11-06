@@ -19,7 +19,7 @@
             <xacro:if value="${(mirror_dae == True) and (front_hind_dae == False)}">
                 <origin rpy="0 0 0" xyz="${-leg_offset_x} ${leg_offset_y} 0"/>
             </xacro:if>
-            <parent link="trunk"/>
+            <parent link="${trunk_link}"/>
             <child link="${name}_hip"/>
             <axis xyz="1 0 0"/>
             <dynamics damping="${damping}" friction="${friction}"/>
@@ -31,6 +31,7 @@
             </xacro:if>            
         </joint>
 
+        <xacro:unless value="${sim_flag}">
         <joint name="${name}_hip_rotor_joint" type="fixed">
             <xacro:if value="${(mirror_dae == False) and (front_hind_dae == True)}">
                 <origin rpy="0 0 0" xyz="${hip_rotor_offset_x} ${-hip_rotor_offset_y} 0"/>
@@ -44,9 +45,10 @@
             <xacro:if value="${(mirror_dae == True) and (front_hind_dae == False)}">
                 <origin rpy="0 0 0" xyz="${-hip_rotor_offset_x} ${hip_rotor_offset_y} 0"/>
             </xacro:if>
-            <parent link="trunk"/>
+            <parent link="${trunk_link}"/>
             <child link="${name}_hip_rotor"/>         
         </joint>
+        </xacro:unless>
 
         <link name="${name}_hip">
             <visual>
@@ -63,7 +65,7 @@
                     <origin rpy="${PI} ${PI} 0" xyz="0 0 0"/>
                 </xacro:if>
                 <geometry>
-                    <mesh filename="package://cerberus_description/meshes/hip.dae" scale="1 1 1"/>
+                    <mesh filename="${mesh_prefix}/hip.dae" scale="1 1 1"/>
                 </geometry>
                 <!-- <material name="orange"/> -->
             </visual>
@@ -83,6 +85,7 @@
             </inertial>
         </link>
 
+        <xacro:unless value="${sim_flag}">
         <link name="${name}_hip_rotor">
             <visual>
                 <origin rpy="0 ${PI/2.0} 0" xyz="0 0 0"/>
@@ -106,6 +109,7 @@
                     izz="${hip_rotor_izz}"/>              
             </inertial>
         </link>
+        </xacro:unless>
 
         <joint name="${name}_thigh_joint" type="revolute">
             <origin rpy="0 0 0" xyz="0 ${thigh_offset*mirror} 0"/>
@@ -113,24 +117,26 @@
             <child link="${name}_thigh"/>
             <axis xyz="0 1 0"/>
             <dynamics damping="${damping}" friction="${friction}"/>
-            <limit effort="${thigh_torque_max}" velocity="${thigh_velocity_max}" lower="${thigh_position_min}" upper="${thigh_position_max}"/>
+            <limit effort="${thigh_torque_max}" velocity="${thigh_velocity_max}" lower="${thigh_position_min if front_hind == 1 else thigh_position_min_rear}" upper="${thigh_position_max if front_hind == 1 else thigh_position_max_rear}"/>
         </joint>
 
+        <xacro:unless value="${sim_flag}">
         <joint name="${name}_thigh_rotor_joint" type="fixed">
             <origin rpy="0 0 0" xyz="${thigh_rotor_offset_x} ${thigh_rotor_offset_y*mirror} 0"/>
             <parent link="${name}_hip"/>
             <child link="${name}_thigh_rotor"/>         
         </joint>
+        </xacro:unless>
 
         <link name="${name}_thigh">
             <visual>
                 <origin rpy="0 0 0" xyz="0 0 0"/>
                 <geometry>
                     <xacro:if value="${mirror_dae == True}">
-                        <mesh filename="package://cerberus_description/meshes/thigh.dae" scale="1 1 1"/>
+                        <mesh filename="${mesh_prefix}/thigh.dae" scale="1 1 1"/>
                     </xacro:if>
                     <xacro:if value="${mirror_dae == False}">
-                        <mesh filename="package://cerberus_description/meshes/thigh_mirror.dae" scale="1 1 1"/>
+                        <mesh filename="${mesh_prefix}/thigh_mirror.dae" scale="1 1 1"/>
                     </xacro:if>
                 </geometry>
                 <!-- <material name="orange"/> -->
@@ -151,6 +157,7 @@
             </inertial>
         </link>
 
+        <xacro:unless value="${sim_flag}">
         <link name="${name}_thigh_rotor">
             <visual>
                 <origin rpy="${PI/2.0} 0 0" xyz="0 0 0"/>
@@ -174,6 +181,7 @@
                     izz="${thigh_rotor_izz}"/>       
             </inertial>
         </link>
+        </xacro:unless>
 
         <joint name="${name}_calf_joint" type="revolute">
             <origin rpy="0 0 0" xyz="0 0 ${-thigh_length}"/>
@@ -184,17 +192,19 @@
             <limit effort="${calf_torque_max}" velocity="${calf_velocity_max}" lower="${calf_position_min}" upper="${calf_position_max}"/>
         </joint>
 
+        <xacro:unless value="${sim_flag}">
         <joint name="${name}_calf_rotor_joint" type="fixed">
             <origin rpy="0 0 0" xyz="${calf_rotor_offset_x} ${calf_rotor_offset_y*mirror} 0"/>
             <parent link="${name}_thigh"/>
             <child link="${name}_calf_rotor"/>         
         </joint>
+        </xacro:unless>
 
         <link name="${name}_calf">
             <visual>
                 <origin rpy="0 0 0" xyz="0 0 0"/>
                 <geometry>
-                    <mesh filename="package://cerberus_description/meshes/calf.dae" scale="1 1 1"/>
+                    <mesh filename="${mesh_prefix}/calf.dae" scale="1 1 1"/>
                 </geometry>
                 <!-- <material name="orange"/> -->
             </visual>
@@ -214,6 +224,7 @@
             </inertial>
         </link>
 
+        <xacro:unless value="${sim_flag}">
         <link name="${name}_calf_rotor">
             <visual>
                 <origin rpy="${PI/2.0} 0 0" xyz="0 0 0"/>
@@ -237,6 +248,7 @@
                     izz="${calf_rotor_izz}"/>     
             </inertial>
         </link>
+        </xacro:unless>
 
         <joint name="${name}_foot_fixed" type="fixed">
             <origin rpy="0 0 0" xyz="0 0 ${-(calf_length)}"/>
@@ -267,6 +279,8 @@
             </inertial>
         </link>
 
-        <xacro:leg_transmission name="${name}"/>
+        <xacro:unless value="${sim_flag}">
+            <xacro:leg_transmission name="${name}"/>
+        </xacro:unless>
     </xacro:macro>
 </robot>

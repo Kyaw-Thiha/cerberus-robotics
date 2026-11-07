@@ -57,7 +57,10 @@ say "training exit=$rc (137 = hit the ${CAP_H}h cap)"
 RUN_DIR="$(find policy/locomotion/checkpoints -maxdepth 2 -name 'model_*.pt' -newer "$MARKER" -printf '%h\n' 2>/dev/null | head -1)"
 EVENTS="$(find "${RUN_DIR:-/nonexistent}" -maxdepth 1 -name 'events.out.tfevents*' 2>/dev/null | head -1)"
 if [[ $rc -eq 0 && -n "$RUN_DIR" && -n "$EVENTS" ]]; then
-    cp -r "$RUN_DIR" "$REPORT_DIR/run_snapshot" 2>/dev/null
+    # Provenance only: params/, git diffs and the event file. The checkpoints themselves stay in
+    # checkpoints/ and go to R2 through their own sync, not through a copy of the run tree.
+    mkdir -p "$REPORT_DIR/run_snapshot"
+    cp -r "$RUN_DIR/params" "$RUN_DIR/git" "$EVENTS" "$REPORT_DIR/run_snapshot/" 2>/dev/null
     record train PASS "$RUN_DIR"
 else
     record train FAIL "exit=$rc run_dir='$RUN_DIR' events='$EVENTS'"

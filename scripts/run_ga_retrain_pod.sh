@@ -49,7 +49,6 @@ say "training (RUN_002 recipe, tensorboard logger)"
 timeout --signal=KILL --kill-after=60 "$CAP_S" "$LAB" -p policy/locomotion/train.py \
     --platform go2 --terrain rough --headless --logger tensorboard \
     --num_envs "$NUM_ENVS" --max_iterations "$ITERATIONS" --seed "$SEED" \
-    --video --video_interval 12000 --video_length 200 \
     > "$REPORT_DIR/train.log" 2>&1
 rc=$?
 say "training exit=$rc (137 = hit the ${CAP_H}h cap)"
@@ -61,6 +60,27 @@ if [[ $rc -eq 0 && -n "$RUN_DIR" && -n "$EVENTS" ]]; then
     record train PASS "$RUN_DIR"
 else
     record train FAIL "exit=$rc run_dir='$RUN_DIR' events='$EVENTS'"
+fi
+
+# ---- rollout video (separate from training on purpose) -----------------------------------------
+# Driver 595 crashes or hangs roughly half of camera-enabled Kit launches (docs/runpod.md). A video
+# flag inside the retrain would put 1.5 h of training behind that coin flip, so the clip is captured
+# afterwards from the finished checkpoint, with retries, and a failed clip does not invalidate the run.
+if [[ -n "$RUN_DIR" ]]; then
+    for attempt in 1 2 3 4; do
+        timeout --signal=KILL --kill-after=30 900 "$LAB" -p policy/locomotion/play.py \
+            --platform go2 --terrain rough --headless --video --video_length 200 --num_envs 8 \
+            > "$REPORT_DIR/video.attempt$attempt.log" 2>&1
+        cp "$REPORT_DIR/video.attempt$attempt.log" "$REPORT_DIR/video.log"
+        clip="$(find "$RUN_DIR" -name '*.mp4' -size +0 2>/dev/null | tail -1)"
+        [[ -n "$clip" ]] && break
+        say "video attempt $attempt produced no clip; retrying"
+    done
+    if [[ -n "$clip" ]]; then
+        cp "$clip" "$REPORT_DIR/rollout.mp4"
+        record video PASS "$REPORT_DIR/rollout.mp4"
+    else record video FAIL "no clip after 4 attempts (non-blocking for the checkpoint)"
+    fi
 fi
 
 # ---- finalize: candidate .pt + .onnx + sidecar -------------------------------------------------

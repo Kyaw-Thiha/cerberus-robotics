@@ -86,13 +86,10 @@ def parse_args(argv=None):
     parser.add_argument("--runner_cfg", default=None, help="JSON file overriding DEFAULT_RUNNER_CFG.")
     parser.add_argument("--dry_run", action="store_true", help="Build everything, step zero attack, exit.")
     parser.add_argument("--max_wall_clock_h", type=float, default=3.0, help="Hard cap; the trainer stops at it.")
-    parser.add_argument("--headless", action="store_true", default=True)
-    parser.add_argument(
-        "--enable_cameras",
-        action="store_true",
-        default=True,
-        help="Keep cameras enabled: on the v6 images a launch with them disabled dies at startup.",
-    )
+    from common.cerberus_compat.launcher import add_launcher_args
+
+    add_launcher_args(parser)
+    parser.set_defaults(headless=True, enable_cameras=True)
     return parser.parse_args(argv)
 
 

@@ -159,14 +159,13 @@ def main(argv: list[str] | None = None) -> int:
         default=_REPO_ROOT / "outputs" / "env_report.json",
         help="Existing env report to fold the runtime findings into (written by scripts/env_report.py).",
     )
-    parser.add_argument("--headless", action="store_true", default=True)
-    parser.add_argument(
-        "--enable_cameras",
-        action="store_true",
-        default=True,
-        help="Must stay on for the v6 image family: launches with cameras disabled die at startup "
-        "(docs/runpod.md). No camera is actually used here.",
-    )
+    # Use the repo's launcher-arg helper, not a hand-built Namespace: Isaac's launcher reads many
+    # fields off the namespace (visualizer, livestream, device, ...) and a partial namespace makes
+    # Kit die during startup. Cameras stay on because the v6 images crash without them.
+    from common.cerberus_compat.launcher import add_launcher_args
+
+    add_launcher_args(parser)
+    parser.set_defaults(headless=True, enable_cameras=True)
     args = parser.parse_args(argv)
 
     import gymnasium as gym

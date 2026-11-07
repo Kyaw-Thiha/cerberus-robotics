@@ -227,14 +227,16 @@ def _dry_run(wrapper, runner_cfg, frozen_snapshot) -> int:
 
     from policy.locomotion.adversarial_robustness import attack_env
 
+    from policy.locomotion.eval.policy_io import select_policy_obs  # noqa: PLC0415
+
     obs = wrapper.reset()
     zero = torch.zeros((wrapper.num_envs, ATTACK_ACTION_DIM), device=wrapper.device)
-    print(f"[adversary] dry run: obs dim {tuple(obs.shape)}, attack dim {ATTACK_ACTION_DIM}, "
-          f"runner cfg class {runner_cfg['class_name']}")
+    print(f"[adversary] dry run: obs dim {tuple(select_policy_obs(obs).shape)}, "
+          f"attack dim {ATTACK_ACTION_DIM}, runner cfg class {runner_cfg['class_name']}")
     nan_seen = False
     for step in range(200):
         obs, reward, _dones, extras = wrapper.step(zero)
-        if not torch.isfinite(obs).all() or not torch.isfinite(reward).all():
+        if not torch.isfinite(select_policy_obs(obs)).all() or not torch.isfinite(reward).all():
             nan_seen = True
             print(f"[adversary] NON-FINITE value at step {step} -- FAIL")
             break

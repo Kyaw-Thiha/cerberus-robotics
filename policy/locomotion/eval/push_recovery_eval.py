@@ -92,6 +92,35 @@ parser.add_argument(
     "not a genuine recovery. Set to 0 to disable and use the raw sampled command.",
 )
 parser.add_argument("--output", type=str, default=None, help="Output CSV path (default: eval/results/<timestamp>.csv).")
+parser.add_argument(
+    "--policy_onnx",
+    type=str,
+    default=None,
+    help="Evaluate this .onnx export instead of loading a checkpoint through rsl-rl (onnxruntime). "
+    "Needed for checkpoints from a retired rsl-rl line: the September Go2 candidates are legacy rsl-rl "
+    "3.x files that the GA stack refuses to load.",
+)
+parser.add_argument(
+    "--contract_reference",
+    type=str,
+    default=None,
+    help="A past run directory (its params/env.yaml + agent.yaml) or a params/ dir. Prints a field-by-field "
+    "contract comparison (observation order/dim, action scale, control rate, command ranges, normalizer) "
+    "before any eval numbers, and aborts on a mismatch unless --allow_contract_mismatch is passed.",
+)
+parser.add_argument(
+    "--allow_contract_mismatch",
+    action="store_true",
+    default=False,
+    help="Evaluate even when the contract check reports a mismatch (the numbers are then not comparable "
+    "to the reference run -- only useful for a deliberate A/B of the mismatch itself).",
+)
+parser.add_argument(
+    "--contract_report",
+    type=str,
+    default=None,
+    help="Where to write the contract-check table (default: <output>_contract.txt).",
+)
 cli_args.add_rsl_rl_args(parser)
 add_launcher_args(parser)
 args_cli, hydra_args = parser.parse_known_args()
@@ -103,6 +132,7 @@ simulation_app = app_launcher.app
 """Rest everything follows."""
 
 import csv
+import json
 import math
 from datetime import datetime
 
@@ -120,7 +150,12 @@ from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper
 import isaaclab_tasks  # noqa: F401
 import policy.locomotion  # noqa: F401  -- registers the Cerberus Go2 tasks
 from isaaclab_tasks.utils import get_checkpoint_path
-from common.cerberus_compat.rsl_rl_compat import check_checkpoint_format, hydra_task_config, make_runner
+from common.cerberus_compat.rsl_rl_compat import (
+    CheckpointFormatError,
+    check_checkpoint_format,
+    hydra_task_config,
+    make_runner,
+)
 from common.cerberus_compat.isaac_data import as_tensor
 from policy.cli_common import resolve_task_id
 from policy.locomotion.core.platforms.registry import get_platform
@@ -129,6 +164,102 @@ from policy.locomotion.core.push_disturbance_cfg import IMPULSE_DURATION_S
 from policy.locomotion.core.push_impulse_event import clear_expired_push_impulses
 from policy.locomotion.core.script_utils import checkpoints_root
 from policy.locomotion.core.terrain_pinning import pin_terrain, sub_terrain_type_for_column
+from policy.locomotion.eval import contract_check
+
+
+def _load_onnx_policy(path: str, device: str):
+    """Wrap an exported ``.onnx`` policy as ``obs -> actions`` on ``device``.
+
+    Used when a checkpoint is in a retired rsl-rl format: the weights are fine, only the container is
+    stale, and the sibling ``.onnx`` export carries the same actor. The September export has no
+    observation normaliser (``actor_obs_normalization: false``), so raw observations go straight in --
+    which is why the contract check runs first and reports the normaliser field.
+    """
+    import numpy as np  # noqa: PLC0415
+    import onnxruntime as ort  # noqa: PLC0415
+    import torch  # noqa: PLC0415
+
+    providers = (
+        ["CUDAExecutionProvider", "CPUExecutionProvider"]
+        if device.startswith("cuda")
+        else ["CPUExecutionProvider"]
+    )
+    session = ort.InferenceSession(path, providers=providers)
+    inputs = [i.name for i in session.get_inputs()]
+    if len(inputs) != 1:
+        raise RuntimeError(f"{path}: expected exactly one ONNX input (observations), got {inputs}")
+    input_name = inputs[0]
+    input_shape = session.get_inputs()[0].shape
+    output_names = [o.name for o in session.get_outputs()]
+    print(f"[INFO]: ONNX policy {path} input={input_name} shape={input_shape} outputs={output_names}")
+
+    def policy(obs):
+        obs_np = obs.detach().cpu().numpy().astype(np.float32)
+        out = session.run(output_names, {input_name: obs_np})[0]
+        return torch.as_tensor(out, dtype=torch.float32, device=obs.device)
+
+    policy.onnx_path = path
+    policy.onnx_input_shape = input_shape
+    return policy
+
+
+def _load_policy(env, agent_cfg, resume_path: str):
+    """Load the eval policy: rsl-rl runner first, ONNX export as the documented fallback.
+
+    Returns (policy, info) where info records which path worked -- the parity report needs that.
+    Raises the original error when neither path can produce a policy, rather than evaluating a
+    silently wrong one.
+
+    Scope note: the ONNX fallback lives here only. The showcase/play scripts still load strictly
+    through rsl-rl, so a September (legacy rsl-rl 3.x) checkpoint cannot be used with them on the GA
+    stack -- use the GA-trained checkpoint for videos, or evaluate through this script.
+    """
+    if args_cli.policy_onnx:
+        print("[INFO]: --policy_onnx given; bypassing the rsl-rl loader entirely")
+        return _load_onnx_policy(args_cli.policy_onnx, env.unwrapped.device), {"source": "onnx (explicit)"}
+
+    print(f"[INFO]: Loading model checkpoint from: {resume_path}")
+    try:
+        fmt = check_checkpoint_format(resume_path)
+        runner = make_runner(env, agent_cfg, log_dir=None, device=agent_cfg.device)
+        runner.load(resume_path)
+        policy = runner.get_inference_policy(device=env.unwrapped.device)
+        print(f"[INFO]: policy loaded through rsl-rl (checkpoint format: {fmt})")
+        return policy, {"source": "rsl-rl", "checkpoint_format": fmt}
+    except (CheckpointFormatError, KeyError, RuntimeError) as e:
+        onnx_path = os.path.splitext(resume_path)[0] + ".onnx"
+        print(f"[WARNING]: rsl-rl could not load {resume_path}: {type(e).__name__}: {e}")
+        if not os.path.isfile(onnx_path):
+            raise
+        print(f"[INFO]: falling back to the sibling ONNX export: {onnx_path}")
+        return _load_onnx_policy(onnx_path, env.unwrapped.device), {
+            "source": "onnx (fallback)",
+            "fallback_reason": f"{type(e).__name__}: {e}",
+        }
+
+
+def _run_contract_check(env_cfg, agent_cfg, env, output_path: str | None) -> dict:
+    """Compare the live stack against the reference run's dumped config, before any numbers."""
+    reference_dir = Path(args_cli.contract_reference)
+    if reference_dir.name == "params":
+        reference_dir = reference_dir.parent
+    reference = contract_check.load_reference(reference_dir)
+    live = contract_check.live_contract(env_cfg, agent_cfg, env=env)
+    rows = contract_check.compare(reference, live)
+    verdict = contract_check.verdict(rows)
+    table = contract_check.format_table(rows)
+    print(f"[CONTRACT] reference: {reference_dir}\n{table}\n[CONTRACT] verdict: {verdict}")
+    mismatches = contract_check.mismatch_summary(rows)
+    for line in mismatches:
+        print(f"[CONTRACT] MISMATCH {line}")
+    if output_path:
+        os.makedirs(os.path.dirname(os.path.abspath(output_path)) or ".", exist_ok=True)
+        with open(output_path, "w") as f:
+            f.write(f"reference: {reference_dir}\nverdict: {verdict}\n\n{table}\n")
+            if mismatches:
+                f.write("\nMISMATCHES\n" + "\n".join(mismatches) + "\n")
+        print(f"[INFO] Wrote contract check to: {output_path}")
+    return {"verdict": verdict, "reference": str(reference_dir), "rows": rows, "mismatches": mismatches}
 
 # now that policy.locomotion has registered every platform's gym tasks, resolve
 # --platform/--terrain to a concrete task id (unless --task was passed explicitly)
@@ -212,11 +343,31 @@ def main(env_cfg, agent_cfg):
 
     env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
 
-    print(f"[INFO]: Loading model checkpoint from: {resume_path}")
-    runner = make_runner(env, agent_cfg, log_dir=None, device=agent_cfg.device)
-    check_checkpoint_format(resume_path)
-    runner.load(resume_path)
-    policy = runner.get_inference_policy(device=env.unwrapped.device)
+    # Contract check first: it must be reported BEFORE eval numbers, so a stack move cannot quietly
+    # turn "94% -> 61%" into a robustness finding when it is really an observation/action change.
+    if args_cli.contract_reference:
+        if args_cli.contract_report:
+            contract_report_path = args_cli.contract_report
+        elif args_cli.output:
+            contract_report_path = os.path.splitext(args_cli.output)[0] + "_contract.txt"
+        else:
+            results_dir = os.path.join(os.path.dirname(__file__), "results")
+            os.makedirs(results_dir, exist_ok=True)
+            contract_report_path = os.path.join(
+                results_dir, f"contract_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.txt"
+            )
+        contract = _run_contract_check(env_cfg, agent_cfg, env, contract_report_path)
+        if contract["verdict"] == "CONTRACT MISMATCH" and not args_cli.allow_contract_mismatch:
+            raise SystemExit(
+                "[CONTRACT] mismatch against the reference run; refusing to produce numbers that are not "
+                "comparable. Re-run with --allow_contract_mismatch only if the mismatch itself is the thing "
+                "being measured."
+            )
+    else:
+        contract = None
+
+    policy, policy_info = _load_policy(env, agent_cfg, resume_path)
+    print(f"[INFO]: policy source: {policy_info}")
 
     raw_env = env.unwrapped
     asset = raw_env.scene["robot"]
@@ -441,6 +592,28 @@ def main(env_cfg, agent_cfg):
         writer.writeheader()
         writer.writerows(trial_results)
     print(f"[INFO] Wrote per-trial results to: {trials_output_path}")
+
+    # Provenance for the report: which policy source produced these numbers, and whether the contract
+    # check against the reference run passed. Without this, a CSV cannot be attributed to a stack.
+    eval_info = {
+        "task": args_cli.task,
+        "policy_source": policy_info,
+        "command_floor_mps": args_cli.min_command_speed_mps,
+        "magnitudes": args_cli.magnitudes,
+        "terrain_levels": args_cli.terrain_levels,
+        "trials_per_cell": trials,
+        "push_time_s": args_cli.push_time_s,
+        "window_s": args_cli.window_s,
+        "contract_verdict": (contract or {}).get("verdict"),
+        "contract_reference": (contract or {}).get("reference"),
+        "contract_mismatches": (contract or {}).get("mismatches", []),
+        "summary_csv": output_path,
+        "trials_csv": trials_output_path,
+    }
+    info_path = output_path.rsplit(".", 1)[0] + "_evalinfo.json"
+    with open(info_path, "w") as f:
+        json.dump(eval_info, f, indent=2)
+    print(f"[INFO] Wrote eval provenance to: {info_path}")
 
     env.close()
 

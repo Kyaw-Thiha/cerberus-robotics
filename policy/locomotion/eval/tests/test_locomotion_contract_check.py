@@ -281,9 +281,7 @@ class TestModelClassEquivalence:
         live = dict(ref, actor_class="LSTMModel")
         assert _mod.verdict(_mod.compare(ref, live)) == "CONTRACT MISMATCH"
 
-    def test_reference_loader_canonicalises(self):
-        ref = _mod.load_reference.__wrapped__ if hasattr(_mod.load_reference, "__wrapped__") else None
-        assert ref is None or True  # loader shape is covered by the September-run tests
+    def test_none_stays_none(self):
         assert _mod.canonical_model_class(None) is None
 
 

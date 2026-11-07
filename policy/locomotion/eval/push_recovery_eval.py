@@ -167,6 +167,7 @@ from policy.locomotion.core.terrain_pinning import (
     sub_terrain_type_for_column,
 )
 from policy.locomotion.eval import contract_check
+from policy.locomotion.eval.policy_io import select_policy_obs
 from policy.locomotion.eval.push_recovery_event import apply_single_push
 
 
@@ -204,6 +205,7 @@ def _load_onnx_policy(path: str, device: str):
         print(f"[INFO]: ONNX export has a fixed batch of {fixed_batch}; feeding it row by row")
 
     def policy(obs):
+        obs = select_policy_obs(obs)
         obs_np = obs.detach().cpu().numpy().astype(np.float32)
         if fixed_batch is None or obs_np.shape[0] == fixed_batch:
             out = session.run(output_names, {input_name: obs_np})[0]

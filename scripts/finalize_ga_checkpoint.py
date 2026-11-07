@@ -27,7 +27,6 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
-import os
 import shutil
 import sys
 from pathlib import Path
@@ -258,15 +257,25 @@ def _export_onnx(checkpoint: Path, target_onnx: Path, task: str) -> None:  # pra
     get_policy_for_export(runner)  # raises if the runner exposes no exportable actor
     # rsl-rl >= 4 exports directly; the JIT file is a by-product of the same call, kept beside the ONNX
     # so the exact deployed module can be inspected later.
-    staging = target_onnx.parent / f"{target_onnx.stem}.export"
-    staging.mkdir(exist_ok=True)
-    export_policy(runner, str(staging), jit_filename=f"{target_onnx.stem}.torchscript.pt", onnx_filename=target_onnx.name)
-    produced = staging / target_onnx.name
-    if not produced.is_file():
-        raise RuntimeError(f"export produced no ONNX at {produced}")
-    shutil.move(str(produced), str(target_onnx))
-    os.replace(staging / f"{target_onnx.stem}.torchscript.pt", target_onnx.with_suffix(".torchscript.pt"))
-    staging.rmdir()
+    # Export straight into the destination directory: rsl-rl writes the weights as ONNX *external
+    # data* next to the graph (`<name>.onnx.data`), so a graph moved on its own is unloadable.
+    export_policy(
+        runner,
+        str(target_onnx.parent),
+        jit_filename=f"{target_onnx.stem}.torchscript.pt",
+        onnx_filename=target_onnx.name,
+    )
+    if not target_onnx.is_file():
+        raise RuntimeError(f"export produced no ONNX at {target_onnx}")
+    data_file = target_onnx.with_suffix(target_onnx.suffix + ".data")
+    loader = target_onnx.read_bytes()[:200]
+    uses_external = b"external_data" in loader or data_file.is_file()
+    if uses_external and not data_file.is_file():
+        raise RuntimeError(
+            f"{target_onnx} references external weights but {data_file.name} is missing: the pair must "
+            "travel together"
+        )
+    print(f"[finalize] ONNX weights: {'external (' + data_file.name + ')' if uses_external else 'inline'}")
     print(f"[finalize] exported -> {target_onnx}")
     env.close()
 

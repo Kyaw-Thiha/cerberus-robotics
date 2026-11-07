@@ -94,6 +94,7 @@ if [[ -n "$RUN_DIR" ]]; then
     CAND="policy/locomotion/checkpoints/go2_locomotion_ga_v1_candidate"
     if [[ -f "$CAND.pt" && -f "$CAND.onnx" && -f "$CAND.meta.json" ]]; then
         cp "$CAND.pt" "$CAND.onnx" "$CAND.meta.json" "$REPORT_DIR/"
+        [[ -f "$CAND.onnx.data" ]] && cp "$CAND.onnx.data" "$REPORT_DIR/"  # external ONNX weights
         record finalize PASS "$(python3 -c "import json;d=json.load(open('$CAND.meta.json'));print('wall=%.0fs reward=%.2f physics=%s' % (d['wall_clock_s'], d['final_reward'], d['physics_backend']))")"
     else record finalize FAIL "exit=$rc (see finalize.log)"; fi
 fi

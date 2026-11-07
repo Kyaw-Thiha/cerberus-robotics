@@ -38,40 +38,6 @@ if str(_REPO_ROOT) not in sys.path:
 # Paper: 3 hidden layers for the Miki-style (push-randomised) policy, 2 for the didactic case.
 ADVERSARY_HIDDEN_DIMS = (256, 128, 64)
 ATTACK_ACTION_DIM = 4  # force x/y + command x/y
-DEFAULT_RUNNER_CFG = {
-    "class_name": "OnPolicyRunner",
-    "num_steps_per_env": 24,
-    "max_iterations": 1000,
-    "save_interval": 25,
-    "empirical_normalization": None,
-    "actor": {
-        "class_name": "MLP",
-        "hidden_dims": list(ADVERSARY_HIDDEN_DIMS),
-        "activation": "elu",
-        "obs_normalization": False,
-    },
-    "critic": {
-        "class_name": "MLP",
-        "hidden_dims": list(ADVERSARY_HIDDEN_DIMS),
-        "activation": "elu",
-        "obs_normalization": False,
-    },
-    "algorithm": {
-        "class_name": "PPO",
-        "num_learning_epochs": 5,
-        "num_mini_batches": 4,
-        "learning_rate": 3e-4,
-        "schedule": "adaptive",
-        "gamma": 0.99,
-        "lam": 0.95,
-        "entropy_coef": 0.01,
-        "desired_kl": 0.01,
-        "max_grad_norm": 1.0,
-        "value_loss_coef": 1.0,
-        "use_clipped_value_loss": True,
-        "clip_param": 0.2,
-    },
-}
 
 
 def parse_args(argv=None):
@@ -83,7 +49,7 @@ def parse_args(argv=None):
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--modality", default="combined", choices=("force_only", "command_only", "combined"))
     parser.add_argument("--out_dir", default=None, help="Default: policy/locomotion/checkpoints/adversary_<stamp>")
-    parser.add_argument("--runner_cfg", default=None, help="JSON file overriding DEFAULT_RUNNER_CFG.")
+    parser.add_argument("--runner_cfg", default=None, help="JSON file overriding the derived runner config.")
     parser.add_argument("--dry_run", action="store_true", help="Build everything, step zero attack, exit.")
     parser.add_argument("--max_wall_clock_h", type=float, default=3.0, help="Hard cap; the trainer stops at it.")
     from common.cerberus_compat.launcher import add_launcher_args
@@ -125,6 +91,24 @@ def load_frozen_policy(task: str, checkpoint: str):
     policy.eval()
     env.close()
     return policy
+
+
+def _runner_cfg_from_task(task: str, iterations: int, seed: int) -> dict:
+    """The task's PPO runner config as a dict, retargeted at the adversary's MLP and budget."""
+    from common.cerberus_compat.cfg_registry import load_agent_cfg
+    from common.cerberus_compat.rsl_rl_compat import migrate_agent_cfg
+
+    agent_cfg = migrate_agent_cfg(load_agent_cfg(task))
+    cfg = agent_cfg.to_dict() if hasattr(agent_cfg, "to_dict") else json.loads(json.dumps(agent_cfg.__dict__))
+    for model in ("actor", "critic"):
+        block = cfg.get(model)
+        if isinstance(block, dict) and "hidden_dims" in block or isinstance(block, dict):
+            block["hidden_dims"] = list(ADVERSARY_HIDDEN_DIMS)
+    cfg["max_iterations"] = int(iterations)
+    cfg["seed"] = int(seed)
+    cfg["save_interval"] = min(25, max(1, int(iterations)))
+    cfg["experiment_name"] = "unitree_go2_adversary"
+    return cfg
 
 
 def layer_inf_norms(policy_nn):
@@ -177,11 +161,12 @@ def _run(args) -> int:
         args.task, policy, bounds, num_envs=args.num_envs, modality=args.modality, play=True
     )
 
-    runner_cfg = json.loads(json.dumps(DEFAULT_RUNNER_CFG))
-    runner_cfg["max_iterations"] = args.iterations
+    # Start from the task's own runner config (migrated for the installed rsl-rl), then change only the
+    # parts that make it an adversary: a smaller MLP, this iteration count, this seed. Hand-writing the
+    # cfg dict would silently miss keys rsl-rl requires (obs_groups, logger, device, ...).
+    runner_cfg = _runner_cfg_from_task(args.task, args.iterations, args.seed)
     if args.runner_cfg:
         runner_cfg.update(json.loads(Path(args.runner_cfg).read_text()))
-    runner_cfg.setdefault("seed", args.seed)
 
     if args.dry_run:
         return _dry_run(wrapper, runner_cfg, frozen_snapshot)

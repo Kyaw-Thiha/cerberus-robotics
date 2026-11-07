@@ -184,17 +184,20 @@ def build_report(repo_root: Path = _REPO_ROOT) -> dict:
         "quat_convention": None,
         "runtime_probe": None,
     }
-    # The image file is authoritative for the versions it pins; surface them at top level too.
-    for src, dst in (
-        ("isaac_sim", "isaac_sim_version"),
-        ("isaaclab", "isaac_lab_version"),
-        ("isaac_lab", "isaac_lab_version"),
-        ("rsl_rl", "rsl_rl_version"),
-        ("torch", "torch_version"),
-    ):
-        value = image.get(src)
-        if value and dst not in report:
-            report[dst] = value
+    # The image file is authoritative for the versions it pins. Its shape is its own
+    # ("isaacsim_image", a "packages" map), not the report's, so map it explicitly rather than
+    # hoping key names line up.
+    packages = image.get("packages") or {}
+    derived = {
+        "isaac_sim_version": image.get("isaacsim_image"),
+        "isaac_lab_version": packages.get("isaaclab") or image.get("isaaclab_ref"),
+        "rsl_rl_version": packages.get("rsl-rl-lib"),
+        "torch_version": packages.get("torch"),
+    }
+    for key, value in derived.items():
+        if value:
+            report[key] = value
+    report["image_packages"] = packages or None
     return report
 
 

@@ -25,7 +25,10 @@ STAMP="$(date -u +%Y%m%dT%H%M%SZ)"
 REPORT_DIR="data/reports/ga_stack_$STAMP"
 SEPT_CHECKPOINT="${SEPT_CHECKPOINT:-policy/locomotion/checkpoints/go2_locomotion_v1_candidate.pt}"
 SEPT_RUN_DIR="${SEPT_RUN_DIR:-policy/locomotion/runs/2026-09-08_19-28-32_analysis}"
-PY="python3"
+# Descriptions of isaaclab / rsl-rl / torch only resolve inside Isaac's interpreter; the system
+# python3 sees none of them. Fall back to python3 on the old stack where that interpreter is absent.
+PY="$ISAACLAB_PATH/_isaac_sim/python.sh"
+[[ -x "$PY" ]] || PY="python3"
 SKIP=""; UPLOAD=0
 while [[ $# -gt 0 ]]; do
     case "$1" in

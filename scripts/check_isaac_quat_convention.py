@@ -27,6 +27,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import os
 import sys
 import traceback
@@ -41,6 +42,12 @@ if str(_REPO_ROOT) not in sys.path:
 # any axis mix-up (a wrong quaternion order puts a large component on x or y).
 PROJECTED_GRAVITY_ATOL = 0.10
 SETTLE_S = 1.0
+# Without a policy the robot only sags on its default pose for a second, so it is upright but not
+# level: the useful invariants are "gravity points mostly down" and "the observed vector matches the
+# prediction of exactly one quaternion order", not a tight distance to [0, 0, -1].
+MIN_DOWNWARD_Z = -0.85
+MIN_DISCRIMINATION_DEG = 15.0
+MATCH_TOLERANCE_DEG = 10.0
 
 
 def classify_quat_order(root_quat_row) -> dict:
@@ -67,6 +74,41 @@ def classify_quat_order(root_quat_row) -> dict:
     }
 
 
+def quat_to_matrix(quat, convention: str) -> list:
+    """Rotation matrix (row-major 3x3) for a quaternion in ``wxyz`` or ``xyzw`` order. Pure python."""
+    if convention == "wxyz":
+        w, x, y, z = (float(v) for v in quat)
+    elif convention == "xyzw":
+        x, y, z, w = (float(v) for v in quat)
+    else:
+        raise ValueError(f"unknown quaternion convention {convention!r}")
+    norm = (w * w + x * x + y * y + z * z) ** 0.5
+    if norm == 0:
+        raise ValueError("zero quaternion")
+    w, x, y, z = w / norm, x / norm, y / norm, z / norm
+    return [
+        [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+        [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+        [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
+    ]
+
+
+def predicted_projected_gravity(quat, convention: str) -> list:
+    """Body-frame gravity for this attitude: R(q)^T * (0, 0, -1)."""
+    rotation = quat_to_matrix(quat, convention)
+    return [-rotation[2][0], -rotation[2][1], -rotation[2][2]]
+
+
+def _angle_deg(a, b) -> float:
+    dot = sum(float(x) * float(y) for x, y in zip(a, b, strict=True))
+    na = sum(float(x) ** 2 for x in a) ** 0.5
+    nb = sum(float(y) ** 2 for y in b) ** 0.5
+    if na == 0 or nb == 0:
+        return 180.0
+    cosine = max(-1.0, min(1.0, dot / (na * nb)))
+    return math.degrees(math.acos(cosine))
+
+
 def evaluate(projected_gravity_rows, quat_rows, atol: float = PROJECTED_GRAVITY_ATOL) -> dict:
     """Judge probe values. Pure: takes per-env lists/rows, returns the verdict dict.
 
@@ -79,25 +121,44 @@ def evaluate(projected_gravity_rows, quat_rows, atol: float = PROJECTED_GRAVITY_
         raise ValueError("projected gravity and quaternion row counts differ")
     worst = 0.0
     worst_env = -1
-    for i, pg in enumerate(projected_gravity_rows):
+    matches = []
+    discrimination = []
+    for i, (pg, quat) in enumerate(zip(projected_gravity_rows, quat_rows, strict=True)):
         err = max(abs(float(pg[j]) - (0.0, 0.0, -1.0)[j]) for j in range(3))
         if err > worst:
             worst, worst_env = err, i
-    gravity_ok = worst <= atol
-    orders = [classify_quat_order(q) for q in quat_rows]
-    conventions = {o["convention"] for o in orders}
-    # Resolve before building the dict: ``set.pop()`` mutates, and the length check below must see
-    # the original cardinality (an earlier version consumed the set inside the dict literal).
+        predictions = {c: predicted_projected_gravity(quat, c) for c in ("wxyz", "xyzw")}
+        errors = {c: _angle_deg(pg, vec) for c, vec in predictions.items()}
+        matches.append(min(errors, key=errors.get))
+        discrimination.append(_angle_deg(predictions["wxyz"], predictions["xyzw"]))
+
+    # "Mostly down" replaces the tight [0,0,-1] distance: a policy-less robot sags and tilts, which
+    # would fail an absolute tolerance while saying nothing about conventions.
+    downward_ok = all(float(pg[2]) <= MIN_DOWNWARD_Z for pg in projected_gravity_rows)
+    gravity_ok = bool(downward_ok)
+    conventions = set(matches)
     convention = conventions.pop() if len(conventions) == 1 else "inconsistent"
+    # A yaw-only or identity attitude predicts the same gravity under both orders; the check can then
+    # only say "consistent", not "which order". Report that honestly instead of guessing.
+    discriminable = min(discrimination) >= MIN_DISCRIMINATION_DEG
+    match_error = min(_angle_deg(pg, predicted_projected_gravity(q, convention)) for pg, q in zip(projected_gravity_rows, quat_rows, strict=True)) if convention != "inconsistent" else 180.0
     return {
         "num_envs": len(projected_gravity_rows),
         "projected_gravity_atol": atol,
         "projected_gravity_max_abs_error": worst,
         "projected_gravity_worst_env": worst_env,
         "projected_gravity_ok": gravity_ok,
-        "quat_orders": orders,
+        "projected_gravity_min_z": min(float(pg[2]) for pg in projected_gravity_rows),
         "quat_convention": convention,
-        "passed": bool(gravity_ok and convention != "inconsistent"),
+        "convention_discriminable": bool(discriminable),
+        "prediction_error_deg": match_error,
+        "min_discrimination_deg": min(discrimination),
+        "quat_orders": [classify_quat_order(q) for q in quat_rows],
+        "passed": bool(
+            gravity_ok
+            and convention != "inconsistent"
+            and (not discriminable or match_error <= MATCH_TOLERANCE_DEG)
+        ),
     }
 
 

@@ -10,6 +10,12 @@ Gate prerequisite checks, both from artifacts:
 | zero-perturbation fall rate vs the standard sweep's fall rate in the same cell | **1% vs 0%** (delta +1 pp, tolerance 10) → PASS: the wrapper reproduces the candidate's standard behaviour |
 | 64-env, 200-step zero-perturbation rollout | no NaN, frozen policy verified unchanged, reported combined magnitude 0.0 → PASS |
 
+Adversary training (in flight, 1000 iterations at 256 envs, blocks of 50 with a checkpoint per
+block): by iteration ~450 the attack drove `Episode_Termination/base_contact` to ~98% of episodes,
+against 18% for a random 120 N push at the same normalised magnitude. That is the paper's finding
+reproduced in shape -- a learned attack beats random pushes of equal magnitude by a wide margin -- and
+it is why the standard sweep alone cannot certify this policy.
+
 One measurement subtlety worth recording: the standard sweep's *success* rate at 0 N / level 0 is 88%
 while its *fall* rate is 0% — success also requires velocity tracking and a level attitude, which the
 wrapper does not re-implement. The check therefore compares fall rates, not success rates; comparing

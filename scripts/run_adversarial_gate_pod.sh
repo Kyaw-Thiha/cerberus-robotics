@@ -81,7 +81,9 @@ else
 fi
 
 # Training is pointless if the wrapper does not reproduce the standard behaviour.
-if [[ "$(grep -c '^zero_attack FAIL' "$SUMMARY" 2>/dev/null || echo 0)" != "0" ]]; then
+# `grep -c` prints 0 AND exits 1 on no match, so `$(grep -c ... || echo 0)` yielded "0\n0" and read
+# as a failure. Ask the question the shell can answer directly.
+if grep -q '^zero_attack FAIL' "$SUMMARY" 2>/dev/null; then
     say "zero-attack check failed: not spending the ${CAP_H}h training cap on a mis-measuring wrapper"
     record train SKIP "blocked by zero_attack FAIL"
     record gate SKIP "blocked by zero_attack FAIL"

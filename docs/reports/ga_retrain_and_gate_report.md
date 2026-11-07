@@ -47,6 +47,12 @@ measured 5306.8 s).
 
 <!-- FILLED IN WHEN THE RUN FINISHES -->
 
+Wall clock so far: training started 07:29:24 UTC; at 733/1500 iterations the projected total is ~65 min
+(2.6 s/iteration), inside the 2.95 h cap with room to spare. Early-run comparison with RUN_002 at the
+same iteration (~500): reward 15.9 vs 18.0, terrain level 4.5 vs 3.2 (the curriculum advances faster),
+but fall rate 22.7% vs 7.0% — the GA run falls more often at equal curriculum progress, which is the
+difference the evaluation has to settle.
+
 ## 4. Adversarial gate
 
 <!-- FILLED IN WHEN THE GATE RUNS -->

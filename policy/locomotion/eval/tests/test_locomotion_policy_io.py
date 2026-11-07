@@ -24,8 +24,8 @@ class TestSelectPolicyObs:
         tensor = object()
         assert _mod.select_policy_obs(tensor) is tensor
 
-    def test_ambiguous_mapping_names_the_groups(self):
-        with pytest.raises(KeyError, match="groups"):
+    def test_ambiguous_mapping_names_the_nesting(self):
+        with pytest.raises(KeyError, match="not single-group"):
             _mod.select_policy_obs({"a": object(), "b": object()})
 
     def test_nested_mappings_are_unwrapped(self):

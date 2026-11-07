@@ -32,6 +32,37 @@ class TestSelectPolicyObs:
         tensor = object()
         assert _mod.select_policy_obs({"outer": {"policy": tensor}}) is tensor
 
+    def test_tensordict_like_container_is_unwrapped(self):
+        # rsl-rl 5 hands over a TensorDict: keys() + batch_size, but not a dict subclass.
+        tensor = object()
+
+        class FakeTensorDict:
+            batch_size = (1800,)
+
+            def __init__(self, mapping):
+                self._mapping = mapping
+
+            def keys(self):
+                return self._mapping.keys()
+
+            def __getitem__(self, key):
+                return self._mapping[key]
+
+        assert _mod.select_policy_obs(FakeTensorDict({"policy": tensor})) is tensor
+
+    def test_container_with_several_groups_and_no_policy_raises(self):
+        class FakeTensorDict:
+            batch_size = (1,)
+
+            def keys(self):
+                return ["a", "b"]
+
+            def __getitem__(self, key):
+                return object()
+
+        with pytest.raises(KeyError, match="not single-group"):
+            _mod.select_policy_obs(FakeTensorDict())
+
     def test_custom_group_name(self):
         tensor = object()
         assert _mod.select_policy_obs({"teacher": tensor}, group="teacher") is tensor

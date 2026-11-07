@@ -352,10 +352,17 @@ def build_attack_env(
             f"[attack_env] WARNING: play=True but task {task!r} is not a Play variant; training "
             "randomisation and pushes will be active, so a measured failure may not be the adversary's."
         )
+    from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper
+
     env_cfg = load_env_cfg(task)
     env_cfg.scene.num_envs = num_envs
     for key, value in (env_cfg_overrides or {}).items():
         setattr(env_cfg, key, value)
-    env = gym.make(task, cfg=env_cfg)
-    hooks = ManagerBasedHooks(env, root_body_name=root_body_name)
+    raw_env = gym.make(task, cfg=env_cfg)
+    hooks = ManagerBasedHooks(raw_env, root_body_name=root_body_name)
+    # The rsl-rl vec-env wrapper is what turns the manager's observations into the TensorDict the
+    # runner and its models read (and returns the 4-tuple + extras["time_outs"] the reward needs).
+    # Wrapping the raw gym env directly left the trainer with a plain dict: "'dict' object has no
+    # attribute 'to'".
+    env = RslRlVecEnvWrapper(raw_env, clip_actions=None)
     return AttackEnvWrapper(env=env, policy=policy, bounds=bounds, hooks=hooks, modality=modality)

@@ -59,7 +59,7 @@ say "candidate: $CANDIDATE  cap: ${CAP_H}h  envs=$NUM_ENVS iterations=$ITERATION
 ZERO_ARGS=()
 [[ -n "$STANDARD_SUCCESS" ]] && ZERO_ARGS=(--standard_success "$STANDARD_SUCCESS")
 run_isaac zero_attack 1200 3 -- "$LAB" -p "$GATE" \
-    --task "$TASK" --checkpoint "$CANDIDATE" --zero_attack_only --trials "$TRIALS" \
+    --task "$TASK" --checkpoint "$CANDIDATE" --zero_attack_only --headless --trials "$TRIALS" \
     "${ZERO_ARGS[@]}" --out_dir "$REPORT_DIR/zero_attack"
 rc=$?
 if [[ -f "$REPORT_DIR/zero_attack/zero_attack_check.json" ]] && python3 -c "
@@ -70,7 +70,7 @@ else
 fi
 
 run_isaac dry_run 1200 3 -- "$LAB" -p "$ADV" \
-    --task "$TASK" --checkpoint "$CANDIDATE" --num_envs 64 --iterations 1 --dry_run
+    --task "$TASK" --checkpoint "$CANDIDATE" --num_envs 64 --iterations 1 --dry_run --headless
 rc=$?
 if [[ $rc -eq 0 ]] && grep -q "dry run PASS" "$REPORT_DIR/dry_run.log"; then
     record dry_run PASS "$REPORT_DIR/dry_run.log"
@@ -87,7 +87,7 @@ else
     ADV_DIR="policy/locomotion/checkpoints/adversary_$STAMP"
     run_isaac train "$CAP_S" 2 -- "$LAB" -p "$ADV" \
         --task "$TASK" --checkpoint "$CANDIDATE" \
-        --num_envs "$NUM_ENVS" --iterations "$ITERATIONS" --out_dir "$ADV_DIR"
+        --num_envs "$NUM_ENVS" --iterations "$ITERATIONS" --out_dir "$ADV_DIR" --headless
     rc=$?
     ADV_MODEL="$(find "$ADV_DIR" -maxdepth 1 -name 'model_*.pt' 2>/dev/null | tail -1)"
     if [[ -n "$ADV_MODEL" ]]; then
@@ -101,7 +101,7 @@ else
     if [[ -n "$ADV_MODEL" ]]; then
         run_isaac gate 5400 2 -- "$LAB" -p "$GATE" \
             --task "$TASK" --checkpoint "$CANDIDATE" --adversary_dir "$ADV_DIR" \
-            --modalities combined,force_only,command_only --trials "$TRIALS" \
+            --modalities combined,force_only,command_only --headless --trials "$TRIALS" \
             --zero_attack_check --out_dir "$REPORT_DIR/gate"
         rc=$?
         if [[ -f "$REPORT_DIR/gate/gate_verdict.json" ]]; then

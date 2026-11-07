@@ -101,6 +101,7 @@ if [[ -f policy/locomotion/checkpoints/go2_locomotion_ga_v1_candidate.pt ]]; the
     run_isaac eval 5400 3 -- "$LAB" -p policy/locomotion/eval/push_recovery_eval.py \
         --platform go2 --terrain rough \
         --checkpoint policy/locomotion/checkpoints/go2_locomotion_ga_v1_candidate.pt \
+        --headless \
         --contract_reference policy/locomotion/runs/2026-09-08_19-28-32_analysis \
         --magnitudes 0,40,80,120,160,200 --terrain_levels 0,4,8 --trials_per_cell 100 \
         --output "$REPORT_DIR/eval_rough_ga_candidate.csv"

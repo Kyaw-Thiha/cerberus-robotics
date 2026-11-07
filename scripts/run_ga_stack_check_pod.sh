@@ -102,7 +102,7 @@ if skipped eval; then record eval SKIP -; else
         [[ -f "$ONNX" ]] && ONNX_ARGS=(--policy_onnx "$ONNX")
         run_isaac eval 5400 2 -- "$LAB" -p policy/locomotion/eval/push_recovery_eval.py \
             --platform go2 --terrain rough \
-            --checkpoint "$SEPT_CHECKPOINT" "${ONNX_ARGS[@]}" \
+            --checkpoint "$SEPT_CHECKPOINT" "${ONNX_ARGS[@]}" --headless \
             --contract_reference "$SEPT_RUN_DIR" \
             --magnitudes 0,40,80,120,160,200 --terrain_levels 0,4,8 --trials_per_cell 100 \
             --output "$REPORT_DIR/eval_rough_september_ckpt_on_ga.csv"

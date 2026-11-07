@@ -84,11 +84,14 @@ if skipped smoke; then record smoke SKIP -; else
         --num_envs 64 --max_iterations 8 --video_interval 100000
     rc=$?
     new_ckpt="$(find policy/locomotion/checkpoints -name 'model_*.pt' -newer "$MARKER" -size +0 2>/dev/null | tail -1)"
-    if [[ $rc -eq 0 && -n "$new_ckpt" ]] && ! grep -qiE "nan|shape mismatch|Traceback" "$REPORT_DIR/smoke.log" \
+    # Patterns must not match Kit's own chatter: the crash reporter's metadata contains the field
+    # name "PythonTracebackStatus", and a bare "nan" matches words like "nanoseconds".
+    smoke_problem="$(grep -cE "Traceback \(most recent call last\)|(^|[^[:alnum:]])nan([^[:alnum:]]|$)|shape mismatch" "$REPORT_DIR/smoke.log")"
+    if [[ $rc -eq 0 && -n "$new_ckpt" && "$smoke_problem" == "0" ]] \
         && grep -qE "Mean reward|mean_reward" "$REPORT_DIR/smoke.log"; then
         record smoke PASS "$new_ckpt"
     else
-        record smoke FAIL "exit=$rc ckpt='$new_ckpt' nan_or_traceback=$(grep -ciE 'nan|shape mismatch|Traceback' "$REPORT_DIR/smoke.log")"
+        record smoke FAIL "exit=$rc ckpt='$new_ckpt' problems=$smoke_problem"
     fi
 fi
 

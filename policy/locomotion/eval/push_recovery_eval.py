@@ -193,9 +193,22 @@ def _load_onnx_policy(path: str, device: str):
     output_names = [o.name for o in session.get_outputs()]
     print(f"[INFO]: ONNX policy {path} input={input_name} shape={input_shape} outputs={output_names}")
 
+    # rsl-rl 3.x exported with a FIXED batch of one (checked: the 2026-09-08 export rejects a
+    # 3-row batch, "index 0 Got: 3 Expected: 1"). Isaac Lab evaluates thousands of envs at once, so
+    # a fixed-batch model has to be fed row by row; a dynamic batch is used as-is.
+    fixed_batch = input_shape[0] if input_shape and isinstance(input_shape[0], int) else None
+    if fixed_batch is not None:
+        print(f"[INFO]: ONNX export has a fixed batch of {fixed_batch}; feeding it row by row")
+
     def policy(obs):
         obs_np = obs.detach().cpu().numpy().astype(np.float32)
-        out = session.run(output_names, {input_name: obs_np})[0]
+        if fixed_batch is None or obs_np.shape[0] == fixed_batch:
+            out = session.run(output_names, {input_name: obs_np})[0]
+        else:
+            rows = [
+                session.run(output_names, {input_name: obs_np[i : i + 1]})[0] for i in range(obs_np.shape[0])
+            ]
+            out = np.concatenate(rows, axis=0)
         return torch.as_tensor(out, dtype=torch.float32, device=obs.device)
 
     policy.onnx_path = path
@@ -558,7 +571,7 @@ def main(env_cfg, agent_cfg):
     if output_path is None:
         results_dir = os.path.join(os.path.dirname(__file__), "results")
         os.makedirs(results_dir, exist_ok=True)
-        output_path = os.path.join(results_dir, f"push_recovery_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.csv")
+        output_path = os.path.join(results_dir, f"push_recovery_{datetime.now(timezone.utc).strftime('%Y-%m-%d_%H-%M-%S')}.csv")
     trials_output_path = output_path.rsplit(".", 1)[0] + "_trials.csv"
 
     with open(output_path, "w", newline="") as f:

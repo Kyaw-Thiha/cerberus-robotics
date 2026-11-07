@@ -24,11 +24,12 @@ ISAACLAB_PATH="${ISAACLAB_PATH:-/workspace/isaaclab}"
 LAB="$ISAACLAB_PATH/isaaclab.sh"
 TASK="Isaac-Velocity-Rough-Unitree-Go2-Cerberus-Play-v0"
 
-CANDIDATE=""; STANDARD_SUCCESS=""; CAP_H=3; NUM_ENVS=256; ITERATIONS=1000; TRIALS=100; UPLOAD=0
+CANDIDATE=""; STANDARD_SUCCESS=""; STANDARD_FALL=""; CAP_H=3; NUM_ENVS=256; ITERATIONS=1000; TRIALS=100; UPLOAD=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --candidate) CANDIDATE="$2"; shift 2 ;;
         --standard_success) STANDARD_SUCCESS="$2"; shift 2 ;;
+        --standard_fall_rate) STANDARD_FALL="$2"; shift 2 ;;
         --cap_h) CAP_H="$2"; shift 2 ;;
         --num_envs) NUM_ENVS="$2"; shift 2 ;;
         --iterations) ITERATIONS="$2"; shift 2 ;;
@@ -57,7 +58,8 @@ say "candidate: $CANDIDATE  cap: ${CAP_H}h  envs=$NUM_ENVS iterations=$ITERATION
 
 # ---- 1 + 2: wrapper checks ---------------------------------------------------------------------
 ZERO_ARGS=()
-[[ -n "$STANDARD_SUCCESS" ]] && ZERO_ARGS=(--standard_success "$STANDARD_SUCCESS")
+[[ -n "$STANDARD_SUCCESS" ]] && ZERO_ARGS+=(--standard_success "$STANDARD_SUCCESS")
+[[ -n "$STANDARD_FALL" ]] && ZERO_ARGS+=(--standard_fall_rate "$STANDARD_FALL")
 run_isaac zero_attack 1200 3 -- "$LAB" -p "$GATE" \
     --task "$TASK" --checkpoint "$CANDIDATE" --zero_attack_only --headless --trials "$TRIALS" \
     "${ZERO_ARGS[@]}" --out_dir "$REPORT_DIR/zero_attack"

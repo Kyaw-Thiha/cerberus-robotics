@@ -55,11 +55,18 @@ def parse_args(argv=None):
         "against --standard_success. This is the check that the wrapper measures the policy rather than itself.",
     )
     parser.add_argument(
+        "--standard_fall_rate",
+        type=float,
+        default=None,
+        help="FALL rate of the standard sweep in the same cell (per-trial 'fell' column, not 1 - success). "
+        "This is the right baseline for the zero-attack check: the standard test's success also requires "
+        "velocity tracking and a level attitude, which the wrapper does not re-implement.",
+    )
+    parser.add_argument(
         "--standard_success",
         type=float,
         default=None,
-        help="Reference success rate from the standard push sweep (0-1); with --zero_attack_only, a zero "
-        "attack should reproduce it within --standard_tolerance_pp.",
+        help="Standard success rate, for the report only (it is not the same quantity as 1 - fall rate).",
     )
     parser.add_argument("--standard_tolerance_pp", type=float, default=10.0)
     parser.add_argument("--out_dir", default=None)
@@ -257,11 +264,20 @@ def _zero_attack_only(args, policy, bounds, frozen_snapshot) -> int:
         "fall_rate": fall_rate,
         "implied_success_rate": 1.0 - fall_rate,
         "nan": result["nan"],
+        "standard_fall_rate": args.standard_fall_rate,
         "standard_success": args.standard_success,
         "tolerance_pp": args.standard_tolerance_pp,
     }
     ok = not result["nan"]
-    if args.standard_success is not None:
+    if args.standard_fall_rate is not None:
+        delta_pp = (fall_rate - args.standard_fall_rate) * 100.0
+        out["delta_pp"] = delta_pp
+        ok = ok and abs(delta_pp) <= args.standard_tolerance_pp
+    elif args.standard_success is not None:
+        out["note"] = (
+            "compared against a success rate, which also counts tracking/tilt failures; pass "
+            "--standard_fall_rate for the like-for-like comparison"
+        )
         delta_pp = (out["implied_success_rate"] - args.standard_success) * 100.0
         out["delta_pp"] = delta_pp
         ok = ok and abs(delta_pp) <= args.standard_tolerance_pp
@@ -272,7 +288,8 @@ def _zero_attack_only(args, policy, bounds, frozen_snapshot) -> int:
     (out_dir / "zero_attack_check.json").write_text(json.dumps(out, indent=2, default=str) + "\n")
     detail = ""
     if "delta_pp" in out:
-        detail = f" (standard {args.standard_success:.1%}, delta {out['delta_pp']:+.1f} pp)"
+        reference = args.standard_fall_rate if args.standard_fall_rate is not None else args.standard_success
+        detail = f" (standard {reference:.1%}, delta {out['delta_pp']:+.1f} pp)"
     print(f"[gate] zero attack: fall rate {fall_rate:.1%} -> success {out['implied_success_rate']:.1%}{detail}")
     print(f"[gate] {'PASS' if ok else 'FAIL'}: {out_dir / 'zero_attack_check.json'}")
     return 0 if ok else 1

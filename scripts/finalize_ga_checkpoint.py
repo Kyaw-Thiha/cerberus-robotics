@@ -84,8 +84,17 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--name", required=True, help="Output stem, e.g. go2_locomotion_ga_v1_candidate.")
     parser.add_argument("--out-dir", type=Path, default=CHECKPOINTS_DIR)
     parser.add_argument("--task", default="Isaac-Velocity-Rough-Unitree-Go2-Cerberus-v0")
-    parser.add_argument("--final-reward", type=float, required=True, help="Final mean reward from the training log.")
-    parser.add_argument("--terrain-stats", default=None, help="JSON dict of final terrain-level stats.")
+    parser.add_argument(
+        "--final-reward",
+        type=float,
+        default=None,
+        help="Final mean reward. Default: read from the run's tensorboard event file (Train/mean_reward).",
+    )
+    parser.add_argument(
+        "--terrain-stats",
+        default=None,
+        help="JSON dict of final terrain-level stats. Default: read from the event file's Curriculum/* tags.",
+    )
     parser.add_argument("--env-report", type=Path, default=_REPO_ROOT / "outputs" / "env_report.json")
     parser.add_argument("--physics", default=None, help="Resolved physics backend, e.g. isaacsim_physx.")
     parser.add_argument("--iterations", type=int, default=None, help="Default: read from params/agent.yaml.")
@@ -140,7 +149,24 @@ def main(argv: list[str] | None = None) -> int:
         print("[finalize] physics backend unknown: pass --physics (the sidecar must state it).", file=sys.stderr)
         return 1
 
-    terrain_stats = json.loads(args.terrain_stats) if args.terrain_stats else None
+    logged = cm.training_summary(events) if events else {}
+    final_reward = args.final_reward if args.final_reward is not None else logged.get("final_reward")
+    if final_reward is None:
+        print(
+            "[finalize] no --final-reward and no Train/mean_reward in the event file: refusing to invent the "
+            "run's final reward.",
+            file=sys.stderr,
+        )
+        return 1
+    if args.terrain_stats:
+        terrain_stats = json.loads(args.terrain_stats)
+    else:
+        terrain_stats = logged.get("terrain_levels")
+        if terrain_stats is None:
+            print("[finalize] WARNING: run logged no Curriculum/terrain_* tags; terrain stats will be null")
+        elif "fall_rate" in logged and terrain_stats is not None:
+            terrain_stats = {**terrain_stats, "final_fall_rate": logged["fall_rate"]}
+    print(f"[finalize] final reward: {final_reward:.4f} (from event file: {args.final_reward is None})")
 
     print(f"[finalize] run dir     : {run_dir}")
     print(f"[finalize] checkpoint  : {checkpoint.name}")
@@ -177,7 +203,7 @@ def main(argv: list[str] | None = None) -> int:
         seed=seed,
         num_envs=int(num_envs),
         wall_clock_s=span["span_s"],
-        final_reward=args.final_reward,
+        final_reward=final_reward,
         config_hash_value=cm.config_hash(run_dir / "params"),
         env_report=env_report,
         terrain_levels=terrain_stats,

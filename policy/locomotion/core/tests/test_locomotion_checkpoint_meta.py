@@ -154,6 +154,110 @@ class TestConfigHash:
         assert len(_mod.config_hash(d)) == 16
 
 
+def _varint(n: int) -> bytes:
+    out = bytearray()
+    while True:
+        byte = n & 0x7F
+        n >>= 7
+        if n:
+            out.append(byte | 0x80)
+        else:
+            out.append(byte)
+            return bytes(out)
+
+
+def _len_field(field: int, payload: bytes) -> bytes:
+    return _varint((field << 3) | 2) + _varint(len(payload)) + payload
+
+
+def summary_record(step: int, scalars: dict) -> bytes:
+    """Event{step, summary: Summary{value: [{tag, simple_value}]}} -- what the trainer writes."""
+    # Summary.value is a repeated Value{tag(1), simple_value(2)}: each scalar is its own Value
+    # message, nested one level under Summary.value(1). A flat encoding parses as garbage.
+    values = b"".join(
+        _len_field(
+            1,
+            _len_field(1, tag.encode()) + _varint((2 << 3) | 5) + struct.pack("<f", float(v)),
+        )
+        for tag, v in scalars.items()
+    )
+    return _varint((2 << 3) | 0) + _varint(step) + _len_field(5, values)
+
+
+def write_scalar_events(path: Path, rows):
+    with open(path, "wb") as f:
+        for step, scalars in rows:
+            payload = summary_record(step, scalars)
+            f.write(struct.pack("<Q", len(payload)) + b"\0\0\0\0" + payload + b"\0\0\0\0")
+    return path
+
+
+class TestTfeventsScalars:
+    def test_reads_last_value_per_tag(self, tmp_path):
+        path = write_scalar_events(
+            tmp_path / "events.out.tfevents.1",
+            [(1, {"Train/mean_reward": 1.5}), (2, {"Train/mean_reward": 19.78})],
+        )
+        out = _mod.tfevents_last_scalars(path, ["Train/mean_reward"])
+        assert out["Train/mean_reward"]["value"] == pytest.approx(19.78, rel=1e-6)
+        assert out["Train/mean_reward"]["step"] == 2
+
+    def test_missing_tag_is_absent_not_none(self, tmp_path):
+        path = write_scalar_events(tmp_path / "events.out.tfevents.2", [(1, {"Other/x": 2.0})])
+        assert _mod.tfevents_last_scalars(path, ["Train/mean_reward"]) == {}
+
+    def test_several_tags_in_one_event(self, tmp_path):
+        path = write_scalar_events(
+            tmp_path / "events.out.tfevents.3",
+            [(7, {"Train/mean_reward": 3.0, "Curriculum/terrain_levels": 5.5})],
+        )
+        out = _mod.tfevents_last_scalars(path, ["Train/mean_reward", "Curriculum/terrain_levels"])
+        assert out["Train/mean_reward"]["value"] == pytest.approx(3.0)
+        assert out["Curriculum/terrain_levels"]["value"] == pytest.approx(5.5)
+
+
+class TestTrainingSummary:
+    def test_maps_logged_tags_to_sidecar_fields(self, tmp_path):
+        path = write_scalar_events(
+            tmp_path / "events.out.tfevents.9",
+            [
+                (
+                    1499,
+                    {
+                        "Train/mean_reward": 19.7756,
+                        "Curriculum/terrain_levels": 5.9007,
+                        "Curriculum/terrain_level_max": 9.0,
+                        "Curriculum/terrain_level_frac_at_max": 0.1474,
+                        "Episode_Termination/base_contact": 0.1033,
+                    },
+                )
+            ],
+        )
+        out = _mod.training_summary(path)
+        assert out["final_reward"] == pytest.approx(19.7756, rel=1e-5)
+        assert out["final_iteration"] == 1499
+        assert out["terrain_levels"]["mean"] == pytest.approx(5.9007, rel=1e-5)
+        assert out["terrain_levels"]["max"] == pytest.approx(9.0)
+        assert out["terrain_levels"]["frac_at_max"] == pytest.approx(0.1474, rel=1e-4)
+        assert out["fall_rate"] == pytest.approx(0.1033, rel=1e-4)
+
+    def test_absent_tags_are_omitted(self, tmp_path):
+        path = write_scalar_events(tmp_path / "events.out.tfevents.10", [(3, {"Train/mean_reward": 4.0})])
+        out = _mod.training_summary(path)
+        assert out == {"final_reward": pytest.approx(4.0), "final_iteration": 3}
+
+    @pytest.mark.skipif(not SEPTEMBER_EVENTS.is_file(), reason="September run tree is gitignored")
+    def test_reproduces_the_published_september_final_row(self):
+        # RUN_002's final row: reward 19.78, terrain mean 5.90, max 9, 14.7% at max, fall rate 10.3%.
+        out = _mod.training_summary(SEPTEMBER_EVENTS)
+        assert out["final_reward"] == pytest.approx(19.78, abs=0.01)
+        assert out["final_iteration"] == 1499
+        assert out["terrain_levels"]["mean"] == pytest.approx(5.90, abs=0.01)
+        assert out["terrain_levels"]["max"] == 9
+        assert out["terrain_levels"]["frac_at_max"] == pytest.approx(0.147, abs=0.001)
+        assert out["fall_rate"] == pytest.approx(0.103, abs=0.001)
+
+
 class TestTfeventsWallTime:
     def test_span_from_synthetic_events(self, tmp_path):
         path = write_event_file(tmp_path / "events.out.tfevents.1", [100.0, 200.5, 350.25])

@@ -253,3 +253,126 @@ def write_meta(path: str | os.PathLike, meta: dict, *, checkpoint_paths=()) -> s
 def load_meta(path: str | os.PathLike) -> dict:
     with open(path) as f:
         return json.load(f)
+
+
+# --------------------------------------------------------------------------------------------
+# Tensorboard scalars (no tensorboard dependency)
+# --------------------------------------------------------------------------------------------
+
+_WIRE_VARINT, _WIRE_I64, _WIRE_LEN, _WIRE_I32 = 0, 1, 2, 5
+
+
+def _iter_proto_fields(buf: bytes):
+    """Yield ``(field_number, wire_type, value)`` for one protobuf message body.
+
+    ``value`` is an int for varint fields, bytes for length-delimited fields, and raw bytes for the
+    fixed-width types. Enough protobuf to read a tensorboard Event/Summary without pulling the
+    ``tensorboard`` package into the image.
+    """
+    i = 0
+    while i < len(buf):
+        key, i = _read_varint(buf, i)
+        if key is None:
+            return
+        field, wire = key >> 3, key & 0x07
+        if wire == _WIRE_VARINT:
+            value, i = _read_varint(buf, i)
+            if value is None:
+                return
+            yield field, wire, value
+        elif wire == _WIRE_I64:
+            if i + 8 > len(buf):
+                return
+            yield field, wire, buf[i : i + 8]
+            i += 8
+        elif wire == _WIRE_LEN:
+            length, i = _read_varint(buf, i)
+            if length is None or i + length > len(buf):
+                return
+            yield field, wire, buf[i : i + length]
+            i += length
+        elif wire == _WIRE_I32:
+            if i + 4 > len(buf):
+                return
+            yield field, wire, buf[i : i + 4]
+            i += 4
+        else:
+            return
+
+
+def _summary_scalars(record: bytes) -> dict:
+    """{tag: simple_value} from one serialized Event (only scalar summaries are decoded)."""
+    out = {}
+    for field, wire, value in _iter_proto_fields(record):
+        if field != 5 or wire != _WIRE_LEN:  # Event.summary is field 5; field 2 is Event.step
+            continue
+        for sub_field, sub_wire, sub_value in _iter_proto_fields(value):
+            if sub_field != 1 or sub_wire != _WIRE_LEN:  # Summary.value
+                continue
+            tag = None
+            scalar = None
+            for v_field, v_wire, v_value in _iter_proto_fields(sub_value):
+                if v_field == 1 and v_wire == _WIRE_LEN:
+                    tag = v_value.decode("utf-8", "replace")
+                elif v_field == 2 and v_wire == _WIRE_I32:
+                    scalar = struct.unpack("<f", v_value)[0]
+            if tag is not None and scalar is not None:
+                out[tag] = scalar
+    return out
+
+
+def tfevents_last_scalars(path: str | os.PathLike, tags) -> dict:
+    """Last logged value of each tag in ``tags`` (exact tag names) from a tensorboard event file.
+
+    Returns ``{tag: {"value": float, "step": int}}`` for the tags that appeared; missing tags are
+    absent rather than None, so a caller can tell "not logged" from "logged as null".
+    """
+    wanted = set(tags)
+    data = Path(path).read_bytes()
+    latest: dict = {}
+    for record in _iter_tfrecords(data):
+        step = 0
+        for field, wire, value in _iter_proto_fields(record):
+            if field == 2 and wire == _WIRE_VARINT:  # Event.step
+                step = value
+        for tag, scalar in _summary_scalars(record).items():
+            if tag in wanted:
+                latest[tag] = {"value": scalar, "step": step}
+    return latest
+
+
+# Training tags logged by rsl-rl / Isaac Lab; the sidecar's "final reward and terrain-level stats"
+# come from these rather than from someone re-typing numbers off a log.
+TAG_MEAN_REWARD = "Train/mean_reward"
+TAG_TERRAIN_LEVELS = "Curriculum/terrain_levels"
+TAG_TERRAIN_LEVEL_MAX = "Curriculum/terrain_level_max"
+TAG_TERRAIN_FRAC_AT_MAX = "Curriculum/terrain_level_frac_at_max"
+TAG_BASE_CONTACT = "Episode_Termination/base_contact"
+
+
+def training_summary(path: str | os.PathLike) -> dict:
+    """Final reward, terrain-level distribution and fall rate at the end of a run.
+
+    Keys are absent when the run did not log that tag (e.g. the diagnostic terrain terms only exist
+    on runs started after they were added), so a caller can distinguish "not logged" from "zero".
+    """
+    scalars = tfevents_last_scalars(
+        path,
+        [TAG_MEAN_REWARD, TAG_TERRAIN_LEVELS, TAG_TERRAIN_LEVEL_MAX, TAG_TERRAIN_FRAC_AT_MAX, TAG_BASE_CONTACT],
+    )
+    summary: dict = {}
+    if TAG_MEAN_REWARD in scalars:
+        summary["final_reward"] = scalars[TAG_MEAN_REWARD]["value"]
+        summary["final_iteration"] = scalars[TAG_MEAN_REWARD]["step"]
+    terrain = {}
+    if TAG_TERRAIN_LEVELS in scalars:
+        terrain["mean"] = scalars[TAG_TERRAIN_LEVELS]["value"]
+    if TAG_TERRAIN_LEVEL_MAX in scalars:
+        terrain["max"] = scalars[TAG_TERRAIN_LEVEL_MAX]["value"]
+    if TAG_TERRAIN_FRAC_AT_MAX in scalars:
+        terrain["frac_at_max"] = scalars[TAG_TERRAIN_FRAC_AT_MAX]["value"]
+    if terrain:
+        summary["terrain_levels"] = terrain
+    if TAG_BASE_CONTACT in scalars:
+        summary["fall_rate"] = scalars[TAG_BASE_CONTACT]["value"]
+    return summary

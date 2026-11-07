@@ -73,7 +73,9 @@ Go2's `projected_gravity` reads `[-0.090, -0.129, -0.988]`.
 | 200 N | 8 | 62% | 61% | 49% |
 | **mean** | | **79.3%** | **75.7%** | **74.4%** |
 
-![September checkpoint on GA](parity_september_on_ga.png)
+![September checkpoint re-evaluated on GA](parity_september_on_ga.png)
+
+![September checkpoint vs GA retrain](parity_ga_retrain.png)
 
 ## Verdicts
 

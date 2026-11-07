@@ -22,7 +22,7 @@ export CERBERUS_ALLOW_BAD_DRIVER_RENDER=1   # 595 hosts: the render guard would 
 ISAACLAB_PATH="${ISAACLAB_PATH:-/workspace/isaaclab}"
 LAB="$ISAACLAB_PATH/isaaclab.sh"
 
-ITERATIONS=1500; NUM_ENVS=4096; SEED=42; CAP_H=2.95; UPLOAD=0
+ITERATIONS=1500; NUM_ENVS=4096; SEED=42; CAP_H=2.95; UPLOAD=0; RESUME_RUN=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --iterations) ITERATIONS="$2"; shift 2 ;;
@@ -30,6 +30,7 @@ while [[ $# -gt 0 ]]; do
         --seed) SEED="$2"; shift 2 ;;
         --cap_h) CAP_H="$2"; shift 2 ;;
         --upload) UPLOAD=1; shift ;;
+        --resume_run) RESUME_RUN="$2"; shift 2 ;;  # skip training, finish an existing run dir
         *) echo "[p2] unknown argument: $1" >&2; exit 2 ;;
     esac
 done
@@ -48,14 +49,21 @@ say "report dir: $REPORT_DIR  cap: ${CAP_H}h (${CAP_S}s)  iterations=$ITERATIONS
 
 # ---- train -------------------------------------------------------------------------------------
 MARKER="$REPORT_DIR/.train_marker"; : > "$MARKER"
-say "training (RUN_002 recipe, tensorboard logger)"
-run_isaac train "$CAP_S" 2 -- "$LAB" -p policy/locomotion/train.py \
-    --platform go2 --terrain rough --headless --logger tensorboard \
-    --num_envs "$NUM_ENVS" --max_iterations "$ITERATIONS" --seed "$SEED"
-rc=$?
-say "training exit=$rc (137 = hit the ${CAP_H}h cap)"
-
-RUN_DIR="$(find policy/locomotion/checkpoints -maxdepth 2 -name 'model_*.pt' -newer "$MARKER" -printf '%h\n' 2>/dev/null | head -1)"
+if [[ -n "$RESUME_RUN" ]]; then
+    say "resuming: skipping training, finishing $RESUME_RUN"
+    RUN_DIR="$RESUME_RUN"
+    rc=0
+    record train SKIP "resumed existing run $RESUME_RUN"
+else
+    say "training (RUN_002 recipe, tensorboard logger)"
+    run_isaac train "$CAP_S" 2 -- "$LAB" -p policy/locomotion/train.py \
+        --platform go2 --terrain rough --headless --logger tensorboard \
+        --num_envs "$NUM_ENVS" --max_iterations "$ITERATIONS" --seed "$SEED"
+    rc=$?
+    say "training exit=$rc (137 = hit the ${CAP_H}h cap)"
+    # depth 3: checkpoints/<experiment>/<run>/model_*.pt
+    RUN_DIR="$(find policy/locomotion/checkpoints -maxdepth 3 -name 'model_*.pt' -newer "$MARKER" -printf '%h\n' 2>/dev/null | head -1)"
+fi
 EVENTS="$(find "${RUN_DIR:-/nonexistent}" -maxdepth 1 -name 'events.out.tfevents*' 2>/dev/null | head -1)"
 if [[ $rc -eq 0 && -n "$RUN_DIR" && -n "$EVENTS" ]]; then
     # Provenance only: params/, git diffs and the event file. The checkpoints themselves stay in

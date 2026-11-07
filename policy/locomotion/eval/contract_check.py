@@ -43,6 +43,20 @@ GO2_JOINT_COUNT = 12
 # Fields whose reference/live values must match for a checkpoint to be evaluated under the same contract.
 NUMERIC_TOLERANCE = 1e-6
 
+# rsl-rl renamed its actor-critic network between the stacks: 3.x calls it ``ActorCritic``, 5.x
+# ``MLPModel``. The name is library vocabulary, not architecture -- the architecture is pinned by
+# ``actor_hidden_dims`` (and would be pinned by an explicit class name for anything non-MLP). Mapping
+# the known pair keeps the comparison meaningful instead of either failing on a rename or dropping the
+# field.
+EQUIVALENT_MODEL_CLASSES = {"ActorCritic": "mlp-actor-critic", "MLPModel": "mlp-actor-critic"}
+
+
+def canonical_model_class(name):
+    """Normalise a known-equivalent model class name; anything unknown passes through unchanged."""
+    if name is None:
+        return None
+    return EQUIVALENT_MODEL_CLASSES.get(name, name)
+
 
 def _tolerant_loader():
     """A SafeLoader that accepts the ``!!python/...`` tags Isaac Lab's dumper emits.
@@ -153,7 +167,7 @@ def load_reference(run_dir: str | Path) -> dict:
         "actor_obs_normalization": policy_cfg.get("actor_obs_normalization"),
         "critic_obs_normalization": policy_cfg.get("critic_obs_normalization"),
         "actor_hidden_dims": list(policy_cfg.get("actor_hidden_dims") or []),
-        "actor_class": policy_cfg.get("class_name"),
+        "actor_class": canonical_model_class(policy_cfg.get("class_name")),
         "algorithm_class": algorithm.get("class_name"),
         "learning_rate": algorithm.get("learning_rate"),
         "gamma": algorithm.get("gamma"),
@@ -257,9 +271,11 @@ def live_contract(env_cfg, agent_cfg, env=None) -> dict:
         "actor_obs_normalization": _normalization_flag(actor_cfg, policy_cfg, "actor"),
         "critic_obs_normalization": _normalization_flag(critic_cfg, policy_cfg, "critic"),
         "actor_hidden_dims": list(hidden) if hidden else [],
-        "actor_class": _unset(getattr(actor_cfg, "class_name", None))
-        if actor_cfg is not None
-        else _unset(getattr(policy_cfg, "class_name", None)),
+        "actor_class": canonical_model_class(
+            _unset(getattr(actor_cfg, "class_name", None))
+            if actor_cfg is not None
+            else _unset(getattr(policy_cfg, "class_name", None))
+        ),
         "algorithm_class": getattr(algorithm, "class_name", None),
         "learning_rate": getattr(algorithm, "learning_rate", None),
         "gamma": getattr(algorithm, "gamma", None),

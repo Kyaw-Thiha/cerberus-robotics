@@ -1,7 +1,13 @@
 # Phase 0.5 adversarial robustness gate (`h2`, P3)
 
-Status: **wrapper checks pass on the GA candidate; adversary training and the gate are running** (pod
-`rbbfy5mf5rd4az`, 2026-11-07 09:06 UTC). Candidate: `go2_locomotion_ga_v1_candidate.pt`.
+Status: **INCOMPLETE — the gate has no verdict.** Both prerequisite checks pass against the GA
+candidate, and adversary training was interrupted at ~100/1000 iterations when the pod was terminated
+(RunPod account balance reached zero; `runpodctl pod get` → "pod not found", and a replacement pod
+cannot be created: "account balance is too low"). Nothing was promoted, so `go2_locomotion_final.pt`
+does not exist — which is the correct state for a gate that has not passed.
+
+Candidate: `go2_locomotion_ga_v1_candidate.pt` (1500 iterations, seed 42, 4096 envs, PhysX, 4009 s,
+final reward 17.04) — preserved locally with its ONNX export and sidecar.
 
 Gate prerequisite checks, both from artifacts:
 
@@ -10,11 +16,16 @@ Gate prerequisite checks, both from artifacts:
 | zero-perturbation fall rate vs the standard sweep's fall rate in the same cell | **1% vs 0%** (delta +1 pp, tolerance 10) → PASS: the wrapper reproduces the candidate's standard behaviour |
 | 64-env, 200-step zero-perturbation rollout | no NaN, frozen policy verified unchanged, reported combined magnitude 0.0 → PASS |
 
-Adversary training (in flight, 1000 iterations at 256 envs, blocks of 50 with a checkpoint per
-block): by iteration ~450 the attack drove `Episode_Termination/base_contact` to ~98% of episodes,
-against 18% for a random 120 N push at the same normalised magnitude. That is the paper's finding
-reproduced in shape -- a learned attack beats random pushes of equal magnitude by a wide margin -- and
-it is why the standard sweep alone cannot certify this policy.
+Adversary training, from an earlier 543-iteration run that was stopped for a checkpointing bug (the
+trainer looped `learn(1)` and rsl-rl's counter never advanced, so no weights were written): by
+iteration ~450 the attack drove `Episode_Termination/base_contact` to **~98%** of episodes, against
+**18%** for a random 120 N push at the same normalised magnitude. That is the paper's finding
+reproduced in shape — a learned attack beats random pushes of equal magnitude by a wide margin — and it
+is why the standard sweep alone cannot certify this policy.
+
+That number is from the *training* rollouts, not the gate's bisection, so it bounds the conclusion: it
+says an attack of ~1x the trained range breaks the policy most of the time, which is a FAIL-shaped
+result, but the gate's own artefact (`gate_verdict.json`) was never produced, so no verdict is claimed.
 
 One measurement subtlety worth recording: the standard sweep's *success* rate at 0 N / level 0 is 88%
 while its *fall* rate is 0% — success also requires velocity tracking and a level attitude, which the
@@ -71,7 +82,7 @@ these numbers, so the report's headline claim is computed, not written by hand.
 |---|---|
 | minimum combined magnitude that induces a fall | — |
 | trained (and evaluated) push range | 1.0 |
-| verdict | **not computed** |
+| verdict | **not computed** (run interrupted) |
 | `eval/gate_verdict.json` | not written |
 
 Pass condition: minimum inducing magnitude **strictly greater** than 1.0. Exactly 1.0 is a FAIL —
@@ -101,6 +112,19 @@ below 1.0.
 | gate math + tests | `policy/locomotion/adversarial_robustness/attack_math.py` (+ `tests/`) | 48 tests pass locally |
 | verdict | `adversarial_robustness/eval/results/<stamp>/gate_verdict.json` | not produced |
 | promoted checkpoint | `policy/locomotion/checkpoints/go2_locomotion_final.pt` | **must not exist until PASS** |
+
+## What remains (exact resume path)
+
+1. Provision a GPU pod with a funded RunPod account, image `kevinkyawthiha/cerberus-remote-v6:v6-ga`.
+2. Sync the repo; copy `policy/locomotion/checkpoints/go2_locomotion_ga_v1_candidate.{pt,onnx,onnx.data,meta.json}`
+   (preserved locally) to `/workspace/cerberus/policy/locomotion/checkpoints/`.
+3. `scripts/run_adversarial_gate_pod.sh --candidate ... --standard_fall_rate 0.0 --standard_success 0.88 --cap_h 3`
+   → zero-attack, dry run, adversary training (1000 iterations, ~80 min at ~4.8 s/iteration), then the
+   three-modality bisection.
+4. On FAIL: `scripts/run_robustify_pod.sh --candidate ... --adversary_dir <run> --verdict <json> --round 1`
+   (fine-tune 300 iterations with 5% adversarial rollouts, then a fresh re-attack).
+
+Wall-clock budget for the remaining work: ~2.5 h of GPU time for the gate, plus ~1 h per robustify round.
 
 ## Run order (pod)
 

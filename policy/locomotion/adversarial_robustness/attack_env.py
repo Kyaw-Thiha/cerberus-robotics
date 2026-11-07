@@ -175,8 +175,16 @@ class AttackEnvWrapper:
         return {"seed": getattr(self, "seed", None), "num_envs": self.num_envs}
 
     def get_observations(self):
-        """Current policy observations WITHOUT stepping (the runner calls this between iterations)."""
-        return self.hooks.observations()
+        """Current observations WITHOUT stepping (the runner calls this between iterations).
+
+        Delegates to the wrapped env so the runner sees the same structure it would during training --
+        on this stack a TensorDict, which is also what ``MLPModel`` expects as input. Building the
+        tensor here instead would hand the runner a bare tensor it cannot read group keys from.
+        """
+        getter = getattr(self.env, "get_observations", None)
+        if getter is not None:
+            return getter()
+        return {"policy": self.hooks.observations()}
 
     def reset(self):
         obs = self.env.reset()

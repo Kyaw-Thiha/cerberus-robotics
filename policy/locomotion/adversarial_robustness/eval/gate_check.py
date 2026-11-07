@@ -40,7 +40,7 @@ def parse_args(argv=None):
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("--task", default="Isaac-Velocity-Rough-Unitree-Go2-Cerberus-Play-v0")
     parser.add_argument("--checkpoint", required=True, help="Candidate .pt that is being gated.")
-    parser.add_argument("--adversary_dir", required=True, help="Run dir with the trained adversary model_*.pt.")
+    parser.add_argument("--adversary_dir", default=None, help="Run dir with the trained adversary model_*.pt.")
     parser.add_argument("--modalities", default="combined,force_only,command_only")
     parser.add_argument("--trials", type=int, default=100, help="Trials (= envs) per probed scale.")
     parser.add_argument("--max_scale", type=float, default=2.0, help="Largest allowed multiplier probed.")
@@ -48,6 +48,20 @@ def parse_args(argv=None):
     parser.add_argument("--fall_threshold", type=float, default=0.5, help="Fall rate counted as 'induced a fall'.")
     parser.add_argument("--tolerance", type=float, default=0.02, help="Bisection stop width on the scale.")
     parser.add_argument("--zero_attack_check", action="store_true", help="Also record the zero-perturbation fall rate.")
+    parser.add_argument(
+        "--zero_attack_only",
+        action="store_true",
+        help="Wrapper sanity check only: run a zero-perturbation episode per env and compare the fall rate "
+        "against --standard_success. This is the check that the wrapper measures the policy rather than itself.",
+    )
+    parser.add_argument(
+        "--standard_success",
+        type=float,
+        default=None,
+        help="Reference success rate from the standard push sweep (0-1); with --zero_attack_only, a zero "
+        "attack should reproduce it within --standard_tolerance_pp.",
+    )
+    parser.add_argument("--standard_tolerance_pp", type=float, default=10.0)
     parser.add_argument("--out_dir", default=None)
     parser.add_argument("--headless", action="store_true", default=True)
     return parser.parse_args(argv)
@@ -122,6 +136,13 @@ def _run(args) -> int:
     bounds = attack_math.PerturbationBounds.from_config(GO2, env_cfg.commands.base_velocity.ranges)
     policy = load_frozen_policy(args.task, args.checkpoint)
     frozen_snapshot = attack_env.assert_policy_frozen(policy)
+
+    if args.zero_attack_only:
+        return _zero_attack_only(args, policy, bounds, frozen_snapshot)
+
+    if not args.adversary_dir:
+        print("[gate] --adversary_dir is required unless --zero_attack_only is passed", file=sys.stderr)
+        return 2
     adversary_checkpoint = newest_checkpoint(Path(args.adversary_dir))
 
     modalities = [m.strip() for m in args.modalities.split(",") if m.strip()]
@@ -203,6 +224,48 @@ def _run(args) -> int:
     print(f"\n[gate] verdict: {decision['verdict']} -- {decision['reason']}")
     print(f"[gate] wrote {path}")
     return 0
+
+
+def _zero_attack_only(args, policy, bounds, frozen_snapshot) -> int:
+    """P3a: a zero attack must reproduce the standard success rate, or the wrapper is measuring itself."""
+    import torch
+
+    from policy.locomotion.adversarial_robustness import attack_env
+
+    wrapper = attack_env.build_attack_env(
+        args.task, policy, bounds, num_envs=args.trials, modality="combined", play=True
+    )
+    zero_adversary = lambda obs: torch.zeros((wrapper.num_envs, 4), device=wrapper.device)
+    result = rollout_fall_rate(wrapper, zero_adversary, args.trials)
+    attack_env.assert_policy_frozen(policy, frozen_snapshot)
+    wrapper.env.close()
+
+    fall_rate = result["fall_rate"]
+    out = {
+        "mode": "zero_attack",
+        "trials": result["trials"],
+        "fall_rate": fall_rate,
+        "implied_success_rate": 1.0 - fall_rate,
+        "nan": result["nan"],
+        "standard_success": args.standard_success,
+        "tolerance_pp": args.standard_tolerance_pp,
+    }
+    ok = not result["nan"]
+    if args.standard_success is not None:
+        delta_pp = (out["implied_success_rate"] - args.standard_success) * 100.0
+        out["delta_pp"] = delta_pp
+        ok = ok and abs(delta_pp) <= args.standard_tolerance_pp
+    out["passed"] = ok
+
+    out_dir = Path(args.out_dir) if args.out_dir else DEFAULT_OUT_DIR / (datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S") + "_zero")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    (out_dir / "zero_attack_check.json").write_text(json.dumps(out, indent=2, default=str) + "\n")
+    detail = ""
+    if "delta_pp" in out:
+        detail = f" (standard {args.standard_success:.1%}, delta {out['delta_pp']:+.1f} pp)"
+    print(f"[gate] zero attack: fall rate {fall_rate:.1%} -> success {out['implied_success_rate']:.1%}{detail}")
+    print(f"[gate] {'PASS' if ok else 'FAIL'}: {out_dir / 'zero_attack_check.json'}")
+    return 0 if ok else 1
 
 
 def _load_adversary(wrapper, checkpoint: Path, args):

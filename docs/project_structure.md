@@ -267,6 +267,26 @@ scheme (`go2_arx5_...`) per the "Embodiment configuration pattern" section
 above, so a future arm or platform swap gets its own checkpoint lineage
 rather than colliding with this one's.
 
+### The `_ga_` tag (checkpoints retrained on Isaac Lab 3.0 GA)
+
+`go2_locomotion_ga_v1_candidate.{pt,onnx,meta.json}` is a **stack-identified** checkpoint: the same Go2
+rough recipe as RUN_002, retrained on Isaac Sim 6.2 / Isaac Lab 3.0 GA / rsl-rl 5.x with PhysX pinned
+explicitly. It exists because a `.pt` records weights, not a physics engine — the September files were
+produced on the retired 2.3.2 stack and are a different artifact class, not an older version of the
+same thing. Rules:
+
+- `_ga_` marks **which stack produced the weights**; `v1`/`v2` and `candidate`/`robustified`/`final`
+  keep their Phase 0.5 meaning unchanged. Combined: `go2_locomotion_ga_v1_candidate` → gate →
+  `go2_locomotion_final`.
+- September files keep their names and bytes forever: they are the parity reference
+  (`docs/reports/phase0_ga_parity.md`). Never rename, overwrite or convert them in place.
+- The tag appears only where a stack distinction matters. The promoted checkpoint stays
+  `go2_locomotion_final.pt` (no `_ga_`) because its sidecar records the stack and the gate verdict;
+  Phase 1 freezes one artifact, and that artifact is identified by its sidecar, not its filename.
+- Every `_ga_` checkpoint ships its `.meta.json` (`policy/locomotion/core/checkpoint_meta.py`): git
+  hash, task id, resolved physics backend, iterations, seed, num_envs, config hash, wall clock, final
+  reward, terrain-level stats. A checkpoint without a sidecar is not a candidate.
+
 ## Rule 7: world backends are pluggable
 
 Scene source and sim-env composition sit behind `common/cerberus_worlds/`. Policy, perception

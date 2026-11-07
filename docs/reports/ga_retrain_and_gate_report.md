@@ -89,6 +89,12 @@ Artifacts (`policy/locomotion/checkpoints/`): `go2_locomotion_ga_v1_candidate.pt
 holds the sweep CSV, per-trial CSV, contract table, sidecar copy, parity table and plot, the run's
 `params/` + `git/` snapshot, its event file, and `rollout.mp4`.
 
+One verification gap, stated rather than implied: the ONNX export was checked by loading it and running
+it (input `obs [1, 235]`, output `actions [1, 12]`, weights resolved from the `.data` sidecar), and the
+`.pt` was exercised end to end by the evaluation sweep through rsl-rl. The two were **not** compared
+action-for-action (1e-4), which would need torch and the rsl-rl model class off-pod; that comparison is
+worth doing on the next pod before the ONNX export is used for anything but evaluation.
+
 Sweep result: mean 74.4% vs September's 79.3% (−4.9 pp, inside the 10-point stop threshold), so the
 adversarial gate proceeds. Five cells move >10 pp in both directions — better at 0 N / level 8 (+11),
 worse at 80 N / L0, 120 N / L4, 160 N / L4, 200 N / L8 (−12 to −14).

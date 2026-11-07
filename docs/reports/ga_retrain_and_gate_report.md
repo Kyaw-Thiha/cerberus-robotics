@@ -45,13 +45,30 @@ Recipe unchanged: 1500 iterations, 4096 envs, seed 42, 24 steps/env,
 `Isaac-Velocity-Rough-Unitree-Go2-Cerberus-v0`, tensorboard logger. Wall-clock cap 2.95 h (2× RUN_002's
 measured 5306.8 s).
 
-<!-- FILLED IN WHEN THE RUN FINISHES -->
+Completed in **66m 54s** of training (4009.2 s of logged wall clock), well inside the 2.95 h cap.
+Final metrics against RUN_002's final row:
 
-Wall clock so far: training started 07:29:24 UTC; at 733/1500 iterations the projected total is ~65 min
-(2.6 s/iteration), inside the 2.95 h cap with room to spare. Early-run comparison with RUN_002 at the
-same iteration (~500): reward 15.9 vs 18.0, terrain level 4.5 vs 3.2 (the curriculum advances faster),
-but fall rate 22.7% vs 7.0% — the GA run falls more often at equal curriculum progress, which is the
-difference the evaluation has to settle.
+| | RUN_002 (Sept) | GA retrain |
+|---|---|---|
+| iterations | 1500 | 1500 |
+| seed / envs | 42 / 4096 | 42 / 4096 |
+| final mean reward | 19.78 | 17.04 |
+| terrain level mean / max / frac at max | 5.90 / 9 / 14.7% | 5.85 / 9 / 14.3% |
+| push curriculum k_c | 0.987 | 0.987 |
+| base-contact termination rate | 10.3% | 13.8% |
+| wall clock | 5306.8 s | 4009.2 s |
+
+Same curriculum trajectory, same terrain distribution, ~2.7 points less reward and ~3.5 points more
+falls. The trained policy is marginally rougher than September's but reaches the same difficulty.
+
+Artifacts (`policy/locomotion/checkpoints/`): `go2_locomotion_ga_v1_candidate.pt`, `.onnx`
+(+ `.onnx.data` external weights, 1.1 MB), `.torchscript.pt`, `.meta.json`; `data/reports/ga_retrain/`
+holds the sweep CSV, per-trial CSV, contract table, sidecar copy, parity table and plot, the run's
+`params/` + `git/` snapshot, its event file, and `rollout.mp4`.
+
+Sweep result: mean 74.4% vs September's 79.3% (−4.9 pp, inside the 10-point stop threshold), so the
+adversarial gate proceeds. Five cells move >10 pp in both directions — better at 0 N / level 8 (+11),
+worse at 80 N / L0, 120 N / L4, 160 N / L4, 200 N / L8 (−12 to −14).
 
 ## 4. Adversarial gate
 

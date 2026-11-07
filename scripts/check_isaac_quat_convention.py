@@ -194,6 +194,7 @@ def main(argv: list[str] | None = None) -> int:
         result["stack_quat_convention"] = isaac_quat_convention()
 
         env = gym.make(args.task, cfg=env_cfg)
+        env.reset()  # gym.make does not reset; stepping first raises ResetNeeded
         raw_env = env.unwrapped
         # Hold the default pose: with no policy, the PD controller holds the spawn joint targets, so
         # the base stays upright and both probes read their "standing" values.

@@ -16,17 +16,31 @@ run_isaac() {  # run_isaac <name> <timeout_s> <attempts> -- cmd...
         "$@" > "$log" 2>&1 &
         pid=$!
         ( sleep "$tmo"; kill -9 "$pid" 2>/dev/null ) >/dev/null 2>&1 & cap_pid=$!
-        ( for _ in $(seq 1 300); do
+        ( local last=-1 size stalls=0
+          for _ in $(seq 1 "$tmo"); do
               sleep 1
               grep -q "crash has occurred" "$log" 2>/dev/null && { kill -9 "$pid" 2>/dev/null; break; }
               kill -0 "$pid" 2>/dev/null || break
+              size=$(stat -c %s "$log" 2>/dev/null || echo 0)
+              if [[ "$size" == "$last" ]]; then
+                  stalls=$((stalls + 1))
+                  # A hung Kit launch keeps the process alive with no new output; driver 595 does
+                  # this instead of crashing outright. STALL_S of silence means dead, not slow.
+                  if (( stalls >= ${STALL_S:-90} )); then
+                      echo "[watchdog] no log growth for ${STALL_S:-90}s: killing stalled launch" >> "$log"
+                      kill -9 "$pid" 2>/dev/null
+                      break
+                  fi
+              else
+                  stalls=0; last=$size
+              fi
           done ) >/dev/null 2>&1 & crash_pid=$!
         wait "$pid"; rc=$?
         kill "$cap_pid" "$crash_pid" 2>/dev/null
         wait "$cap_pid" 2>/dev/null; wait "$crash_pid" 2>/dev/null
         cp "$log" "$REPORT_DIR/$name.log"
-        if grep -q "crash has occurred" "$log" 2>/dev/null; then
-            say "$name attempt $i: Kit crashed at launch (rc=$rc); retrying"
+        if grep -qE "crash has occurred|no log growth for" "$log" 2>/dev/null; then
+            say "$name attempt $i: launch failed (crash or stall, rc=$rc); retrying"
             rc=1
             continue
         fi

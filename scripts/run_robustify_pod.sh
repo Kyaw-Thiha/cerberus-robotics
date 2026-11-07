@@ -58,7 +58,7 @@ if python3 -c "import json,sys; sys.exit(0 if json.load(open('$VERDICT'))['verdi
 fi
 say "gate FAILED: round $ROUND, mix=$MIX, iterations=$ITERATIONS"
 
-NAME="go2_locomotion_v${ROUND%?}$((ROUND + 1))_candidate"   # round 1 -> v2_candidate
+NAME="go2_locomotion_v$((ROUND + 1))_candidate"   # round 1 -> v2_candidate (one naming scheme, per project_structure.md)
 OUT_STEM="policy/locomotion/checkpoints/$NAME"
 if [[ -e "$OUT_STEM.pt" ]]; then
     say "refusing to overwrite $OUT_STEM.pt"
@@ -97,21 +97,22 @@ fi
 # Re-attack with a NEW adversary: the one that broke the old weights says nothing about the new ones.
 if [[ -f "$OUT_STEM.pt" ]]; then
     say "re-attack round $ROUND (fresh adversary)"
-    GATE_OUT="$REPORT_DIR/gate_round$ROUND"
+    # The gate driver writes into its own timestamped directory; watch for a NEW one rather than
+    # guessing its name.
+    MARKER="$REPORT_DIR/.reattack_marker"; : > "$MARKER"
     setsid bash scripts/run_adversarial_gate_pod.sh \
         --candidate "$OUT_STEM.pt" --standard_fall_rate 0.0 \
         --cap_h 3 --num_envs 256 --iterations 1000 \
         > "$REPORT_DIR/gate_round$ROUND.out" 2>&1 < /dev/null &
-    GATE_PID=$!
-    # The gate driver runs its own steps; wait for the verdict file rather than the process tree.
+    found=""
     for _ in $(seq 1 480); do
-        [[ -f "$REPORT_DIR/gate_round$ROUND/gate_verdict.json" ]] && break
-        kill -0 "$GATE_PID" 2>/dev/null || break
+        found="$(find data/reports -maxdepth 3 -path '*adversarial_gate_*/gate/gate_verdict.json' -newer "$MARKER" 2>/dev/null | tail -1)"
+        [[ -n "$found" ]] && break
         sleep 15
     done
-    if [[ -f "$REPORT_DIR/gate_round$ROUND/gate_verdict.json" ]]; then
-        cp "$REPORT_DIR/gate_round$ROUND/gate_verdict.json" "$REPORT_DIR/"
-        record reattack PASS "$(python3 -c "import json;d=json.load(open('$REPORT_DIR/gate_verdict.json'));print(d['verdict'], d.get('minimum_inducing_score'))")"
+    if [[ -n "$found" ]]; then
+        cp "$found" "$REPORT_DIR/gate_verdict_round$ROUND.json"
+        record reattack PASS "$(python3 -c "import json;d=json.load(open('$REPORT_DIR/gate_verdict_round$ROUND.json'));print(d['verdict'], d.get('minimum_inducing_score'))")"
     else
         record reattack FAIL "no gate verdict after the re-attack"
     fi

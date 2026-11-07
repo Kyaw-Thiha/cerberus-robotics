@@ -92,6 +92,8 @@ def rollout_fall_rate(wrapper, adversary, trials: int, max_steps: int = 400) -> 
     """
     import torch
 
+    from policy.locomotion.eval.policy_io import select_policy_obs
+
     obs = wrapper.reset()
     fell = torch.zeros(wrapper.num_envs, dtype=torch.bool, device=wrapper.device)
     finished = torch.zeros(wrapper.num_envs, dtype=torch.bool, device=wrapper.device)
@@ -100,7 +102,8 @@ def rollout_fall_rate(wrapper, adversary, trials: int, max_steps: int = 400) -> 
         with torch.no_grad():
             action = adversary(obs)
         obs, _reward, dones, extras = wrapper.step(action)
-        if not torch.isfinite(obs).all():
+        # Observations arrive grouped (TensorDict); finiteness is checked on the policy tensor.
+        if not torch.isfinite(select_policy_obs(obs)).all():
             nan_seen = True
             break
         time_outs = extras.get("time_outs")

@@ -167,19 +167,20 @@ def main(argv: list[str] | None = None) -> int:
 
     app_launcher = AppLauncher(args)
     simulation_app = app_launcher.app
+    print(f"[quat_check] Kit app up ({type(simulation_app).__name__}, headless={args.headless})")
 
     result: dict = {"task": args.task, "passed": False}
     exit_code = 1
     try:
-        import torch  # noqa: PLC0415
+        import isaaclab_tasks  # noqa: F401
+        import torch
 
-        import isaaclab_tasks  # noqa: F401, PLC0415
-        import policy.locomotion  # noqa: F401, PLC0415 -- registers the Cerberus tasks
-
+        import policy.locomotion  # noqa: F401 -- registers the Cerberus tasks
+        from common.cerberus_compat.cfg_registry import load_env_cfg
         from common.cerberus_compat.isaac_data import as_tensor
         from common.cerberus_compat.quat import isaac_quat_convention
 
-        env_cfg = gym.spec(args.task).kwargs["env_cfg_entry_point"]()
+        env_cfg = load_env_cfg(args.task)
         env_cfg.scene.num_envs = args.num_envs
         env_cfg.sim.device = "cuda:0"
         physics = physics_summary(env_cfg)
@@ -191,9 +192,8 @@ def main(argv: list[str] | None = None) -> int:
         # Hold the default pose: with no policy, the PD controller holds the spawn joint targets, so
         # the base stays upright and both probes read their "standing" values.
         steps = max(1, round(SETTLE_S / raw_env.step_dt))
-        obs = env.get_observations() if hasattr(env, "get_observations") else None
         for _ in range(steps):
-            obs, _, _, _ = env.step(torch.zeros(raw_env.action_space.shape, device=raw_env.device))
+            _obs, _, _, _ = env.step(torch.zeros(raw_env.action_space.shape, device=raw_env.device))
 
         probe = observation_probe(raw_env, group="policy")
         pg_rows = probe.pop("rows").detach().cpu().tolist()
@@ -238,7 +238,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[quat_check] quat_convention={result.get('quat_convention')}")
         if args.merge_into and args.merge_into.is_file():
             sys.path.insert(0, str(_REPO_ROOT / "scripts"))
-            from env_report import merge_runtime_probe  # noqa: PLC0415
+            from env_report import merge_runtime_probe
 
             merge_runtime_probe(
                 args.merge_into,

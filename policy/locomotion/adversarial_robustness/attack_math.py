@@ -203,6 +203,9 @@ class AdversaryRewardConfig:
     lipschitz_lambda: float = 1e-4
 
 
+DEFAULT_REWARD_CONFIG = AdversaryRewardConfig()
+
+
 def adversary_reward(
     *,
     alive: bool,
@@ -211,7 +214,7 @@ def adversary_reward(
     joint_torques,
     joint_torque_limits,
     layer_inf_norms=(),
-    config: AdversaryRewardConfig = AdversaryRewardConfig(),
+    config: AdversaryRewardConfig = DEFAULT_REWARD_CONFIG,
 ) -> dict:
     """Paper Eq. 2-3: ``-1_alive + r_aux - lambda * sum(||theta_i||_inf)``, broken into its parts.
 

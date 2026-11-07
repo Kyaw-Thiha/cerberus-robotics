@@ -34,7 +34,6 @@ import torch
 
 from policy.locomotion.adversarial_robustness import attack_math
 
-
 # ------------------------------------------------------------------------------------------------
 # Hooks: the only two places a perturbation enters the simulation
 # ------------------------------------------------------------------------------------------------
@@ -302,12 +301,13 @@ def build_attack_env(
     randomised physics draw. The training pushes are disabled there too: the adversary is the only
     perturbation in the loop, which is what makes the gate's numbers attributable.
     """
-    import gymnasium as gym  # noqa: PLC0415
+    import gymnasium as gym
+    import isaaclab_tasks  # noqa: F401
 
-    import isaaclab_tasks  # noqa: F401, PLC0415
-    import policy.locomotion  # noqa: F401, PLC0415
+    import policy.locomotion
+    from common.cerberus_compat.cfg_registry import load_env_cfg
 
-    env_cfg = gym.spec(task).kwargs["env_cfg_entry_point"]()
+    env_cfg = load_env_cfg(task)
     env_cfg.scene.num_envs = num_envs
     for key, value in (env_cfg_overrides or {}).items():
         setattr(env_cfg, key, value)

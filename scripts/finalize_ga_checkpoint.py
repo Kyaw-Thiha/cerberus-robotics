@@ -191,23 +191,26 @@ def main(argv: list[str] | None = None) -> int:
 
 def _export_onnx(checkpoint: Path, target_onnx: Path, task: str) -> None:  # pragma: no cover - pod only
     """Rebuild the runner around ``checkpoint`` and export its actor to ``target_onnx``."""
-    import gymnasium as gym  # noqa: PLC0415
+    import gymnasium as gym
+    import isaaclab_tasks  # noqa: F401
+    from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper
 
-    import isaaclab_tasks  # noqa: F401, PLC0415
-    import policy.locomotion  # noqa: F401, PLC0415
-    from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper  # noqa: PLC0415
-
-    from common.cerberus_compat.rsl_rl_compat import (  # noqa: PLC0415
+    import policy.locomotion  # noqa: F401
+    from common.cerberus_compat.cfg_registry import (
+        load_agent_cfg,
+        load_env_cfg,
+    )
+    from common.cerberus_compat.rsl_rl_compat import (
         check_checkpoint_format,
         export_policy,
         get_policy_for_export,
         make_runner,
     )
 
-    env_cfg = gym.spec(task).kwargs["env_cfg_entry_point"]()
+    env_cfg = load_env_cfg(task)
     env_cfg.scene.num_envs = 1
     env = gym.make(task, cfg=env_cfg)
-    agent_cfg = gym.spec(task).kwargs["rsl_rl_cfg_entry_point"]()
+    agent_cfg = load_agent_cfg(task)
     env = RslRlVecEnvWrapper(env, clip_actions=getattr(agent_cfg, "clip_actions", None))
     fmt = check_checkpoint_format(str(checkpoint))
     print(f"[finalize] checkpoint format: {fmt}")

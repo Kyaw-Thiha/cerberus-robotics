@@ -56,7 +56,7 @@ def _tolerant_loader():
     class TolerantLoader(yaml.SafeLoader):
         pass
 
-    def _python_any(loader, suffix, node):  # noqa: ANN001
+    def _python_any(loader, suffix, node):
         # ``!!python/tuple`` is loadable as a plain sequence and several compared fields use it
         # (command ranges, resampling interval). Everything else (object/apply slices, objects) is
         # only used by fields this module never reads, so None is enough to keep the file loadable.

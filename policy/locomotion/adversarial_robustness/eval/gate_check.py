@@ -26,7 +26,7 @@ from __future__ import annotations
 import argparse
 import json
 import sys
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[4]
@@ -71,7 +71,7 @@ def rollout_fall_rate(wrapper, adversary, trials: int, max_steps: int = 400) -> 
     excluded exactly as the push-recovery eval does -- otherwise every trial would count as a fall when
     its episode ends.
     """
-    import torch  # noqa: PLC0415
+    import torch
 
     obs = wrapper.reset()
     fell = torch.zeros(wrapper.num_envs, dtype=torch.bool, device=wrapper.device)
@@ -96,27 +96,29 @@ def rollout_fall_rate(wrapper, adversary, trials: int, max_steps: int = 400) -> 
 
 def main(argv=None) -> int:
     args = parse_args(argv)
-    from isaaclab.app import AppLauncher  # noqa: PLC0415
+    from isaaclab.app import AppLauncher
 
     app_launcher = AppLauncher(args)
     simulation_app = app_launcher.app  # noqa: F841
     try:
         return _run(args)
     except Exception:  # noqa: BLE001 -- never let SimulationApp.close()'s exit(0) hide a failure
-        import traceback  # noqa: PLC0415
+        import traceback
 
         traceback.print_exc()
         return 1
 
 
 def _run(args) -> int:
-    import gymnasium as gym  # noqa: PLC0415
 
+    from common.cerberus_compat.cfg_registry import load_env_cfg
     from policy.locomotion.adversarial_robustness import attack_env, attack_math
-    from policy.locomotion.adversarial_robustness.train_adversary import load_frozen_policy
+    from policy.locomotion.adversarial_robustness.train_adversary import (
+        load_frozen_policy,
+    )
     from policy.locomotion.core.platforms.go2.platform import GO2
 
-    env_cfg = gym.spec(args.task).kwargs["env_cfg_entry_point"]()
+    env_cfg = load_env_cfg(args.task)
     bounds = attack_math.PerturbationBounds.from_config(GO2, env_cfg.commands.base_velocity.ranges)
     policy = load_frozen_policy(args.task, args.checkpoint)
     frozen_snapshot = attack_env.assert_policy_frozen(policy)
@@ -167,7 +169,7 @@ def _run(args) -> int:
     combined = results.get("combined", {})
     decision = attack_math.gate_decision(combined.get("minimum_score"), trained_range_score=1.0)
 
-    out_dir = Path(args.out_dir) if args.out_dir else DEFAULT_OUT_DIR / datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+    out_dir = Path(args.out_dir) if args.out_dir else DEFAULT_OUT_DIR / datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
     out_dir.mkdir(parents=True, exist_ok=True)
     verdict = {
         "verdict": decision["verdict"],
@@ -193,7 +195,7 @@ def _run(args) -> int:
         },
         "modalities": results,
         "summary": summary,
-        "created_at": datetime.now().isoformat(timespec="seconds"),
+        "created_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
         "wall_clock_s": None,
     }
     path = out_dir / "gate_verdict.json"
@@ -205,9 +207,12 @@ def _run(args) -> int:
 
 def _load_adversary(wrapper, checkpoint: Path, args):
     """Load the trained adversary through a runner built on this wrapper (never trained here)."""
-    import json as _json  # noqa: PLC0415
+    import json as _json
 
-    from common.cerberus_compat.rsl_rl_compat import check_checkpoint_format, make_runner
+    from common.cerberus_compat.rsl_rl_compat import (
+        check_checkpoint_format,
+        make_runner,
+    )
     from policy.locomotion.adversarial_robustness import train_adversary
 
     manifest_path = Path(args.adversary_dir) / "train_manifest.json"

@@ -24,7 +24,7 @@ _spec.loader.exec_module(_mod)
 
 
 def bounds(**overrides):
-    base = dict(force_peak_n=120.0, command_peak_mps=math.hypot(1.0, 1.0), rate_limit_fraction=0.1)
+    base = {"force_peak_n": 120.0, "command_peak_mps": math.hypot(1.0, 1.0), "rate_limit_fraction": 0.1}
     base.update(overrides)
     return _mod.PerturbationBounds(**base)
 

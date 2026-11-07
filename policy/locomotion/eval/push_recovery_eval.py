@@ -134,37 +134,37 @@ simulation_app = app_launcher.app
 import csv
 import json
 import math
-from datetime import datetime
+from datetime import datetime, timezone
 
 import gymnasium as gym
+import isaaclab_tasks  # noqa: F401
 import torch
-
-
 from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.utils.assets import retrieve_file_path
 from isaaclab.utils.math import euler_xyz_from_quat
-
 from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper
-
-import isaaclab_tasks  # noqa: F401
-import policy.locomotion  # noqa: F401  -- registers the Cerberus Go2 tasks
 from isaaclab_tasks.utils import get_checkpoint_path
+
+import policy.locomotion  # noqa: F401  -- registers the Cerberus Go2 tasks
+from common.cerberus_compat.isaac_data import as_tensor
 from common.cerberus_compat.rsl_rl_compat import (
     CheckpointFormatError,
     check_checkpoint_format,
     hydra_task_config,
     make_runner,
 )
-from common.cerberus_compat.isaac_data import as_tensor
 from policy.cli_common import resolve_task_id
 from policy.locomotion.core.platforms.registry import get_platform
-from policy.locomotion.eval.push_recovery_event import apply_single_push
 from policy.locomotion.core.push_disturbance_cfg import IMPULSE_DURATION_S
 from policy.locomotion.core.push_impulse_event import clear_expired_push_impulses
 from policy.locomotion.core.script_utils import checkpoints_root
-from policy.locomotion.core.terrain_pinning import pin_terrain, sub_terrain_type_for_column
+from policy.locomotion.core.terrain_pinning import (
+    pin_terrain,
+    sub_terrain_type_for_column,
+)
 from policy.locomotion.eval import contract_check
+from policy.locomotion.eval.push_recovery_event import apply_single_push
 
 
 def _load_onnx_policy(path: str, device: str):
@@ -175,9 +175,9 @@ def _load_onnx_policy(path: str, device: str):
     observation normaliser (``actor_obs_normalization: false``), so raw observations go straight in --
     which is why the contract check runs first and reports the normaliser field.
     """
-    import numpy as np  # noqa: PLC0415
-    import onnxruntime as ort  # noqa: PLC0415
-    import torch  # noqa: PLC0415
+    import numpy as np
+    import onnxruntime as ort
+    import torch
 
     providers = (
         ["CUDAExecutionProvider", "CPUExecutionProvider"]
@@ -354,7 +354,7 @@ def main(env_cfg, agent_cfg):
             results_dir = os.path.join(os.path.dirname(__file__), "results")
             os.makedirs(results_dir, exist_ok=True)
             contract_report_path = os.path.join(
-                results_dir, f"contract_{datetime.now().strftime('%Y-%m-%d_%H-%M-%S')}.txt"
+                results_dir, f"contract_{datetime.now(timezone.utc).strftime('%Y-%m-%d_%H-%M-%S')}.txt"
             )
         contract = _run_contract_check(env_cfg, agent_cfg, env, contract_report_path)
         if contract["verdict"] == "CONTRACT MISMATCH" and not args_cli.allow_contract_mismatch:

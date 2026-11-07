@@ -79,7 +79,7 @@ def _torch_info() -> dict:
     """torch / CUDA / GPU, or an 'unavailable' marker. Imported lazily: torch is a 2 GB import."""
     info: dict = {"available": False}
     try:
-        import torch  # noqa: PLC0415 -- deliberately deferred
+        import torch
     except Exception as e:  # noqa: BLE001 -- any import failure means 'not usable here'
         info["error"] = f"{type(e).__name__}: {e}"
         return info

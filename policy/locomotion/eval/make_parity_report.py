@@ -234,10 +234,10 @@ def render_markdown(
 
 def plot_parity(rows: list[dict], path: str | Path, *, reference_label: str, candidate_label: str, title: str):
     """Success vs push magnitude, one line per terrain level, both stacks. Lazy matplotlib import."""
-    import matplotlib  # noqa: PLC0415
+    import matplotlib
 
     matplotlib.use("Agg")
-    import matplotlib.pyplot as plt  # noqa: PLC0415
+    import matplotlib.pyplot as plt
 
     cand_rate = next((k for k in rows[0] if k.endswith("_rate") and k != "reference_rate"), "candidate_rate")
     levels = sorted({r["terrain_level"] for r in rows}, key=lambda s: float(s) if s.replace(".", "", 1).isdigit() else -1)

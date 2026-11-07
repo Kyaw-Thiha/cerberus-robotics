@@ -92,20 +92,26 @@ def parse_args(argv=None):
 
 def load_frozen_policy(task: str, checkpoint: str):
     """Load a GA checkpoint's actor as an ``obs -> actions`` callable (never trained here)."""
-    import gymnasium as gym  # noqa: PLC0415
+    import gymnasium as gym
+    import isaaclab_tasks  # noqa: F401
 
-    import isaaclab_tasks  # noqa: F401, PLC0415
-    import policy.locomotion  # noqa: F401, PLC0415
+    import policy.locomotion
+    from common.cerberus_compat.cfg_registry import (
+        load_agent_cfg,
+        load_env_cfg,
+    )
+    from common.cerberus_compat.rsl_rl_compat import (
+        check_checkpoint_format,
+        make_runner,
+    )
 
-    from common.cerberus_compat.rsl_rl_compat import check_checkpoint_format, make_runner
-
-    env_cfg = gym.spec(task).kwargs["env_cfg_entry_point"]()
+    env_cfg = load_env_cfg(task)
     env_cfg.scene.num_envs = 1  # the runner only needs an env to construct; the wrapper drives the real one
-    agent_cfg = gym.spec(task).kwargs["rsl_rl_cfg_entry_point"]()
+    agent_cfg = load_agent_cfg(task)
     env = gym.make(task, cfg=env_cfg)
     fmt = check_checkpoint_format(checkpoint)
     print(f"[adversary] frozen policy checkpoint format: {fmt}")
-    from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper  # noqa: PLC0415
+    from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper
 
     wrapped = RslRlVecEnvWrapper(env, clip_actions=getattr(agent_cfg, "clip_actions", None))
     runner = make_runner(wrapped, agent_cfg, log_dir=None, device=getattr(agent_cfg, "device", "cuda:0"))
@@ -120,7 +126,7 @@ def load_frozen_policy(task: str, checkpoint: str):
 
 def layer_inf_norms(policy_nn):
     """Infinity norm of each linear layer's weights -- the term the paper's lambda penalises."""
-    import torch  # noqa: PLC0415
+    import torch
 
     norms = []
     for module in policy_nn.modules():
@@ -131,7 +137,7 @@ def layer_inf_norms(policy_nn):
 
 def main(argv=None) -> int:
     args = parse_args(argv)
-    from isaaclab.app import AppLauncher  # noqa: PLC0415
+    from isaaclab.app import AppLauncher
 
     app_launcher = AppLauncher(args)
     simulation_app = app_launcher.app  # noqa: F841 -- keeps Kit alive for the whole run
@@ -139,7 +145,7 @@ def main(argv=None) -> int:
     try:
         return _run(args)
     except Exception:  # noqa: BLE001 -- Kit exits 0 on close, so a traceback here is the only evidence
-        import traceback  # noqa: PLC0415
+        import traceback
 
         traceback.print_exc()
         return 1
@@ -149,15 +155,14 @@ def main(argv=None) -> int:
 
 
 def _run(args) -> int:
-    import time  # noqa: PLC0415
+    import time
 
-    import gymnasium as gym  # noqa: PLC0415
-
+    from common.cerberus_compat.cfg_registry import load_env_cfg
     from common.cerberus_compat.rsl_rl_compat import make_runner
     from policy.locomotion.adversarial_robustness import attack_env, attack_math
     from policy.locomotion.core.platforms.go2.platform import GO2
 
-    env_cfg = gym.spec(args.task).kwargs["env_cfg_entry_point"]()
+    env_cfg = load_env_cfg(args.task)
     ranges = env_cfg.commands.base_velocity.ranges
     bounds = attack_math.PerturbationBounds.from_config(GO2, ranges)
     print(f"[adversary] bounds: force {bounds.force_peak_n} N, command {bounds.command_peak_mps:.3f} m/s, "
@@ -227,7 +232,7 @@ def _run(args) -> int:
 
 def _dry_run(wrapper, runner_cfg, frozen_snapshot) -> int:
     """P3a smoke: one zero-perturbation rollout + shape checks, no training, no time spent."""
-    import torch  # noqa: PLC0415
+    import torch
 
     from policy.locomotion.adversarial_robustness import attack_env
 

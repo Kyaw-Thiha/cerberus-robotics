@@ -102,7 +102,20 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--num-envs", type=int, default=None, help="Default: read from params/env.yaml.")
     parser.add_argument("--skip-onnx", action="store_true", help="Copy + sidecar only (no Isaac needed).")
     parser.add_argument("--dry-run", action="store_true", help="Print the plan; write nothing.")
+    from common.cerberus_compat.launcher import add_launcher_args
+
+    add_launcher_args(parser)
+    parser.set_defaults(headless=True, enable_cameras=True)
     args = parser.parse_args(argv)
+
+    # The ONNX export needs a live Kit app; launch it here, with the full launcher namespace, rather
+    # than handing AppLauncher a hand-built Namespace (which leaves the physics manager unimportable:
+    # "No module named 'omni.physics'").
+    if not args.skip_onnx and not args.dry_run:
+        from isaaclab.app import AppLauncher
+
+        args.app_launcher = AppLauncher(args)
+        args.simulation_app = args.app_launcher.app
 
     cm = _load_pure_module("policy/locomotion/core/checkpoint_meta.py", "cerberus_checkpoint_meta")
     contract_check = _load_pure_module("policy/locomotion/eval/contract_check.py", "cerberus_contract_check")

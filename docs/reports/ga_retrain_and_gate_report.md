@@ -16,6 +16,29 @@ were pulled down instead of pushed up (see the last section).
 | GA retrain (RUN_002 recipe) | see §3 |
 | Adversarial gate | prerequisite checks pass; training interrupted, **no verdict** — see §4 |
 
+### Stack report (values as measured; the container's JSON died with the pod)
+
+`scripts/env_report.py` wrote `outputs/env_report.json` and a copy under `docs/reports/` on the pod;
+both were on the container disk and were lost when RunPod terminated the instance. The values it
+reported, and the ones the probe merged into it, are:
+
+| field | value |
+|---|---|
+| isaac_sim | 6.2.0 (`/etc/cerberus_versions.json`) |
+| isaaclab | 28.0.0, commit `e3f7d9ff1f5d7f8280de3ece9000b7117f66bcf4` |
+| isaaclab_tasks / isaaclab_rl | 25.2.0 / 1.5.1 |
+| rsl-rl-lib | 5.5.1 |
+| torch | 2.11.0+cu130, CUDA 13.0 |
+| python | 3.12.14 (image), 3.12.3 (system) |
+| GPU | NVIDIA GeForce RTX 4090, 24564 MiB, driver 595.91.07 |
+| other packages | warp-lang 1.17.0, numpy 2.3.5, lightwheel-sdk 1.0.3 |
+| resolved physics | `PhysxCfg`, `use_newton_actuators=False` |
+| quaternion convention | `xyzw` (`root_quat_w` scalar last), `projected_gravity` [-0.090, -0.129, -0.988] |
+| repo commit synced to the pod | `25eaa080131929e33f7ef6aa3ad2e5bc207c9a42` |
+
+Re-running `scripts/env_report.py --also docs/reports/env_report_<date>.json` on any future pod
+reproduces the file; nothing here was reconstructed into an artifact that looks machine-written.
+
 ## 2. Parity: the September checkpoint on the GA stack
 
 Loading: the `.pt` is legacy rsl-rl 3.x (`model_state_dict`) and rsl-rl 5.5.1 rejects it

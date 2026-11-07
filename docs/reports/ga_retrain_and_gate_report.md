@@ -14,7 +14,7 @@ were pulled down instead of pushed up (see the last section).
 | Smoke (64 envs, 8 iters) | PASS: checkpoint written, reward curve present, no NaN/traceback |
 | Parity eval (September checkpoint on GA) | CONTRACT OK, **PARITY BROKEN (marginal)** — see §2 |
 | GA retrain (RUN_002 recipe) | see §3 |
-| Adversarial gate | see §4 |
+| Adversarial gate | prerequisite checks pass; training interrupted, **no verdict** — see §4 |
 
 ## 2. Parity: the September checkpoint on the GA stack
 
@@ -70,22 +70,63 @@ Sweep result: mean 74.4% vs September's 79.3% (−4.9 pp, inside the 10-point st
 adversarial gate proceeds. Five cells move >10 pp in both directions — better at 0 N / level 8 (+11),
 worse at 80 N / L0, 120 N / L4, 160 N / L4, 200 N / L8 (−12 to −14).
 
-## 4. Adversarial gate
+## 4. Adversarial gate — INCOMPLETE
 
-<!-- FILLED IN WHEN THE GATE RUNS -->
+Two prerequisite checks were made on the pod against the GA candidate, both from artifacts:
 
-## 5. Verification performed
+| check | result |
+|---|---|
+| zero-perturbation fall rate vs the standard sweep's fall rate (same cell) | 1% vs 0% → delta +1 pp → **PASS** |
+| 64-env, 200-step zero-perturbation rollout | no NaN, frozen policy verified unchanged, combined magnitude 0.0 → **PASS** |
+
+Adversary training then ran (1000 iterations at 256 envs, 3 h cap, blocks of 50 with a checkpoint per
+block). It was at ~100 iterations when the pod was terminated: the RunPod account balance reached zero
+(`clientBalance: -0.065`), `runpodctl pod get` returns "pod not found", and a replacement pod was
+refused with "account balance is too low".
+
+Evidence gathered before the loss, from an earlier 543-iteration adversary run on the same candidate:
+- `Episode_Termination/base_contact` reached **~98%** of episodes under the attack at 1x the trained
+  range, against **18%** for a random 120 N push at the same normalised magnitude;
+- a random-push sweep at the trained peak (120 N) still reports 82% success — i.e. the standard test
+  passes while a learned attack of equal magnitude breaks the policy. That is the source paper's
+  finding, reproduced in shape.
+
+No `gate_verdict.json` was produced, so no verdict is claimed, and `go2_locomotion_final.pt` was **not**
+created. Resume path: `docs/reports/phase05_adversarial_report.md` ("What remains").
+
+## 5. Wall clock and cost
+
+| package | wall clock | note |
+|---|---|---|
+| pod bring-up, stack report, probe | 06:14 → 06:33 (19 min) | includes ~14 min image pull |
+| P1 parity eval | 07:12 → 07:27 (15 min) | 1800-trial sweep |
+| P2 retrain | 07:29 → 08:37 (68 min) | 4009 s logged training + video + finalize + sweep |
+| P3 prerequisites + adversary training | 08:44 → ~09:35 (~50 min) | training interrupted at ~100/1000 |
+| total pod time | ~3.3 h at $0.89/h ≈ **$2.9** | pod terminated by RunPod at zero balance |
+
+Debugging inside that time was substantial and is visible in the commit log: Kit launches that crashed
+or hung on driver 595, a physics-preset type error, a fixed-batch ONNX export, `TensorDict`
+observation shapes, a shadowed `policy` name, and a training loop that never wrote a checkpoint. Each
+is fixed in `main` with a test where the logic is testable off-pod.
+
+## 6. Verification performed
 
 - `pixi run pytest -q` on the workstation: 1008 passed, 18 skipped before the pod work; the new modules
   add 100+ tests of their own (gate math, contract check, parity report, sidecars, quat probe, policy IO).
 - On the pod: every gate above is decided from an artifact, not an exit code (SimulationApp exits 0
   whatever happened); the drivers judge each step that way and retry crashed/stalled launches.
 
-## 6. Deviations and things that contradict the handoff
+## 7. Deviations and things that contradict the handoff
 
 - H1 was not merged into `main` when this started; per instruction the work went on `main` directly.
 - No R2 credentials on the workstation or the pod, so `scripts/sync_to_r2.py` could not run; artifacts
   were pulled to `data/reports/` with `scripts/pull_pod_artifacts.sh` instead.
 - The September checkpoint cannot load through rsl-rl 5 at all (verified), so "try the `.pt` first" is
   answered by the format guard rather than by an attempt that could have succeeded.
-- Scene eval (P4) needs the GRScenes package from R2; with no R2 credentials it stops at its first step.
+- Scene eval (P4) needs the GRScenes package from R2; with no R2 credentials it stops at its first
+  step, and with no GPU pod it cannot run at all.
+- **The pod was terminated mid-gate.** The account balance hit zero. Everything that mattered had been
+  pulled down first (the candidate, its ONNX export, the sidecar, both sweeps, the rollout clip), except
+  the in-flight adversary run, which was lost. This is the concrete cost of not having R2 credentials
+  on the pod: the "sync before you stop" step had to be a manual pull, and the last two hours of
+  compute could not be recovered.

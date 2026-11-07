@@ -217,13 +217,24 @@ def _run(args) -> int:
     start = time.time()
     cap_s = args.max_wall_clock_h * 3600.0
     stop_reason = "iterations complete"
-    for iteration in range(args.iterations):
-        runner.learn(num_learning_iterations=1)
+    # Train in blocks, not one iteration at a time: rsl-rl only writes a checkpoint on its own
+    # iteration counter, and calling learn(1) repeatedly keeps that counter at 0 -- the loop ran but
+    # produced nothing to evaluate. Each block is followed by an explicit save, so an interrupted
+    # run still leaves usable weights.
+    save_every = 50
+    completed = 0
+    out_dir = Path(args.out_dir or f"policy/locomotion/checkpoints/adversary_{int(time.time())}")
+    out_dir.mkdir(parents=True, exist_ok=True)
+    while completed < args.iterations:
+        block = min(save_every, args.iterations - completed)
+        runner.learn(num_learning_iterations=block)
+        completed += block
         elapsed = time.time() - start
-        if iteration % 10 == 0:
-            print(f"[adversary] iter {iteration}/{args.iterations}  elapsed {elapsed / 60:.1f} min")
+        runner.save(str(out_dir / f"model_{completed}.pt"))
+        print(f"[adversary] iter {completed}/{args.iterations}  elapsed {elapsed / 60:.1f} min  "
+              f"saved model_{completed}.pt")
         if elapsed > cap_s:
-            stop_reason = f"wall-clock cap {args.max_wall_clock_h} h reached at iteration {iteration}"
+            stop_reason = f"wall-clock cap {args.max_wall_clock_h} h reached at iteration {completed}"
             print(f"[adversary] STOP: {stop_reason}")
             break
 
@@ -237,7 +248,7 @@ def _run(args) -> int:
         "modality": args.modality,
         "num_envs": args.num_envs,
         "iterations_requested": args.iterations,
-        "iterations_completed": iteration + 1,
+        "iterations_completed": completed,
         "stop_reason": stop_reason,
         "wall_clock_s": round(elapsed, 1),
         "bounds": {
@@ -248,8 +259,6 @@ def _run(args) -> int:
         "runner_cfg": runner_cfg,
         "out_dir": args.out_dir,
     }
-    out_dir = Path(args.out_dir or f"policy/locomotion/checkpoints/adversary_{int(time.time())}")
-    out_dir.mkdir(parents=True, exist_ok=True)
     (out_dir / "train_manifest.json").write_text(json.dumps(manifest, indent=2) + "\n")
     print(f"[adversary] wrote {out_dir / 'train_manifest.json'}")
     return 0

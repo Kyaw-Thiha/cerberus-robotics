@@ -89,6 +89,20 @@ def load_yaml_tolerant(path: str | Path):
         return yaml.load(f, Loader=_tolerant_loader())
 
 
+def _term_entry(value) -> dict:
+    """One observation/action term, normalised to a mapping.
+
+    Isaac Lab's config dumper writes a term either as its full cfg (mapping) or, when nothing was
+    customised, as the bare ``"module:func"`` string. Both forms appear in dumps from different
+    versions, so the reader accepts either.
+    """
+    if isinstance(value, str):
+        return {"func": value}
+    if isinstance(value, dict):
+        return value
+    return {}
+
+
 def _func_leaf(func) -> str | None:
     """``'isaaclab.envs.mdp.observations:joint_pos_rel'`` -> ``'joint_pos_rel'``."""
     if not isinstance(func, str):
@@ -131,10 +145,11 @@ def load_reference(run_dir: str | Path) -> dict:
 
     obs_cfg = (env_yaml.get("observations") or {}).get("policy") or {}
     term_names = [k for k in obs_cfg if k not in OBS_META_KEYS]
-    term_widths = {name: _term_width(name, obs_cfg[name], env_yaml) for name in term_names}
+    term_entries = {name: _term_entry(obs_cfg[name]) for name in term_names}
+    term_widths = {name: _term_width(name, term_entries[name], env_yaml) for name in term_names}
     known_widths = [w for w in term_widths.values() if w is not None]
 
-    action_cfg = ((env_yaml.get("actions") or {}).get("joint_pos")) or {}
+    action_cfg = _term_entry((env_yaml.get("actions") or {}).get("joint_pos"))
     command_cfg = (env_yaml.get("commands") or {}).get("base_velocity") or {}
     ranges = command_cfg.get("ranges") or {}
     policy_cfg = agent_yaml.get("policy") or {}
@@ -145,7 +160,7 @@ def load_reference(run_dir: str | Path) -> dict:
         "source": "params/env.yaml+agent.yaml",
         "obs_group": "policy",
         "obs_term_names": term_names,
-        "obs_term_funcs": [_func_leaf(obs_cfg[n].get("func")) for n in term_names],
+        "obs_term_funcs": [_func_leaf(term_entries[n].get("func")) for n in term_names],
         "obs_term_widths": term_widths,
         "obs_dim": sum(known_widths) if len(known_widths) == len(term_names) else None,
         "enable_corruption": obs_cfg.get("enable_corruption"),

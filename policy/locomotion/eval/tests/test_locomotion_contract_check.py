@@ -215,6 +215,37 @@ class TestLiveContractLayouts:
         assert _mod.verdict(rows) == "CONTRACT OK", _mod.mismatch_summary(rows)
 
 
+class TestReferenceDumpForms:
+    def test_string_form_terms_are_accepted(self, tmp_path):
+        # Isaac Lab's dumper writes an unmodified term as a bare "module:func" string, which is how the
+        # GA run's params/env.yaml looked. A reader that assumes mappings crashes on it.
+        run = tmp_path / "run"
+        (run / "params").mkdir(parents=True)
+        (run / "params" / "env.yaml").write_text(
+            "decimation: 4\n"
+            "sim: {dt: 0.005}\n"
+            "observations:\n"
+            "  policy:\n"
+            "    concatenate_terms: true\n"
+            "    base_lin_vel: isaaclab.envs.mdp.observations:base_lin_vel\n"
+            "    joint_pos: isaaclab.envs.mdp.observations:joint_pos_rel\n"
+            "    actions: isaaclab.envs.mdp.observations:last_action\n"
+            "actions:\n"
+            "  joint_pos: {scale: 0.25, offset: 0.0, use_default_offset: true}\n"
+            "commands:\n"
+            "  base_velocity:\n"
+            "    ranges: {lin_vel_x: [-1.0, 1.0], lin_vel_y: [-1.0, 1.0], ang_vel_z: [-1.0, 1.0]}\n"
+        )
+        ref = _mod.load_reference(run)
+        assert ref["obs_term_names"] == ["base_lin_vel", "joint_pos", "actions"]
+        assert ref["obs_term_widths"]["base_lin_vel"] == 3
+        assert ref["obs_term_widths"]["joint_pos"] == 12
+        assert ref["obs_term_funcs"][0] == "base_lin_vel"
+        assert ref["obs_dim"] == 3 + 12 + 12
+        assert ref["action_scale"] == pytest.approx(0.25)
+        assert ref["command_ranges"]["ang_vel_z"] == (-1.0, 1.0)
+
+
 class TestCompareCatches:
     def test_observation_reorder_is_a_mismatch(self):
         ref = make_reference()

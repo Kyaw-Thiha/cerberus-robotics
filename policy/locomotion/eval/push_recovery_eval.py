@@ -204,8 +204,13 @@ def _load_onnx_policy(path: str, device: str):
     if fixed_batch is not None:
         print(f"[INFO]: ONNX export has a fixed batch of {fixed_batch}; feeding it row by row")
 
+    printed_input = []
+
     def policy(obs):
         obs = select_policy_obs(obs)
+        if not printed_input:
+            printed_input.append(True)
+            print(f"[INFO]: policy input: {type(obs).__name__} shape={getattr(obs, 'shape', None)}")
         obs_np = obs.detach().cpu().numpy().astype(np.float32)
         if fixed_batch is None or obs_np.shape[0] == fixed_batch:
             out = session.run(output_names, {input_name: obs_np})[0]

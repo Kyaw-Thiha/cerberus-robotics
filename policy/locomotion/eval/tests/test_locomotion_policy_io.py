@@ -28,6 +28,10 @@ class TestSelectPolicyObs:
         with pytest.raises(KeyError, match="groups"):
             _mod.select_policy_obs({"a": object(), "b": object()})
 
+    def test_nested_mappings_are_unwrapped(self):
+        tensor = object()
+        assert _mod.select_policy_obs({"outer": {"policy": tensor}}) is tensor
+
     def test_custom_group_name(self):
         tensor = object()
         assert _mod.select_policy_obs({"teacher": tensor}, group="teacher") is tensor

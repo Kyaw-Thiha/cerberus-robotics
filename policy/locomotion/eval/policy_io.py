@@ -15,16 +15,21 @@ def select_policy_obs(obs, group: str = DEFAULT_GROUP):
     """Return the tensor a policy should consume.
 
     - mapping with ``group``: that entry;
-    - mapping with exactly one entry: it (a task with a single observation group is unambiguous);
+    - mapping with exactly one entry: it (a single-group observation space is unambiguous);
+    - nested mappings: unwrapped repeatedly (a wrapper may nest its groups);
     - anything else (tensor, array): returned unchanged.
     """
-    if not isinstance(obs, dict):
-        return obs
-    if group in obs:
-        return obs[group]
-    if len(obs) == 1:
-        return next(iter(obs.values()))
-    raise KeyError(
-        f"observation mapping has no {group!r} entry and is not single-group "
-        f"(groups: {sorted(obs)}); pass the group name explicitly"
-    )
+    seen = []
+    while isinstance(obs, dict):
+        seen.append(sorted(obs))
+        if group in obs:
+            obs = obs[group]
+            continue
+        if len(obs) == 1:
+            obs = next(iter(obs.values()))
+            continue
+        raise KeyError(
+            f"observation mapping has no {group!r} entry and is not single-group "
+            f"(nesting so far: {seen}); pass the group name explicitly"
+        )
+    return obs

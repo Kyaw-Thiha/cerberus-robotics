@@ -61,10 +61,13 @@ def parse_args(argv=None):
 
 def load_frozen_policy(task: str, checkpoint: str):
     """Load a GA checkpoint's actor as an ``obs -> actions`` callable (never trained here)."""
+    import importlib
+
     import gymnasium as gym
     import isaaclab_tasks  # noqa: F401
 
-    import policy.locomotion
+    # Imported by name, not `import policy.locomotion`: "policy" is also this module's return value.
+    importlib.import_module("policy.locomotion")
     from common.cerberus_compat.cfg_registry import (
         load_agent_cfg,
         load_env_cfg,

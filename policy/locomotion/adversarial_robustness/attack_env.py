@@ -325,10 +325,15 @@ def build_attack_env(
     randomised physics draw. The training pushes are disabled there too: the adversary is the only
     perturbation in the loop, which is what makes the gate's numbers attributable.
     """
+    import importlib
+
     import gymnasium as gym
     import isaaclab_tasks  # noqa: F401
 
-    import policy.locomotion
+    # Imported by name: `import policy.locomotion` would bind "policy" to the Python module and
+    # shadow this function's `policy` parameter, so the wrapper received a module instead of a
+    # callable (caught by the zero-attack check: "'module' object is not callable").
+    importlib.import_module("policy.locomotion")
     from common.cerberus_compat.cfg_registry import load_env_cfg
 
     if play and "Play" not in task:

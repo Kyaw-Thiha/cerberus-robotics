@@ -1,9 +1,19 @@
 # Phase 0.5 adversarial robustness gate (`h2`, P3)
 
-Status: **NOT RUN — no GPU pod available from the executing workstation**, and the gate needs the
-GA candidate from P2, which also needs the pod. The method, bounds, criteria and artifacts below are
-implemented and locally tested (48 pure-python tests); the measured numbers are absent and are shown
-as `—` rather than estimated.
+Status: **wrapper checks pass on the GA candidate; adversary training and the gate are running** (pod
+`rbbfy5mf5rd4az`, 2026-11-07 09:06 UTC). Candidate: `go2_locomotion_ga_v1_candidate.pt`.
+
+Gate prerequisite checks, both from artifacts:
+
+| check | result |
+|---|---|
+| zero-perturbation fall rate vs the standard sweep's fall rate in the same cell | **1% vs 0%** (delta +1 pp, tolerance 10) → PASS: the wrapper reproduces the candidate's standard behaviour |
+| 64-env, 200-step zero-perturbation rollout | no NaN, frozen policy verified unchanged, reported combined magnitude 0.0 → PASS |
+
+One measurement subtlety worth recording: the standard sweep's *success* rate at 0 N / level 0 is 88%
+while its *fall* rate is 0% — success also requires velocity tracking and a level attitude, which the
+wrapper does not re-implement. The check therefore compares fall rates, not success rates; comparing
+against 88% would have failed a correct wrapper by 12 points.
 
 Method: `plans/handoff_phase0.5.md` (Shi, Zhang, Miki, Lee, Hutter, Coros, RSS 2024). The locomotion
 candidate is frozen; a small MLP adversary is trained with PPO to emit a base push force and a

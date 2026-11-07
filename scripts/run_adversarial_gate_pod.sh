@@ -45,6 +45,8 @@ REPORT_DIR="data/reports/adversarial_gate_$STAMP"
 SUMMARY="$REPORT_DIR/summary.txt"
 mkdir -p "$REPORT_DIR"
 say() { echo "[p3 $(date -u +%H:%M:%S)] $*"; }
+# shellcheck source=scripts/pod_isaac_lib.sh
+source "$REPO_ROOT/scripts/pod_isaac_lib.sh"
 FAILS=0
 record() { echo "$1 $2 $3" | tee -a "$SUMMARY"; [[ "$2" == PASS || "$2" == SKIP ]] || FAILS=$((FAILS + 1)); }
 CAP_S="$(python3 -c "print(int(float('$CAP_H') * 3600))")"
@@ -56,9 +58,9 @@ say "candidate: $CANDIDATE  cap: ${CAP_H}h  envs=$NUM_ENVS iterations=$ITERATION
 # ---- 1 + 2: wrapper checks ---------------------------------------------------------------------
 ZERO_ARGS=()
 [[ -n "$STANDARD_SUCCESS" ]] && ZERO_ARGS=(--standard_success "$STANDARD_SUCCESS")
-timeout --signal=KILL --kill-after=30 1200 "$LAB" -p "$GATE" \
+run_isaac zero_attack 1200 3 -- "$LAB" -p "$GATE" \
     --task "$TASK" --checkpoint "$CANDIDATE" --zero_attack_only --trials "$TRIALS" \
-    "${ZERO_ARGS[@]}" --out_dir "$REPORT_DIR/zero_attack" > "$REPORT_DIR/zero_attack.log" 2>&1
+    "${ZERO_ARGS[@]}" --out_dir "$REPORT_DIR/zero_attack"
 rc=$?
 if [[ -f "$REPORT_DIR/zero_attack/zero_attack_check.json" ]] && python3 -c "
 import json,sys; d=json.load(open('$REPORT_DIR/zero_attack/zero_attack_check.json')); sys.exit(0 if d.get('passed') else 1)"; then
@@ -67,9 +69,8 @@ else
     record zero_attack FAIL "exit=$rc (see zero_attack.log)"
 fi
 
-timeout --signal=KILL --kill-after=30 1200 "$LAB" -p "$ADV" \
-    --task "$TASK" --checkpoint "$CANDIDATE" --num_envs 64 --iterations 1 --dry_run \
-    > "$REPORT_DIR/dry_run.log" 2>&1
+run_isaac dry_run 1200 3 -- "$LAB" -p "$ADV" \
+    --task "$TASK" --checkpoint "$CANDIDATE" --num_envs 64 --iterations 1 --dry_run
 rc=$?
 if [[ $rc -eq 0 ]] && grep -q "dry run PASS" "$REPORT_DIR/dry_run.log"; then
     record dry_run PASS "$REPORT_DIR/dry_run.log"
@@ -84,10 +85,9 @@ if [[ "$(grep -c '^zero_attack FAIL' "$SUMMARY" 2>/dev/null || echo 0)" != "0" ]
     record gate SKIP "blocked by zero_attack FAIL"
 else
     ADV_DIR="policy/locomotion/checkpoints/adversary_$STAMP"
-    timeout --signal=KILL --kill-after=60 "$CAP_S" "$LAB" -p "$ADV" \
+    run_isaac train "$CAP_S" 2 -- "$LAB" -p "$ADV" \
         --task "$TASK" --checkpoint "$CANDIDATE" \
-        --num_envs "$NUM_ENVS" --iterations "$ITERATIONS" --out_dir "$ADV_DIR" \
-        > "$REPORT_DIR/train.log" 2>&1
+        --num_envs "$NUM_ENVS" --iterations "$ITERATIONS" --out_dir "$ADV_DIR"
     rc=$?
     ADV_MODEL="$(find "$ADV_DIR" -maxdepth 1 -name 'model_*.pt' 2>/dev/null | tail -1)"
     if [[ -n "$ADV_MODEL" ]]; then
@@ -99,10 +99,10 @@ else
     fi
 
     if [[ -n "$ADV_MODEL" ]]; then
-        timeout --signal=KILL --kill-after=60 5400 "$LAB" -p "$GATE" \
+        run_isaac gate 5400 2 -- "$LAB" -p "$GATE" \
             --task "$TASK" --checkpoint "$CANDIDATE" --adversary_dir "$ADV_DIR" \
             --modalities combined,force_only,command_only --trials "$TRIALS" \
-            --zero_attack_check --out_dir "$REPORT_DIR/gate" > "$REPORT_DIR/gate.log" 2>&1
+            --zero_attack_check --out_dir "$REPORT_DIR/gate"
         rc=$?
         if [[ -f "$REPORT_DIR/gate/gate_verdict.json" ]]; then
             cp "$REPORT_DIR/gate/gate_verdict.json" "$REPORT_DIR/"

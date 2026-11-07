@@ -38,6 +38,8 @@ REPORT_DIR="data/reports/ga_retrain_$STAMP"
 SUMMARY="$REPORT_DIR/summary.txt"
 mkdir -p "$REPORT_DIR"
 say() { echo "[p2 $(date -u +%H:%M:%S)] $*"; }
+# shellcheck source=scripts/pod_isaac_lib.sh
+source "$REPO_ROOT/scripts/pod_isaac_lib.sh"
 FAILS=0
 record() { echo "$1 $2 $3" | tee -a "$SUMMARY"; [[ "$2" == PASS || "$2" == SKIP ]] || FAILS=$((FAILS + 1)); }
 CAP_S="$(python3 -c "print(int(float('$CAP_H') * 3600))")"
@@ -46,10 +48,9 @@ say "report dir: $REPORT_DIR  cap: ${CAP_H}h (${CAP_S}s)  iterations=$ITERATIONS
 # ---- train -------------------------------------------------------------------------------------
 MARKER="$REPORT_DIR/.train_marker"; : > "$MARKER"
 say "training (RUN_002 recipe, tensorboard logger)"
-timeout --signal=KILL --kill-after=60 "$CAP_S" "$LAB" -p policy/locomotion/train.py \
+run_isaac train "$CAP_S" 2 -- "$LAB" -p policy/locomotion/train.py \
     --platform go2 --terrain rough --headless --logger tensorboard \
-    --num_envs "$NUM_ENVS" --max_iterations "$ITERATIONS" --seed "$SEED" \
-    > "$REPORT_DIR/train.log" 2>&1
+    --num_envs "$NUM_ENVS" --max_iterations "$ITERATIONS" --seed "$SEED"
 rc=$?
 say "training exit=$rc (137 = hit the ${CAP_H}h cap)"
 
@@ -68,10 +69,8 @@ fi
 # afterwards from the finished checkpoint, with retries, and a failed clip does not invalidate the run.
 if [[ -n "$RUN_DIR" ]]; then
     for attempt in 1 2 3 4; do
-        timeout --signal=KILL --kill-after=30 900 "$LAB" -p policy/locomotion/play.py \
-            --platform go2 --terrain rough --headless --video --video_length 200 --num_envs 8 \
-            > "$REPORT_DIR/video.attempt$attempt.log" 2>&1
-        cp "$REPORT_DIR/video.attempt$attempt.log" "$REPORT_DIR/video.log"
+        run_isaac video 900 1 -- "$LAB" -p policy/locomotion/play.py \
+            --platform go2 --terrain rough --headless --video --video_length 200 --num_envs 8
         clip="$(find "$RUN_DIR" -name '*.mp4' -size +0 2>/dev/null | tail -1)"
         [[ -n "$clip" ]] && break
         say "video attempt $attempt produced no clip; retrying"
@@ -86,9 +85,8 @@ fi
 # ---- finalize: candidate .pt + .onnx + sidecar -------------------------------------------------
 if [[ -n "$RUN_DIR" ]]; then
     say "finalizing candidate from $RUN_DIR"
-    timeout --signal=KILL --kill-after=30 1800 "$LAB" -p scripts/finalize_ga_checkpoint.py \
-        --run-dir "$RUN_DIR" --name go2_locomotion_ga_v1_candidate --physics isaacsim_physx \
-        > "$REPORT_DIR/finalize.log" 2>&1
+    run_isaac finalize 1800 2 -- "$LAB" -p scripts/finalize_ga_checkpoint.py \
+        --run-dir "$RUN_DIR" --name go2_locomotion_ga_v1_candidate --physics isaacsim_physx
     rc=$?
     CAND="policy/locomotion/checkpoints/go2_locomotion_ga_v1_candidate"
     if [[ -f "$CAND.pt" && -f "$CAND.onnx" && -f "$CAND.meta.json" ]]; then
@@ -100,13 +98,12 @@ fi
 # ---- evaluate the new candidate on the same sweep as the September reference --------------------
 if [[ -f policy/locomotion/checkpoints/go2_locomotion_ga_v1_candidate.pt ]]; then
     say "evaluating candidate"
-    timeout --signal=KILL --kill-after=60 5400 "$LAB" -p policy/locomotion/eval/push_recovery_eval.py \
+    run_isaac eval 5400 3 -- "$LAB" -p policy/locomotion/eval/push_recovery_eval.py \
         --platform go2 --terrain rough \
         --checkpoint policy/locomotion/checkpoints/go2_locomotion_ga_v1_candidate.pt \
         --contract_reference policy/locomotion/runs/2026-09-08_19-28-32_analysis \
         --magnitudes 0,40,80,120,160,200 --terrain_levels 0,4,8 --trials_per_cell 100 \
-        --output "$REPORT_DIR/eval_rough_ga_candidate.csv" \
-        > "$REPORT_DIR/eval.log" 2>&1
+        --output "$REPORT_DIR/eval_rough_ga_candidate.csv"
     rc=$?
     if [[ $rc -eq 0 && -s "$REPORT_DIR/eval_rough_ga_candidate.csv" ]]; then
         record eval PASS "$REPORT_DIR/eval_rough_ga_candidate.csv"

@@ -39,24 +39,14 @@ while [[ $# -gt 0 ]]; do
 done
 skipped() { [[ " $SKIP " == *" $1 "* ]]; }
 say() { echo "[p0p1 $(date -u +%H:%M:%S)] $*"; }
+# shellcheck source=scripts/pod_isaac_lib.sh
+source "$REPO_ROOT/scripts/pod_isaac_lib.sh"
 
 mkdir -p "$REPORT_DIR"
 SUMMARY="$REPORT_DIR/summary.txt"
 FAILS=0
 record() { echo "$1 $2 $3" | tee -a "$SUMMARY"; [[ "$2" == PASS || "$2" == SKIP ]] || FAILS=$((FAILS + 1)); }
 
-run_isaac() {  # run_isaac <name> <timeout_s> <attempts> -- cmd...
-    local name="$1" tmo="$2" tries="$3" rc=1 i; shift 4
-    for ((i = 1; i <= tries; i++)); do
-        say "$name attempt $i/$tries"
-        timeout --signal=KILL --kill-after=30 "$tmo" "$@" > "$REPORT_DIR/$name.attempt$i.log" 2>&1
-        rc=$?
-        cp "$REPORT_DIR/$name.attempt$i.log" "$REPORT_DIR/$name.log"
-        say "$name attempt $i exit=$rc (124/137 = timeout)"
-        [[ $rc -eq 0 ]] && return 0
-    done
-    return "$rc"
-}
 
 say "report dir: $REPORT_DIR  isaaclab: $LAB"
 { echo "stamp $STAMP"; echo "git ${CERBERUS_SYNC_COMMIT:-unknown}"; nvidia-smi --query-gpu=name,driver_version,memory.total --format=csv,noheader; } \

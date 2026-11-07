@@ -213,6 +213,22 @@ class AttackEnvWrapper:
             for prev, row in zip(states, rows, strict=True)
         ]
 
+    def policy_input(self, obs):
+        """Wrap the concatenated observation tensor the way an rsl-rl 5 model expects it.
+
+        ``MLPModel.forward`` reads ``obs[group]``, so a bare tensor raises. The frozen policy's own
+        ``obs_groups`` say which key to use; a single-group model is the normal case here.
+        """
+        groups = getattr(self.policy, "obs_groups", None)
+        if not groups:
+            return {"policy": obs}
+        if len(groups) == 1:
+            return {groups[0]: obs}
+        raise RuntimeError(
+            f"frozen policy expects several observation groups {list(groups)}; the wrapper only has the "
+            "policy observation, so it cannot reconstruct a multi-group input"
+        )
+
     def step(self, attack_action):
         """One adversary step -> (obs, reward, dones, extras), with the adversary's reward signal."""
         force, command = self.attack_action_to_channels(attack_action)
@@ -221,7 +237,7 @@ class AttackEnvWrapper:
         obs = self.hooks.observations()
         self._last_obs = obs
         with torch.no_grad():
-            actions = self.policy(obs)
+            actions = self.policy(self.policy_input(obs))
             obs, _, dones, extras = self.env.step(actions)
         time_outs = extras.get("time_outs") if isinstance(extras, dict) else None
         alive = ~(dones.bool() & ~time_outs.bool()) if time_outs is not None else ~dones.bool()

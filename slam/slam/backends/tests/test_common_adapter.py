@@ -1,9 +1,13 @@
-import rclpy
-from geometry_msgs.msg import Point, Pose, Quaternion
-from nav_msgs.msg import Odometry
-from sensor_msgs.msg import PointCloud2
+import pytest
 
-from slam.slam.backends.common_adapter import SlamBackendAdapter
+pytest.importorskip("cerberus_msgs", reason="cerberus_msgs (colcon-built ROS package) not available")
+
+import rclpy  # noqa: E402
+from geometry_msgs.msg import Point, Pose, Quaternion  # noqa: E402
+from nav_msgs.msg import Odometry  # noqa: E402
+from sensor_msgs.msg import PointCloud2  # noqa: E402
+
+from slam.slam.backends.common_adapter import SlamBackendAdapter  # noqa: E402
 
 
 def _make_odom(x: float, y: float, z: float, qx: float, qy: float, qz: float, qw: float) -> Odometry:

@@ -1,5 +1,8 @@
 import pytest
-from cerberus_bringup.validate_sensor_suite import (
+
+pytest.importorskip("cerberus_bringup", reason="cerberus_bringup (colcon-built ROS package) not available")
+
+from cerberus_bringup.validate_sensor_suite import (  # noqa: E402
     SensorSuiteMismatchError,
     require_explicit_algorithm_if_unset,
     unimplemented_dependencies,

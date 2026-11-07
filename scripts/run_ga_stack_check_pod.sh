@@ -32,7 +32,7 @@ PY="$ISAACLAB_PATH/_isaac_sim/python.sh"
 SKIP=""; UPLOAD=0
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        --skip) SKIP="$SKIP $2"; shift 2 ;;
+        --skip) SKIP="$SKIP ${2//,/ }"; shift 2 ;;  # comma- or space-separated
         --upload) UPLOAD=1; shift ;;
         *) echo "[p0p1] unknown argument: $1" >&2; exit 2 ;;
     esac

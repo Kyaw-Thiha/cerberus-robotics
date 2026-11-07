@@ -96,6 +96,40 @@ def load_frozen_policy(task: str, checkpoint: str):
     return policy
 
 
+def load_adversary_policy(env, run_dir: str):
+    """Rebuild a trained adversary from its run dir and return it as an inference policy.
+
+    Uses the runner config stored in that run's manifest: the adversary's shape and observation groups
+    have to match exactly what was trained, so they are read back rather than re-derived.
+    """
+    import json
+    from pathlib import Path
+
+    from common.cerberus_compat.rsl_rl_compat import (
+        check_checkpoint_format,
+        make_runner,
+    )
+
+    run_dir = Path(run_dir)
+    manifest = json.loads((run_dir / "train_manifest.json").read_text())
+    runner_cfg = manifest["runner_cfg"]
+    checkpoints = sorted(
+        (p for p in run_dir.glob("model_*.pt") if p.stem[len("model_"):].isdigit()),
+        key=lambda p: int(p.stem[len("model_"):]),
+    )
+    if not checkpoints:
+        raise FileNotFoundError(f"no model_<n>.pt in {run_dir}")
+    checkpoint = checkpoints[-1]
+    check_checkpoint_format(str(checkpoint))
+    runner = make_runner(env, runner_cfg, log_dir=None, device=env.device)
+    runner.load(str(checkpoint))
+    policy = runner.get_inference_policy(device=env.device)
+    for parameter in policy.parameters():
+        parameter.requires_grad_(False)
+    policy.eval()
+    return policy
+
+
 def _runner_cfg_from_task(task: str, iterations: int, seed: int) -> dict:
     """The task's PPO runner config as a dict, retargeted at the adversary's MLP and budget."""
     from common.cerberus_compat.cfg_registry import load_agent_cfg
@@ -226,8 +260,7 @@ def _dry_run(wrapper, runner_cfg, frozen_snapshot) -> int:
     import torch
 
     from policy.locomotion.adversarial_robustness import attack_env
-
-    from policy.locomotion.eval.policy_io import select_policy_obs  # noqa: PLC0415
+    from policy.locomotion.eval.policy_io import select_policy_obs
 
     obs = wrapper.reset()
     zero = torch.zeros((wrapper.num_envs, ATTACK_ACTION_DIM), device=wrapper.device)

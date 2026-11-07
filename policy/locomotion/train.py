@@ -100,8 +100,8 @@ simulation_app = app_launcher.app
 import time
 
 import gymnasium as gym
+import isaaclab_tasks  # noqa: F401
 import torch
-
 from isaaclab.envs import (
     DirectMARLEnv,
     DirectMARLEnvCfg,
@@ -110,12 +110,10 @@ from isaaclab.envs import (
     multi_agent_to_single_agent,
 )
 from isaaclab.utils.io import dump_yaml
-
 from isaaclab_rl.rsl_rl import RslRlBaseRunnerCfg, RslRlVecEnvWrapper
-
-import isaaclab_tasks  # noqa: F401
-import policy.locomotion  # noqa: F401  -- registers the Cerberus Go2 tasks
 from isaaclab_tasks.utils import get_checkpoint_path
+
+import policy.locomotion  # noqa: F401  -- registers the Cerberus Go2 tasks
 from policy.cli_common import resolve_task_id
 from policy.locomotion.core.best_checkpoint_runner import BestCheckpointOnPolicyRunner
 from policy.locomotion.core.script_utils import (
@@ -181,6 +179,18 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
     start_time = time.time()
 
     env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
+
+    if args_cli.adversarial_env:
+        # Opt-in: mix a fraction of rollouts under a frozen, previously trained adversary
+        # (attack -> fine-tune -> re-attack). Default behaviour is unchanged.
+        import importlib
+        import json
+
+        module_name, _, factory_name = args_cli.adversarial_env.partition(":")
+        factory = getattr(importlib.import_module(module_name), factory_name or "make_adversarial_wrapper")
+        params = json.loads(args_cli.adversarial_params or "{}")
+        env = factory(env, **params)
+        print(f"[INFO]: adversarial rollouts enabled: {params}")
 
     if agent_cfg.class_name == "OnPolicyRunner":
         # BestCheckpointOnPolicyRunner instead of stock OnPolicyRunner: also

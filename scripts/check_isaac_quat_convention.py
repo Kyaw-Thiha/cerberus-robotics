@@ -200,7 +200,7 @@ def main(argv: list[str] | None = None) -> int:
         # the base stays upright and both probes read their "standing" values.
         steps = max(1, round(SETTLE_S / raw_env.step_dt))
         for _ in range(steps):
-            _obs, _, _, _ = env.step(torch.zeros(raw_env.action_space.shape, device=raw_env.device))
+            env.step(torch.zeros(raw_env.action_space.shape, device=raw_env.device))
 
         probe = observation_probe(raw_env, group="policy")
         pg_rows = probe.pop("rows").detach().cpu().tolist()

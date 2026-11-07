@@ -2,6 +2,10 @@
 
 Oct 30, 2026 · @Kevin
 
+> **Stack note (2026-11-06).** This doc assumes an "Isaac Lab 2.3 / Sim 5.1 pin". The repo's active stack is Lab 3.0 GA / Sim 6.2 (`docker/remote_v6`). The compatibility claims below about JEPLO (`isaaclab==2.3.2.post1`), DAWN (Lab 2.3.0) and LeggedManip_Lab (needs a newer RSL-RL) are **unverified on the GA stack**.
+>
+> **The v1 lineup is a menu, not a commitment.** Each backend's target support level is recorded in its backend card (`common/cerberus_policies/cards/`, see `interfaces.md`), and only a few are targeted at L3 (trained by us).
+
 ## TL;DR
 
 Every locomotion, manipulation and whole-body paradigm in the current literature attaches to the rest of the stack at one of three command boundaries, so Cerberus can support all of them by fixing those three interfaces and making each paradigm a swappable backend behind them (same pattern as `cerberus_worlds`).

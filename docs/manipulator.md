@@ -1,3 +1,5 @@
+> **SUPERSEDED (2026-11-06): the VLA family list in this doc is superseded by `modular_stack_options.md`.** Joint-level VLA is a non-goal (tier T4); the shortlist is pi0.5 / GR00T N1.7 / X-VLA / SmolVLA / MolmoAct2. MobileVLA-R1 and QUART are no longer leading candidates. The body below is kept as history.
+
 # Cerberus — Manipulation Policy: VLM/VLA Notes
 
 > **Status: provisional.** Everything in this doc is a first pass — findings

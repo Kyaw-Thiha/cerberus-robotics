@@ -1277,3 +1277,7 @@ Artifacts: `data/reports/ga_smoke_20261106T214925Z/` locally (train/play/spike a
 `r2:migration/ga_smoke_20261106T214925Z/` — JSON, per-attempt logs, `summary.txt` and the video. The earlier,
 partly-failed run is kept at `r2:migration/ga_smoke_20261106T213400Z/` as the evidence for the `reset_all` bug.
 This is the first time the Arena spike PASS has an artifact.
+
+## Note 2026-11-06 (H1 doc reconciliation): the `arena_spike_go2.json` `passed: true` is a FAIL
+
+`data/reports/ga_smoke_20261106T214925Z/arena_spike_go2.json` records `"passed": true`, but its metrics (`robot_z_min_max [-0.7296,-0.4822]`, `base_minus_foot_z_mean -0.181`) fail the standing check described in "The standing check" above (threshold `<= 0.15`): the robot sank through the Galileo background. Treat that run as a FAIL. The `passed` field was written by the script before the standing check existed (`scripts/arena_spike_go2.py`, see line 480, `report["passed"] = not reasons`); that script already consults the check on the current branch, and was not changed by H1.

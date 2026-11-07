@@ -124,8 +124,8 @@ this session (both subcommands, uploaded + inspected via `rclone tree` +
 cleaned up via `rclone delete`/`rmdirs` — `rclone purge`'s bucket-versioning
 preflight check 403's under this account's API token scope, unrelated to the
 actual delete, which works fine). **rclone is already present on the local
-machine but not yet in `docker/remote/Dockerfile`.** Since the artifacts live
+machine. Update 2026-11-06: it is installed in `docker/remote_v6/Dockerfile` (rclone 1.75.1), not in the legacy `docker/remote/Dockerfile`.** Since the artifacts live
 on the pod, the natural place to run this is on the pod itself (right before
-killing it), which means `rclone` needs adding to the Dockerfile before this
-is usable end-to-end there. A local install is only needed for testing, or
+killing it), which needs `rclone` in the image: present in `docker/remote_v6`, still missing
+from the legacy `docker/remote`. A local install is only needed for testing, or
 re-syncing something already pulled down to the local machine.

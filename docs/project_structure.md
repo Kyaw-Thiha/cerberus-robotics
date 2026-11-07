@@ -55,7 +55,10 @@ platform):
 
 1. **Compose embodiment configs, don't write one monolithic robot config.**
    `common/cerberus_description/` defines separable `UNITREE_GO2_CFG` (legs)
-   and `ARX5_CFG` (arm) objects and composes them into `GO2_ARX5_CFG`. A
+   and `ARX5_CFG` (arm) objects and composes them into `GO2_ARX5_CFG`. (Status
+   2026-11-06: only `GO2_ARX5_CFG` / `GO2_ARX5_FIXED_BASE_CFG` exist as named symbols;
+   `UNITREE_GO2_CFG` is imported from `isaaclab_assets` and `ARX5_CFG` does not exist yet,
+   so the split is planned, not done.) A
    future arm swap edits only the arm sub-config; a future leg-platform swap
    (e.g. to ANYmal, the likely candidate if an inspection/intervention
    mission is added later) edits only the leg sub-config.
@@ -89,19 +92,23 @@ versioning" below for the current, legs-only-so-far naming).
 cerberus/
 ├── pixi.toml                      # single root env: colcon, ruff, pytest, plotting libs
 ├── pixi.lock
-├── colcon_defaults.yaml           # colcon build args/paths
+├── colcon_defaults.yaml           # colcon build args: symlink-install, base-paths limited to dirs with package.xml
+├── ruff.toml                      # minimal lint config (baseline-ignored rules listed inline)
+├── .github/workflows/ci.yml       # lint + test on push/PR (no GPU, no Docker)
 ├── build/ install/ log/           # colcon artifacts — gitignored
 │
 ├── common/                        # shared, dependency-only, no standalone behavior
-│   ├── cerberus_msgs/               # custom msg/srv/action defs
-│   └── cerberus_description/        # UNITREE_GO2_CFG + ARX5_CFG, composed into
-│       │                               # GO2_ARX5_CFG — see embodiment config pattern above
-│       ├── embodiment.py              # EmbodimentCfg (lazy entry point, joint_groups by name)
-│       │                                 # + compose_embodiments(); pure python
-│       ├── urdf/go2.urdf.xacro        # Go2 description; `sim` arg (default false = ROS; true =
-│       │                                 # root link `base`, no rotors/sensors/gazebo, for sim)
-│       └── xacro_expand.py            # expands xacro without an ament index; pure python
-│
+│   ├── cerberus_msgs/               # custom msg/srv/action defs (TaggedMap today)
+│   ├── cerberus_description/        # UNITREE_GO2_CFG + ARX5_CFG, composed into GO2_ARX5_CFG — see
+│   │   │                               # embodiment config pattern above. Today only GO2_ARX5_CFG is a named
+│   │   │                               # symbol
+│   │   ├── embodiment.py              # EmbodimentCfg (lazy entry point, joint_groups by name)
+│   │   │                                 # + compose_embodiments(); pure python
+│   │   ├── go2_arx5_cfg.py / go2_arx5_spec.py  # GO2_ARX5_CFG, GO2_ARX5_FIXED_BASE_CFG, joint-name specs
+│   │   ├── urdf/go2.urdf.xacro        # Go2 description; `sim` arg (default false = ROS; true =
+│   │   │                                 # root link `base`, no rotors/sensors/gazebo, for sim)
+│   │   └── xacro_expand.py            # expands xacro without an ament index; pure python
+│   │
 │   ├── cerberus_worlds/             # world-backend abstraction — see docs/worlds.md
 │   │   ├── base.py                    # WorldBackend: list_scenes, load_scene,
 │   │   │                                 # register_embodiment, build_env
@@ -112,62 +119,77 @@ cerberus/
 │   │   └── backends/                    # never imported outside registry
 │   │       ├── arena_backend.py         # Isaac Lab Arena (Lightwheel kitchens etc.)
 │   │       └── plain_usd_backend.py     # generic USD scenes (GRScenes-100), configurable preprocess
+│   │
+│   └── cerberus_compat/             # Isaac Lab 2.x <-> 3.0 adapters (quat, Warp data, rsl-rl, launcher);
+│                                       # all Isaac-touching code goes through these
 │
-│   ├── cerberus_compat/             # Isaac Lab 2.x <-> 3.0 adapters (quat, Warp data, rsl-rl, launcher);
-│   │                                   # all Isaac-touching code goes through these
+├── perception/                      # no package.xml yet (candidate registries + tests only)
+│   ├── terrain_perception/          # planned ROS2 pkg: terrain/obstacle perception for nav
+│   └── object_perception/           # (planned, not yet created) planned ROS2 pkg: object detection + 6D pose
 │
-├── perception/
-│   ├── terrain_perception/          # ROS2 pkg: terrain/obstacle perception for nav
-│   └── object_perception/           # ROS2 pkg: object detection + 6D pose for grasp targets
+├── slam/                            # ROS2 pkg (package.xml here)
+│   └── slam/                        # name placeholder, approach not yet decided
+│       ├── core/                      # algorithm registry + sensor requirements
+│       ├── backends/                  # 6 adapters (fast_lio2, bievr_lio, orb_slam3, multicam_slam,
+│       │                                 # fast_livo2, gs_livo) + common_adapter.py; algorithms are external
+│       ├── ground_truth/              # sim ground-truth pose/sensor bridge (zmq IPC to the Sim interpreter)
+│       └── eval/                      # mission-bag scoring with evo, remote eval drivers
 │
-├── slam/
-│   └── slam/                        # ROS2 pkg — name placeholder, approach not yet decided
-│
-├── planning/
-│   ├── global_planner/              # ROS2 pkg: A*/D*/RRT over the SLAM map
-│   └── task_orchestrator/           # ROS2 pkg: state machine, fault recovery/retry
+├── planning/                        # no package.xml yet (registries only)
+│   ├── global_planner/              # planned ROS2 pkg: A*/D*/RRT over the SLAM map
+│   ├── local_planner/               # planned ROS2 pkg: local planner candidates
+│   └── task_orchestrator/           # (planned, not yet created) planned ROS2 pkg: state machine, fault recovery/retry
 │
 ├── policy/
 │   ├── locomotion/                  # Phase 0 (+ Phase 1 velocity-command composition)
 │   │   ├── train.py / play.py         # Isaac Lab, plain python — NOT a colcon package
+│   │   ├── core/                      # platform registry (core/platforms), env cfgs, push events, tests
 │   │   ├── eval/                      # push-recovery robustness curve (standard tests)
-│   │   ├── adversarial_robustness/    # Phase 0.5 gate — sibling to eval/, not nested under it
+│   │   ├── runs/                      # RUN_*.md notes; clips/events are gitignored
+│   │   ├── adversarial_robustness/    # (planned, not yet created) Phase 0.5 gate — sibling to eval/
 │   │   │   ├── train_adversary.py       # trains adversary policy vs. frozen candidate checkpoint
 │   │   │   ├── attack_env.py            # wrapper env: frozen locomotion policy in the loop
 │   │   │   └── eval/                    # adversarial vulnerability report, robustify/reattack results
-│   │   └── checkpoints/               # candidate → robustified → final, versioned
+│   │   └── checkpoints/               # candidate → robustified → final, versioned (gitignored)
 │   ├── manipulation/                # Phase 2, owns the Phase 4 training loop
-│   │   ├── demo_collection/           # Isaac Lab Mimic
-│   │   ├── algorithms/                # BC, Diffusion Policy, ACT
-│   │   ├── continual_learning/        # Phase 4: naive fine-tune vs LoRA/adapter
-│   │   ├── world_model/               # Phase 4: diffusion world model, policy refinement
-│   │   └── eval/                      # demo-efficiency plot, forgetting curve, refinement success
+│   │   ├── go2_arx5_stack/            # env cfg, Mimic env, layout, waypoints, registration
+│   │   ├── demo_collection/           # (planned, not yet created) Isaac Lab Mimic
+│   │   ├── algorithms/                # (planned, not yet created) BC, Diffusion Policy, ACT
+│   │   ├── continual_learning/        # (planned, not yet created) Phase 4: naive fine-tune vs LoRA/adapter
+│   │   ├── world_model/               # (planned, not yet created) Phase 4: diffusion world model
+│   │   └── eval/                      # (planned, not yet created) demo-efficiency, forgetting curve, refinement
+│   ├── whole_body/                  # (planned, not yet created) T2 whole-body controller; composes
+│   │                                   # locomotion + manipulation (see docs/modular_stack_options.md)
 │   ├── locomotion_policy/           # ROS2 pkg: inference node, frozen (final) checkpoint
-│   └── manipulation_policy/         # ROS2 pkg: inference node, frozen checkpoint
+│   └── manipulation_policy/         # (planned, not yet created) planned ROS2 pkg: inference node
 │
-├── safety_filter/
+├── safety_filter/                   # (planned, not yet created)
 │   ├── core/                        # CBF/shielding math, plain python, pytest-testable
 │   │   └── eval/                      # safety filter ablation table (filter on vs off);
 │   │                                   # reuses policy/locomotion/adversarial_robustness/
 │   │                                   # infra, retargeted at policy+filter, see Phase 3 notes
-│   └── cerberus_safety_filter/      # ROS2 pkg: thin node wrapper around core/
+│   └── cerberus_safety_filter/      # planned ROS2 pkg: thin node wrapper around core/
 │
-├── actuation/
-│   └── cerberus_actuation/          # ROS2 pkg: low-level joint cmd interface
+├── actuation/                       # (planned, not yet created)
+│   └── cerberus_actuation/          # planned ROS2 pkg: low-level joint cmd interface
 │
 ├── system/                          # deployment composition, not a stack stage
-│   ├── cerberus_bringup/              # launch files, composes the full graph
-│   ├── scripts/
-│   └── systemd/
+│   ├── cerberus_bringup/              # ROS2 pkg: launch files, sensor profiles, sensor-suite validator
+│   ├── scripts/                       # (planned, not yet created)
+│   └── systemd/                       # (planned, not yet created)
 │
-├── docs/                             # architecture.svg, pipeline diagram, this file,
-│                                       # isaac_lab_workflow.md, manipulator.md (VLM/VLA plan),
-│                                       # worlds.md (scene sources/splits/backends),
-│                                       # arena_integration_log.md (W0-W4 gate log)
+├── plans/                            # handoff docs (phase 0, 0.5, arena, slam, sensor setup, H1)
+├── docs/                             # this file,
+│                                       # worlds.md, arena_integration_log.md, status reports,
+│                                       # modular_stack_options.md, archive/ + superpowers/ (history);
+│                                       # architecture.svg (planned, not yet created)
 ├── docker/
-│   ├── remote/                       # OLD stack image (Sim 5.1 / Lab 2.3.2 / Py 3.11): Dockerfile, start.sh
-│   ├── remote_v6/                    # NEW stack image (Sim 6.2 / Lab v3.0.0 GA / Py 3.12 + Arena main + pixi sim-ros2)
+│   ├── remote/                       # LEGACY stack image (Sim 5.1 / Lab 2.3.2 / Py 3.11): Dockerfile, start.sh
+│   ├── remote_v6/                    # ACTIVE stack image (Sim 6.2 / Lab v3.0.0 GA / Py 3.12 + Arena main
+│   │                                    # + pixi sim-ros2 + rclone 1.75.1)
 │   └── slam/                         # one SLAM backend image per subdirectory
+├── third_party/                      # vendored external source (SLAM backends, Arena, ARX model) — gitignored
+├── artifacts/                        # local artifact staging (see docs/artifact_storage.md)
 ├── scripts/                          # cross-cutting ops tooling, not owned by one stack component
 │   ├── sync_to_r2.py                   # permanent artifact storage — see docs/artifact_storage.md
 │   ├── build_go2_arx5_urdf.py          # merge sim Go2 + patched X5A arm -> go2_arx5 URDF (offline)
@@ -175,7 +197,7 @@ cerberus/
 │   ├── compare_go2_urdf_to_usd.py      # URDF vs USD mass/CoM/inertia/limits (offline)
 │   ├── run_ga_smoke_pod.sh             # one-session GA-stack smoke: train, play+video, Arena spike
 │   └── tests/                          # colocated tests for the scripts above
-├── data/                             # gitignored — demos, trajectories
+├── data/                             # gitignored — demos, trajectories, scenes, reports
 ├── outputs/                          # gitignored — checkpoints, logs, videos, wandb runs
 └── README.md
 ```
@@ -278,7 +300,5 @@ Nobody imports `common.cerberus_worlds.backends.*` directly; everything goes thr
 
 ## Open item
 
-`slam/slam/` keeps a placeholder name until a SLAM approach is actually
-chosen — rename the package once it's decided, same way `edgegate_slam` would
-have named itself, had that been the real answer (it isn't — SLAM tooling is
-still genuinely undecided as of this doc).
+`slam/slam/` keeps a placeholder name: six backend adapters exist (`slam/slam/backends/`), but the final
+selection is still an ablation, not a lock. Rename the package once an approach is chosen.

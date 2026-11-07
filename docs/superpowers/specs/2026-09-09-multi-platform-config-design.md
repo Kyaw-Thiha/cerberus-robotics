@@ -1,3 +1,5 @@
+> **Shorter copy.** The longer version of this document is `docs/archive/superpowers_plans/2026-09-09-multi-platform-config.md`.
+
 # Multi-Platform Config Design
 
 Date: 2026-09-09

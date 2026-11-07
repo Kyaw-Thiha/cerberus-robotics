@@ -1,0 +1,16 @@
+name: scripted_loco
+slot: loco
+boundary: B1_LOCO
+paradigm: "scripted B1 command source: constant LocoCommand from config"
+architecture: modular
+required_sensors: []
+rate_hz: 50
+license: MIT
+checkpoint_url: n/a
+code_url: common/cerberus_policies/backends/scripted_loco.py
+support_level: L1
+target_support_level: L1
+evidence:
+  - {kind: file, ref: common/cerberus_policies/backends/scripted_loco.py}
+  - {kind: file, ref: common/cerberus_policies/tests/test_policies_backends_contract.py}
+results: []

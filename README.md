@@ -33,7 +33,7 @@ restaurant and office come from GRScenes' commercial scenes. Scenes sit behind `
 | 3 | Safety filter (CBF/shielding) | Not started |
 | 4 | Continual learning + world model | Not started |
 
-Interface layer (`LocoCommand` / `ArmCommand` / `BodyCommand`, `PolicyBackend`): see `docs/interfaces.md`.
+Interface layer (`LocoCommand` / `ArmCommand` / `BodyCommand` messages, `PolicyBackend` in `common/cerberus_policies/`): `docs/interfaces.md`.
 Full audit: `docs/status_report_2026-11-06.md`.
 
 ## Borrowed vs novel
@@ -58,12 +58,14 @@ Each backend has a card and a support level; we do not train everything.
 Backends are **modular** (consume a map or other module output) or **fused** (raw sensor streams, encoder trained inside the
 policy, e.g. JEPLO, DAWN, Omni-Perception); both plug in at the same boundary.
 
-<!-- backend-table: link to the generated table is added with the generator (work package C4) -->
+Current backends, levels and targets: [`docs/backend_support.md`](docs/backend_support.md) (generated from
+`common/cerberus_policies/cards/`; interfaces in [`docs/interfaces.md`](docs/interfaces.md)).
 
 ## Key docs
 
 - `docs/cerberus_project_context.md`: motivation, mission, phases, open decisions
 - `docs/project_structure.md`: repo layout and conventions
+- `docs/interfaces.md`, `docs/backend_support.md`: the three command boundaries and per-backend support levels
 - `docs/modular_stack_options.md`: locomotion / manipulation / whole-body options and the three boundaries
 - `docs/worlds.md`, `docs/arena_integration_log.md`: scene sources and the Arena gate log
 - `docs/isaac_lab_workflow.md`, `docs/runpod.md`, `docs/artifact_storage.md`: remote GPU workflow

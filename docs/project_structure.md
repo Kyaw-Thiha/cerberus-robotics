@@ -98,7 +98,7 @@ cerberus/
 ├── build/ install/ log/           # colcon artifacts — gitignored
 │
 ├── common/                        # shared, dependency-only, no standalone behavior
-│   ├── cerberus_msgs/               # custom msg/srv/action defs (TaggedMap today)
+│   ├── cerberus_msgs/               # custom msgs: TaggedMap + LocoCommand/ArmCommand/BodyCommand (B1/B2/B3)
 │   ├── cerberus_description/        # UNITREE_GO2_CFG + ARX5_CFG, composed into GO2_ARX5_CFG — see
 │   │   │                               # embodiment config pattern above. Today only GO2_ARX5_CFG is a named
 │   │   │                               # symbol
@@ -119,6 +119,14 @@ cerberus/
 │   │   └── backends/                    # never imported outside registry
 │   │       ├── arena_backend.py         # Isaac Lab Arena (Lightwheel kitchens etc.)
 │   │       └── plain_usd_backend.py     # generic USD scenes (GRScenes-100), configurable preprocess
+│   │
+│   ├── cerberus_policies/           # policy-backend abstraction (B1/B2/B3) — see docs/interfaces.md
+│   │   ├── base.py                    # PolicyBackend ABC + Boundary/Role enums + command-dict checks
+│   │   ├── registry.py                # LOCO_BACKEND / ARM_BACKEND / BODY_BACKEND; lazy, no silent default
+│   │   ├── backend_card.py            # validated YAML cards + support levels L0-L3
+│   │   ├── validate_config.py         # one producer/consumer per boundary; sensors ⊆ rig
+│   │   ├── backends/                    # never imported outside registry (null_loco, scripted_loco)
+│   │   └── cards/                       # one YAML per backend; feeds docs/backend_support.md
 │   │
 │   └── cerberus_compat/             # Isaac Lab 2.x <-> 3.0 adapters (quat, Warp data, rsl-rl, launcher);
 │                                       # all Isaac-touching code goes through these
@@ -179,8 +187,8 @@ cerberus/
 │   └── systemd/                       # (planned, not yet created)
 │
 ├── plans/                            # handoff docs (phase 0, 0.5, arena, slam, sensor setup, H1)
-├── docs/                             # this file,
-│                                       # worlds.md, arena_integration_log.md, status reports,
+├── docs/                             # this file, interfaces.md,
+│                                       # backend_support.md (generated), worlds.md, arena_integration_log.md, status reports,
 │                                       # modular_stack_options.md, archive/ + superpowers/ (history);
 │                                       # architecture.svg (planned, not yet created)
 ├── docker/
@@ -192,6 +200,7 @@ cerberus/
 ├── artifacts/                        # local artifact staging (see docs/artifact_storage.md)
 ├── scripts/                          # cross-cutting ops tooling, not owned by one stack component
 │   ├── sync_to_r2.py                   # permanent artifact storage — see docs/artifact_storage.md
+│   ├── gen_backend_table.py            # cards -> docs/backend_support.md (pixi run backend-table)
 │   ├── build_go2_arx5_urdf.py          # merge sim Go2 + patched X5A arm -> go2_arx5 URDF (offline)
 │   ├── convert_go2_arx5_urdf_to_usd.py # UrdfConverter -> flattened USD + checks (pod)
 │   ├── compare_go2_urdf_to_usd.py      # URDF vs USD mass/CoM/inertia/limits (offline)
@@ -297,6 +306,15 @@ new file in `backends/`, not a rewrite. Scene assets are fetched to gitignored `
 Nobody imports `common.cerberus_worlds.backends.*` directly; everything goes through
 `registry.get_backend`, and an AST-scan test enforces it. OmniGibson was evaluated and dropped
 (see `docs/worlds.md`).
+
+## Rule 8: policy backends are pluggable
+
+Locomotion, arm and whole-body paradigms sit behind `common/cerberus_policies/` and the three command
+boundaries B1/B2/B3 (`docs/interfaces.md`). Same conventions as rule 7: lazy `module:Class` registry,
+selection by `LOCO_BACKEND` / `ARM_BACKEND` / `BODY_BACKEND`, no silent default, nobody imports a
+backend module directly (AST-scan test). Each backend has a card under `common/cerberus_policies/cards/`
+with a support level (L0-L3); `docs/backend_support.md` is generated from the cards. `policy/whole_body/`
+(T2 whole-body controller) is planned, not yet created.
 
 ## Open item
 

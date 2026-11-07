@@ -1,0 +1,52 @@
+# Schema for policy backend cards: common/cerberus_policies/cards/<name>.yaml
+# Authoritative validation lives in common/cerberus_policies/backend_card.py (cross-field rules
+# below cannot be expressed in plain JSON Schema); a test keeps the enums here in sync with it.
+$schema: https://json-schema.org/draft/2020-12/schema
+title: Cerberus backend card
+type: object
+additionalProperties: false
+required: [name, slot, boundary, paradigm, architecture, required_sensors, rate_hz, license,
+           checkpoint_url, code_url, support_level, target_support_level, evidence, results]
+properties:
+  name: {type: string, pattern: "^[a-z0-9_]+$", description: must equal the file name stem}
+  slot: {enum: [loco, arm, body], description: registry slot (LOCO_BACKEND / ARM_BACKEND / BODY_BACKEND)}
+  boundary: {enum: [B1_LOCO, B2_ARM, B3_BODY], description: must match slot (loco=B1, arm=B2, body=B3)}
+  paradigm: {type: string, minLength: 1, description: paradigm label as in docs/modular_stack_options.md}
+  architecture: {enum: [modular, fused], description: "modular = consumes a map or other upstream module output; fused = consumes raw sensor streams, encoder trained inside the policy"}
+  required_sensors:
+    description: sensor ids as in sensor_profiles.yaml (lidar, front_camera, rear_camera, wrist_camera, imu) plus joint_encoders; the string "unknown" only at L0
+    oneOf: [{type: array, items: {type: string}}, {const: unknown}]
+  rate_hz: {oneOf: [{type: number, exclusiveMinimum: 0}, {const: unknown}], description: '"unknown" only at L0'}
+  license: {type: string, description: '"unknown" only at L0'}
+  checkpoint_url: {type: string, description: 'URL, "n/a" when no checkpoint exists, or "unknown" (L0 only)'}
+  code_url: {type: string, description: 'URL or repo path; "unknown" only at L0'}
+  support_level: {enum: [L0, L1, L2, L3], description: what the evidence proves today}
+  target_support_level: {enum: [L0, L1, L2, L3], description: ambition; must be >= support_level}
+  evidence:
+    description: required and non-empty for L1 and above; L2 and L3 need at least one `report` entry
+    type: array
+    items:
+      type: object
+      additionalProperties: false
+      required: [kind, ref]
+      properties:
+        kind: {enum: [file, report, commit]}
+        ref: {type: string, minLength: 1, description: repo-relative path (file/report) or commit hash}
+  results:
+    description: required and non-empty for L2 and above (may be empty for L0/L1); L3 needs an entry with trained_by_us true
+    type: array
+    items:
+      type: object
+      additionalProperties: false
+      required: [metric, value, eval, source]
+      properties:
+        metric: {type: string}
+        value: {type: [number, string]}
+        eval: {type: string, description: scene / shared eval the number was measured on}
+        source: {type: string, description: report path or commit}
+        trained_by_us: {type: boolean}
+x-support-levels:
+  L0: Documented. Backend card only, no code.
+  L1: Integrated. Adapter exists and passes contract tests (loads, act() returns correct shapes, sensor needs validate against a rig).
+  L2: Evaluated. Run on our scenes or shared evals with released weights or without training; numbers recorded.
+  L3: Trained by us. Trained and evaluated by us; result recorded in a report.

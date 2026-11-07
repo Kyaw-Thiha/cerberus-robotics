@@ -1,0 +1,17 @@
+# L0: documented only. Facts from docs/modular_stack_options.md; no adapter exists.
+# Only the LiDAR simulator is released upstream so far; training code is in progress.
+name: omni_perception
+slot: loco
+boundary: B1_LOCO
+paradigm: "E. raw LiDAR end-to-end (raw spatio-temporal point clouds)"
+architecture: fused
+required_sensors: [lidar]
+rate_hz: 50
+license: unknown
+checkpoint_url: unknown
+code_url: https://github.com/aCodeDog/OmniPerception
+support_level: L0
+target_support_level: L1
+evidence:
+  - {kind: file, ref: docs/modular_stack_options.md}
+results: []

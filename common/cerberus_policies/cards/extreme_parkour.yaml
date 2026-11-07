@@ -1,0 +1,16 @@
+# L0: documented only. Facts from docs/modular_stack_options.md; no adapter exists.
+name: extreme_parkour
+slot: loco
+boundary: B1_LOCO
+paradigm: "C. end-to-end depth -> joints (teacher-student depth distillation)"
+architecture: fused
+required_sensors: [front_camera]
+rate_hz: 50
+license: unknown
+checkpoint_url: unknown
+code_url: https://github.com/chengxuxin/extreme-parkour
+support_level: L0
+target_support_level: L0
+evidence:
+  - {kind: file, ref: docs/modular_stack_options.md}
+results: []

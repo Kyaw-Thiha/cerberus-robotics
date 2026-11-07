@@ -102,14 +102,19 @@ def evaluate(projected_gravity_rows, quat_rows, atol: float = PROJECTED_GRAVITY_
 
 
 def physics_summary(env_cfg) -> dict:
-    """What the env cfg resolved for physics, plus whether the legacy actuator path is selected."""
+    """What the env cfg resolved for physics, plus whether the legacy actuator path is selected.
+
+    ``load_env_cfg`` already replaced Lab 3.0's preset container with the preset it selected, so
+    ``sim.physics`` IS the backend here; the ``.default`` lookup only covers a config that has not been
+    through that resolution.
+    """
     physics = getattr(env_cfg.sim, "physics", None)
-    default = getattr(physics, "default", None) if physics is not None else None
+    backend = getattr(physics, "default", physics) if physics is not None else None
     return {
-        "physics_default_class": type(default).__name__ if default is not None else None,
-        "physics_default_mro": [c.__name__ for c in type(default).__mro__] if default is not None else [],
-        "is_physx": any("Physx" in c.__name__ or "PhysX" in c.__name__ for c in type(default).__mro__)
-        if default is not None
+        "physics_default_class": type(backend).__name__ if backend is not None else None,
+        "physics_default_mro": [c.__name__ for c in type(backend).__mro__] if backend is not None else [],
+        "is_physx": any("Physx" in c.__name__ or "PhysX" in c.__name__ for c in type(backend).__mro__)
+        if backend is not None
         else False,
         "use_newton_actuators": getattr(env_cfg.sim, "use_newton_actuators", None),
         "sim_dt": getattr(env_cfg.sim, "dt", None),
@@ -188,6 +193,14 @@ def main(argv: list[str] | None = None) -> int:
 
         env_cfg = load_env_cfg(args.task)
         env_cfg.scene.num_envs = args.num_envs
+        # Spawn yaw is randomised +-pi by default, which makes a yawed robot's root quaternion look
+        # "ambiguous" to an order check (two non-trivial components either way). With yaw pinned to
+        # zero the standing pose is identity, so the quaternion's scalar slot is unambiguous.
+        reset_base = getattr(env_cfg.events, "reset_base", None)
+        if reset_base is not None and getattr(reset_base, "params", None):
+            pose_range = reset_base.params.get("pose_range") or {}
+            pose_range["yaw"] = (0.0, 0.0)
+            reset_base.params["pose_range"] = pose_range
         env_cfg.sim.device = "cuda:0"
         physics = physics_summary(env_cfg)
         result["physics"] = physics

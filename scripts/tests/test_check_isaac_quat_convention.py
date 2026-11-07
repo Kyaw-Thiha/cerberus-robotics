@@ -96,6 +96,15 @@ class TestPhysicsSummary:
         assert out["use_newton_actuators"] is False
         assert out["decimation"] == 4
 
+    def test_resolved_physics_cfg_is_read_directly(self):
+        # load_env_cfg replaces Lab 3.0's preset container with the selected backend, so there is no
+        # `.default` to read any more -- the config's own physics object is the backend.
+        cfg = types.SimpleNamespace(sim=_sim(_PhysxCfg(), dt=0.005, use_newton_actuators=False), decimation=4)
+        cfg.sim.physics = _PhysxCfg()  # no .default attribute
+        out = probe.physics_summary(cfg)
+        assert out["is_physx"] is True
+        assert out["physics_default_class"] == "_PhysxCfg"
+
     def test_newton_class_fails_the_gate(self):
         cfg = types.SimpleNamespace(sim=_sim(_NewtonCfg(), dt=0.005, use_newton_actuators=True), decimation=4)
         out = probe.physics_summary(cfg)

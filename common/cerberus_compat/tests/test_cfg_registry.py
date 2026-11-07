@@ -41,6 +41,25 @@ class TestResolveEntryPoint:
             _mod.resolve_entry_point("collections:__name__")
 
 
+class _PresetContainer:
+    """Stands in for Lab 3.0's RoughPhysicsCfg: presets plus a resolved default."""
+
+    def __init__(self):
+        self.isaacsim_physx = "physx"
+        self.newton_mjwarp = "newton"
+        self.default = "physx"
+
+
+class _SimCfg:
+    def __init__(self, physics):
+        self.physics = physics
+
+
+class _EnvCfg:
+    def __init__(self, physics):
+        self.sim = _SimCfg(physics)
+
+
 class _FakeSpec:
     def __init__(self, kwargs):
         self.kwargs = kwargs
@@ -72,6 +91,24 @@ class TestLoadCfg:
 
     def test_accepts_a_registered_callable(self, fake_gym):
         assert _mod.load_env_cfg("Task-Obj-v0") == {"from": "object"}
+
+    def test_resolves_a_physics_preset_container(self, fake_gym, monkeypatch):
+        # Lab 3.0 GA hands out RoughPhysicsCfg; SimulationContext rejects it unless resolved.
+        env_cfg = _EnvCfg(_PresetContainer())
+        monkeypatch.setitem(sys.modules, "gymnasium", _FakeGym({"Task-Play-v0": {"env_cfg_entry_point": lambda: env_cfg}}))
+        loaded = _mod.load_env_cfg("Task-Play-v0")
+        assert loaded.sim.physics == "physx"
+
+    def test_leaves_a_concrete_physics_cfg_alone(self, fake_gym, monkeypatch):
+        env_cfg = _EnvCfg("already-concrete")
+        monkeypatch.setitem(sys.modules, "gymnasium", _FakeGym({"Task-Play-v0": {"env_cfg_entry_point": lambda: env_cfg}}))
+        assert _mod.load_env_cfg("Task-Play-v0").sim.physics == "already-concrete"
+
+    def test_tolerates_a_cfg_without_sim(self, fake_gym, monkeypatch):
+        monkeypatch.setitem(
+            sys.modules, "gymnasium", _FakeGym({"Task-Play-v0": {"env_cfg_entry_point": lambda: {"no": "sim"}}})
+        )
+        assert _mod.load_env_cfg("Task-Play-v0") == {"no": "sim"}
 
     def test_loads_agent_cfg_object(self, fake_gym):
         assert _mod.load_agent_cfg("Task-Obj-v0") is not None

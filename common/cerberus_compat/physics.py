@@ -43,3 +43,25 @@ def pin_physx(sim_cfg: Any) -> dict[str, Any]:
         sim_cfg.use_newton_actuators = False
         actuators = False
     return {"lab3": chosen is not None, "physics_preset": chosen, "use_newton_actuators": actuators}
+
+
+def resolve_physics_preset(sim_cfg: Any) -> dict:
+    """Replace a task's physics *preset container* with the preset it selected.
+
+    Lab 3.0 GA's velocity tasks declare physics as a ``PresetCfg`` subclass
+    (``RoughPhysicsCfg``) holding ``isaacsim_physx`` / ``newton_mjwarp`` / ... plus ``default``. Hydra
+    resolves that container into a concrete backend when it builds a config from the command line.
+    Scripts that instantiate a config directly (the stack probe, the checkpoint exporter, the
+    adversary trainer, the gate) do not go through Hydra, and ``SimulationContext`` rejects the
+    container: "SimulationCfg.physics must be a concrete PhysicsCfg, got RoughPhysicsCfg".
+
+    ``pin_physx`` already chooses the backend by writing ``physics.default``; this applies that
+    choice. Idempotent: a concrete config has no ``default`` attribute and is left alone.
+    """
+    physics = getattr(sim_cfg, "physics", None)
+    default = getattr(physics, "default", None)
+    if default is None:
+        return {"resolved": False, "physics": type(physics).__name__ if physics is not None else None}
+    preset_container = type(physics).__name__
+    sim_cfg.physics = default
+    return {"resolved": True, "preset_container": preset_container, "physics": type(default).__name__}

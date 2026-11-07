@@ -16,6 +16,8 @@ from __future__ import annotations
 
 import importlib
 
+from common.cerberus_compat.physics import resolve_physics_preset
+
 
 def resolve_entry_point(entry_point: str):
     """``"pkg.module:ClassName"`` -> the instantiated object."""
@@ -57,8 +59,17 @@ def load_cfg(task: str, key: str = "env_cfg_entry_point"):
 
 
 def load_env_cfg(task: str):
-    """The task's environment config, with the task's own Play/Train variant resolved already."""
-    return load_cfg(task, "env_cfg_entry_point")
+    """The task's environment config, ready to pass to ``gym.make`` outside Hydra.
+
+    Also resolves the physics preset container (``RoughPhysicsCfg`` -> the backend it selected):
+    Hydra does that when it builds a config from the command line, but ``SimulationContext`` rejects
+    the unresolved container, so a script that instantiates the cfg directly must resolve it first.
+    """
+    cfg = load_cfg(task, "env_cfg_entry_point")
+    sim = getattr(cfg, "sim", None)
+    if sim is not None:
+        resolve_physics_preset(sim)
+    return cfg
 
 
 def load_agent_cfg(task: str):

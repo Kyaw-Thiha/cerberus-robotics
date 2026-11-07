@@ -124,6 +124,9 @@ parser.add_argument(
 cli_args.add_rsl_rl_args(parser)
 add_launcher_args(parser)
 args_cli, hydra_args = parser.parse_known_args()
+# The v6 image family dies at startup when cameras are disabled (docs/runpod.md: "every launch without
+# it died within ~1 s at startup"). Nothing here renders, but the flag has to be on.
+args_cli.enable_cameras = True
 sys.argv = [sys.argv[0]] + hydra_args
 
 app_launcher = AppLauncher(args_cli)

@@ -160,6 +160,13 @@ def main(argv: list[str] | None = None) -> int:
         help="Existing env report to fold the runtime findings into (written by scripts/env_report.py).",
     )
     parser.add_argument("--headless", action="store_true", default=True)
+    parser.add_argument(
+        "--enable_cameras",
+        action="store_true",
+        default=True,
+        help="Must stay on for the v6 image family: launches with cameras disabled die at startup "
+        "(docs/runpod.md). No camera is actually used here.",
+    )
     args = parser.parse_args(argv)
 
     import gymnasium as gym

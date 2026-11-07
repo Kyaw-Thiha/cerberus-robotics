@@ -64,6 +64,12 @@ def parse_args(argv=None):
     parser.add_argument("--standard_tolerance_pp", type=float, default=10.0)
     parser.add_argument("--out_dir", default=None)
     parser.add_argument("--headless", action="store_true", default=True)
+    parser.add_argument(
+        "--enable_cameras",
+        action="store_true",
+        default=True,
+        help="Keep cameras enabled: on the v6 images a launch with them disabled dies at startup.",
+    )
     return parser.parse_args(argv)
 
 

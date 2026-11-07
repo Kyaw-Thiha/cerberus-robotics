@@ -43,6 +43,7 @@ source "$REPO_ROOT/scripts/pod_isaac_lib.sh"
 FAILS=0
 record() { echo "$1 $2 $3" | tee -a "$SUMMARY"; [[ "$2" == PASS || "$2" == SKIP ]] || FAILS=$((FAILS + 1)); }
 CAP_S="$(python3 -c "print(int(float('$CAP_H') * 3600))")"
+_stamped_commit() { cat "$REPO_ROOT/.sync_commit" 2>/dev/null || echo unknown; }
 say "report dir: $REPORT_DIR  cap: ${CAP_H}h (${CAP_S}s)  iterations=$ITERATIONS envs=$NUM_ENVS seed=$SEED"
 
 # ---- train -------------------------------------------------------------------------------------
@@ -89,7 +90,8 @@ fi
 if [[ -n "$RUN_DIR" ]]; then
     say "finalizing candidate from $RUN_DIR"
     run_isaac finalize 1800 2 -- "$LAB" -p scripts/finalize_ga_checkpoint.py \
-        --run-dir "$RUN_DIR" --name go2_locomotion_ga_v1_candidate --physics isaacsim_physx
+        --run-dir "$RUN_DIR" --name go2_locomotion_ga_v1_candidate --physics isaacsim_physx \
+        --git-hash "${CERBERUS_SYNC_COMMIT:-$(_stamped_commit)}"
     rc=$?
     CAND="policy/locomotion/checkpoints/go2_locomotion_ga_v1_candidate"
     if [[ -f "$CAND.pt" && -f "$CAND.onnx" && -f "$CAND.meta.json" ]]; then

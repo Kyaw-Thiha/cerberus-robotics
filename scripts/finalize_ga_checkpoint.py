@@ -36,6 +36,15 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 CHECKPOINTS_DIR = _REPO_ROOT / "policy" / "locomotion" / "checkpoints"
+SYNC_COMMIT_FILE = _REPO_ROOT / ".sync_commit"
+
+
+def _stamped_commit() -> str | None:
+    """Commit recorded at sync time (the pod checkout has no .git to ask)."""
+    try:
+        return SYNC_COMMIT_FILE.read_text().strip() or None
+    except OSError:
+        return None
 
 
 def _load_pure_module(relative_path: str, name: str):
@@ -96,6 +105,12 @@ def main(argv: list[str] | None = None) -> int:
     )
     parser.add_argument("--env-report", type=Path, default=_REPO_ROOT / "outputs" / "env_report.json")
     parser.add_argument("--physics", default=None, help="Resolved physics backend, e.g. isaacsim_physx.")
+    parser.add_argument(
+        "--git-hash",
+        default=None,
+        help="Commit the code was synced from. Needed on a pod, where the checkout has no .git; the "
+        "drivers pass CERBERUS_SYNC_COMMIT for this.",
+    )
     parser.add_argument("--iterations", type=int, default=None, help="Default: read from params/agent.yaml.")
     parser.add_argument("--seed", type=int, default=None, help="Default: read from params/agent.yaml.")
     parser.add_argument("--num-envs", type=int, default=None, help="Default: read from params/env.yaml.")
@@ -208,7 +223,7 @@ def main(argv: list[str] | None = None) -> int:
     meta = cm.build_meta(
         checkpoint=str(target_pt),
         onnx=str(target_onnx) if target_onnx.exists() else None,
-        git_hash_value=cm.git_hash(_REPO_ROOT),
+        git_hash_value=args.git_hash or cm.git_hash(_REPO_ROOT) or _stamped_commit(),
         task_id=args.task,
         physics_backend=physics,
         iterations=int(iterations),

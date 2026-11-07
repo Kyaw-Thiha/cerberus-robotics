@@ -62,7 +62,7 @@ fi
 
 # ---- 2. quat convention + resolved physics -----------------------------------------------------
 if skipped probe; then record probe SKIP -; else
-    run_isaac probe 1200 2 -- "$LAB" -p scripts/check_isaac_quat_convention.py \
+    run_isaac probe 900 4 -- "$LAB" -p scripts/check_isaac_quat_convention.py \
         --task Isaac-Velocity-Rough-Unitree-Go2-Cerberus-Play-v0 \
         --merge-into outputs/env_report.json \
         --output "$REPORT_DIR/quat_convention.json"

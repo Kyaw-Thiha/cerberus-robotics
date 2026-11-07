@@ -98,7 +98,7 @@ fi
 # ---- evaluate the new candidate on the same sweep as the September reference --------------------
 if [[ -f policy/locomotion/checkpoints/go2_locomotion_ga_v1_candidate.pt ]]; then
     say "evaluating candidate"
-    run_isaac eval 5400 3 -- "$LAB" -p policy/locomotion/eval/push_recovery_eval.py \
+    run_isaac eval 5400 4 -- "$LAB" -p policy/locomotion/eval/push_recovery_eval.py \
         --platform go2 --terrain rough \
         --checkpoint policy/locomotion/checkpoints/go2_locomotion_ga_v1_candidate.pt \
         --headless \

@@ -307,6 +307,11 @@ def build_attack_env(
     import policy.locomotion
     from common.cerberus_compat.cfg_registry import load_env_cfg
 
+    if play and "Play" not in task:
+        print(
+            f"[attack_env] WARNING: play=True but task {task!r} is not a Play variant; training "
+            "randomisation and pushes will be active, so a measured failure may not be the adversary's."
+        )
     env_cfg = load_env_cfg(task)
     env_cfg.scene.num_envs = num_envs
     for key, value in (env_cfg_overrides or {}).items():

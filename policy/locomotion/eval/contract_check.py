@@ -186,6 +186,15 @@ def _ranges_of(commands_cfg, name: str = "base_velocity") -> dict:
     return out
 
 
+def _unset(value):
+    """``dataclasses.MISSING`` means "not set", which the reference yaml spells as ``null``."""
+    try:
+        from dataclasses import MISSING
+    except ImportError:  # pragma: no cover
+        return value
+    return None if isinstance(value, type(MISSING)) or value is MISSING else value
+
+
 def live_contract(env_cfg, agent_cfg, env=None) -> dict:
     """Extract the same contract fields from freshly built configs.
 
@@ -211,13 +220,16 @@ def live_contract(env_cfg, agent_cfg, env=None) -> dict:
     commands_cfg = getattr(env_cfg, "commands", None)
     command_cfg = getattr(commands_cfg, "base_velocity", None) if commands_cfg is not None else None
 
-    policy_cfg = getattr(agent_cfg, "policy", None)
-    actor_cfg = getattr(agent_cfg, "actor", None)  # rsl-rl >= 4 migrated layout
-    hidden = (
-        getattr(actor_cfg, "hidden_dims", None)
-        if actor_cfg is not None and not _is_missing(actor_cfg)
-        else getattr(policy_cfg, "actor_hidden_dims", None)
-    )
+    # rsl-rl >= 4 (the GA stack) splits the old `policy` block into `actor` / `critic`; the
+    # September reference files still have the `policy` shape. Read whichever exists.
+    policy_cfg = _unset(getattr(agent_cfg, "policy", None))
+    actor_cfg = _unset(getattr(agent_cfg, "actor", None))
+    critic_cfg = _unset(getattr(agent_cfg, "critic", None))
+    hidden = None
+    if actor_cfg is not None:
+        hidden = _unset(getattr(actor_cfg, "hidden_dims", None))
+    elif policy_cfg is not None:
+        hidden = _unset(getattr(policy_cfg, "actor_hidden_dims", None))
     algorithm = getattr(agent_cfg, "algorithm", None)
 
     return {
@@ -241,11 +253,13 @@ def live_contract(env_cfg, agent_cfg, env=None) -> dict:
         "num_envs": getattr(getattr(env_cfg, "scene", None), "num_envs", None),
         "max_iterations": getattr(agent_cfg, "max_iterations", None),
         "num_steps_per_env": getattr(agent_cfg, "num_steps_per_env", None),
-        "empirical_normalization": getattr(agent_cfg, "empirical_normalization", None),
-        "actor_obs_normalization": getattr(policy_cfg, "actor_obs_normalization", None),
-        "critic_obs_normalization": getattr(policy_cfg, "critic_obs_normalization", None),
+        "empirical_normalization": _unset(getattr(agent_cfg, "empirical_normalization", None)),
+        "actor_obs_normalization": _normalization_flag(actor_cfg, policy_cfg, "actor"),
+        "critic_obs_normalization": _normalization_flag(critic_cfg, policy_cfg, "critic"),
         "actor_hidden_dims": list(hidden) if hidden else [],
-        "actor_class": getattr(policy_cfg, "class_name", None),
+        "actor_class": _unset(getattr(actor_cfg, "class_name", None))
+        if actor_cfg is not None
+        else _unset(getattr(policy_cfg, "class_name", None)),
         "algorithm_class": getattr(algorithm, "class_name", None),
         "learning_rate": getattr(algorithm, "learning_rate", None),
         "gamma": getattr(algorithm, "gamma", None),
@@ -255,6 +269,17 @@ def live_contract(env_cfg, agent_cfg, env=None) -> dict:
         "entropy_coef": getattr(algorithm, "entropy_coef", None),
         "desired_kl": getattr(algorithm, "desired_kl", None),
     }
+
+
+def _normalization_flag(model_cfg, policy_cfg, which: str):
+    """Observation-normalisation flag, in either config layout (``obs_normalization`` / ``*_obs_normalization``)."""
+    if model_cfg is not None:
+        value = _unset(getattr(model_cfg, "obs_normalization", None))
+        if value is not None:
+            return value
+    if policy_cfg is not None:
+        return _unset(getattr(policy_cfg, f"{which}_obs_normalization", None))
+    return None
 
 
 def _is_missing(value) -> bool:

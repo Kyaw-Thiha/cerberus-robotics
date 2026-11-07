@@ -9,6 +9,7 @@ Reference-run tests skip when `policy/locomotion/runs/<run>/params/` is absent (
 """
 
 import importlib.util
+import math
 from pathlib import Path
 
 import pytest
@@ -107,6 +108,111 @@ class TestSeptemberReference:
     def test_identical_live_contract_passes(self):
         ref = _mod.load_reference(SEPTEMBER_RUN)
         assert _mod.verdict(_mod.compare(ref, dict(ref))) == "CONTRACT OK"
+
+
+class _ObsManager:
+    """The bits of Isaac Lab's ObservationManager the contract check reads."""
+
+    def __init__(self, names, dims):
+        self.active_terms = {"policy": list(names)}
+        self.group_obs_term_dim = {"policy": [(d,) for d in dims]}
+
+
+class _EnvWithManager:
+    def __init__(self, names, dims):
+        self.observation_manager = _ObsManager(names, dims)
+
+
+class _ModelCfg:
+    def __init__(self, **kw):
+        self.__dict__.update(kw)
+
+
+class _AgentCfg:
+    """Stands in for an rsl-rl >= 4 runner cfg (actor/critic split, no `policy` block)."""
+
+    def __init__(self, **kw):
+        self.__dict__.update(kw)
+
+
+class TestLiveContractLayouts:
+    def _env_cfg(self):
+        from types import SimpleNamespace
+
+        ranges = SimpleNamespace(
+            lin_vel_x=(-1.0, 1.0),
+            lin_vel_y=(-1.0, 1.0),
+            ang_vel_z=(-1.0, 1.0),
+            heading=(-math.pi, math.pi),
+        )
+        return SimpleNamespace(
+            observations=SimpleNamespace(
+                policy=SimpleNamespace(
+                    base_lin_vel=object(), base_ang_vel=object(), projected_gravity=object(),
+                    velocity_commands=object(), joint_pos=object(), joint_vel=object(), actions=object(),
+                    enable_corruption=False,
+                )
+            ),
+            actions=SimpleNamespace(joint_pos=SimpleNamespace(scale=0.25, offset=0.0, use_default_offset=True)),
+            scene=SimpleNamespace(num_envs=4096, robot=None),
+            decimation=4,
+            sim=SimpleNamespace(dt=0.005),
+            commands=SimpleNamespace(base_velocity=SimpleNamespace(ranges=ranges, rel_standing_envs=0.02,
+                                                                    resampling_time_range=(10.0, 10.0))),
+        )
+
+    def test_reads_the_split_actor_critic_layout(self):
+        from dataclasses import MISSING
+
+        agent = _AgentCfg(
+            seed=42,
+            max_iterations=1500,
+            num_steps_per_env=24,
+            empirical_normalization=MISSING,   # unset on GA == null in the reference yaml
+            policy=MISSING,                    # rsl-rl >= 4 has no `policy` block
+            actor=_ModelCfg(hidden_dims=(512, 256, 128), obs_normalization=False, class_name="MLP"),
+            critic=_ModelCfg(obs_normalization=False),
+            algorithm=_ModelCfg(class_name="PPO", learning_rate=0.001, gamma=0.99, lam=0.95,
+                                num_learning_epochs=5, num_mini_batches=4, entropy_coef=0.01, desired_kl=0.01),
+        )
+        live = _mod.live_contract(self._env_cfg(), agent)
+        assert live["empirical_normalization"] is None       # MISSING must not leak into the comparison
+        assert live["actor_hidden_dims"] == [512, 256, 128]
+        assert live["actor_obs_normalization"] is False
+        assert live["critic_obs_normalization"] is False
+        assert live["actor_class"] == "MLP"
+        assert live["action_scale"] == 0.25
+        assert live["step_dt"] == pytest.approx(0.02)
+        assert live["command_ranges"]["lin_vel_x"] == (-1.0, 1.0)
+
+    def test_split_layout_compares_clean_against_the_reference_shape(self):
+        from dataclasses import MISSING
+
+        agent = _AgentCfg(
+            seed=42, max_iterations=1500, num_steps_per_env=24,
+            empirical_normalization=MISSING, policy=MISSING,
+            actor=_ModelCfg(hidden_dims=(512, 256, 128), obs_normalization=False, class_name="ActorCritic"),
+            critic=_ModelCfg(obs_normalization=False),
+            algorithm=_ModelCfg(class_name="PPO", learning_rate=0.001, gamma=0.99, lam=0.95,
+                                num_learning_epochs=5, num_mini_batches=4, entropy_coef=0.01, desired_kl=0.01),
+        )
+        env = _EnvWithManager(
+            ["base_lin_vel", "base_ang_vel", "projected_gravity", "velocity_commands"],
+            [3, 3, 3, 3],
+        )
+        live = _mod.live_contract(self._env_cfg(), agent, env=env)
+        ref = make_reference(
+            obs_term_names=list(live["obs_term_names"]),
+            command_ranges={
+                "lin_vel_x": (-1.0, 1.0),
+                "lin_vel_y": (-1.0, 1.0),
+                "ang_vel_z": (-1.0, 1.0),
+                "heading": (-3.141592653589793, 3.141592653589793),
+            },
+        )
+        rows = _mod.compare(ref, live)
+        # The interface fields the eval depends on must all match; run metadata may differ.
+        assert _mod.verdict(rows) == "CONTRACT OK", _mod.mismatch_summary(rows)
 
 
 class TestCompareCatches:

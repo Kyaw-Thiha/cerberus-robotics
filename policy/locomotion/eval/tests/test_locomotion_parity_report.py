@@ -5,8 +5,8 @@ checkpoint may be called parity-equivalent, so each way of failing one is exerci
 where every cell is individually within tolerance but the mean is not.
 """
 
-import importlib.util
 import csv
+import importlib.util
 from pathlib import Path
 
 import pytest

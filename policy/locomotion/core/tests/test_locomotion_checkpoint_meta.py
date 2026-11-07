@@ -22,22 +22,22 @@ SEPTEMBER_EVENTS = REPO_ROOT / "policy" / "locomotion" / "runs" / "2026-09-08_19
 
 
 def make_meta(**overrides):
-    base = dict(
-        checkpoint="go2_locomotion_ga_v1_candidate.pt",
-        task_id="Isaac-Velocity-Rough-Unitree-Go2-Cerberus-v0",
-        physics_backend="isaacsim_physx",
-        iterations=1500,
-        seed=42,
-        num_envs=4096,
-        wall_clock_s=5306.8,
-        final_reward=19.78,
-        config_hash_value="0123456789abcdef",
-        git_hash_value="deadbeef",
-        onnx="go2_locomotion_ga_v1_candidate.onnx",
-        env_report="docs/reports/env_report_2026-11-07.json",
-        terrain_levels={"mean": 5.9, "max": 9, "frac_at_max": 0.147},
-        run_dir="policy/locomotion/checkpoints/unitree_go2_rough/2026-11-07_10-00-00",
-    )
+    base = {
+        "checkpoint": "go2_locomotion_ga_v1_candidate.pt",
+        "task_id": "Isaac-Velocity-Rough-Unitree-Go2-Cerberus-v0",
+        "physics_backend": "isaacsim_physx",
+        "iterations": 1500,
+        "seed": 42,
+        "num_envs": 4096,
+        "wall_clock_s": 5306.8,
+        "final_reward": 19.78,
+        "config_hash_value": "0123456789abcdef",
+        "git_hash_value": "deadbeef",
+        "onnx": "go2_locomotion_ga_v1_candidate.onnx",
+        "env_report": "docs/reports/env_report_2026-11-07.json",
+        "terrain_levels": {"mean": 5.9, "max": 9, "frac_at_max": 0.147},
+        "run_dir": "policy/locomotion/checkpoints/unitree_go2_rough/2026-11-07_10-00-00",
+    }
     base.update(overrides)
     return _mod.build_meta(**base)
 

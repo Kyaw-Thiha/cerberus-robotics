@@ -187,7 +187,8 @@ class AttackEnvWrapper:
         return {"policy": self.hooks.observations()}
 
     def reset(self):
-        obs = self.env.reset()
+        outcome = self.env.reset()
+        obs = outcome[0] if isinstance(outcome, tuple) else outcome  # gymnasium reset -> (obs, info)
         self._force_state = [[0.0, 0.0] for _ in range(self.num_envs)]
         self._command_state = [[0.0, 0.0] for _ in range(self.num_envs)]
         self._last_obs = obs
@@ -246,12 +247,22 @@ class AttackEnvWrapper:
         self._last_obs = obs
         with torch.no_grad():
             actions = self.policy(self.policy_input(obs))
-            obs, _, dones, extras = self.env.step(actions)
-        time_outs = extras.get("time_outs") if isinstance(extras, dict) else None
+            outcome = self.env.step(actions)
+        # gymnasium 1.x returns (obs, reward, terminated, truncated, info); older stacks return four
+        # values. Normalise to dones + a truncated mask, which is what "did it fall?" needs.
+        if len(outcome) == 5:
+            obs, _, terminated, truncated, info = outcome
+            dones = terminated | truncated
+            time_outs = truncated
+        else:
+            obs, _, dones, info = outcome
+            info = info or {}
+            time_outs = info.get("time_outs")
         alive = ~(dones.bool() & ~time_outs.bool()) if time_outs is not None else ~dones.bool()
         state = self.hooks.read_state(self.layer_inf_norms_fn() if self.layer_inf_norms_fn else None)
         reward = self._reward(state, alive)
-        extras = dict(extras or {})
+        extras = dict(info or {})
+        extras["time_outs"] = time_outs
         extras["attack"] = attack_math.modality_evidence(
             force.mean(dim=0).detach().cpu().tolist(),
             command.mean(dim=0).detach().cpu().tolist(),

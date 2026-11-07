@@ -319,17 +319,38 @@ def find_minimum_inducing(
     }
 
 
-def gate_decision(minimum_inducing_score, trained_range_score: float = 1.0) -> dict:
+def gate_decision(
+    minimum_inducing_score, trained_range_score: float = 1.0, searched_max_scale: float | None = None
+) -> dict:
     """PASS iff the minimum inducing magnitude strictly exceeds the trained range.
 
     Strictly: a boundary exactly at the trained range means the attack works at the strength the
     policy was trained and evaluated against, which is the failure the gate exists to catch.
+
+    ``minimum_inducing_score`` of None means the adversary never broke the policy at any scale that was
+    tried. That is not automatically a failure -- if the largest tried scale exceeds the trained range,
+    the boundary is above it, which is exactly what a pass requires. It is reported as a lower bound so
+    the report cannot present a search limit as a measured boundary.
     """
     if minimum_inducing_score is None:
+        if searched_max_scale is not None and searched_max_scale > trained_range_score:
+            return {
+                "verdict": "PASS",
+                "reason": (
+                    f"no fall induced up to {searched_max_scale:g}x the trained range, so the boundary lies "
+                    "above it (lower bound, not a measured boundary)"
+                ),
+                "minimum_inducing_score": None,
+                "searched_max_scale": searched_max_scale,
+                "boundary_is_lower_bound": True,
+                "trained_range_score": trained_range_score,
+                "margin": None,
+            }
         return {
             "verdict": "FAIL",
-            "reason": "no fall induced at any allowed scale: no adversarial boundary to compare",
+            "reason": "no fall induced, and the search never exceeded the trained range: inconclusive",
             "trained_range_score": trained_range_score,
+            "searched_max_scale": searched_max_scale,
         }
     value = float(minimum_inducing_score)
     passed = value > trained_range_score

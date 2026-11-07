@@ -251,10 +251,21 @@ class TestGateDecision:
     def test_below_trained_range_fails(self):
         assert _mod.gate_decision(0.8)["verdict"] == "FAIL"
 
-    def test_no_boundary_at_all_fails(self):
+    def test_no_boundary_below_the_search_limit_is_a_pass_as_a_lower_bound(self):
+        # The adversary failed to break the policy even at 2x the trained range: the boundary is above
+        # it, which is what a pass requires -- but it must be labelled a lower bound, not a measurement.
+        out = _mod.gate_decision(None, searched_max_scale=2.0)
+        assert out["verdict"] == "PASS"
+        assert out["boundary_is_lower_bound"] is True
+        assert "lower bound" in out["reason"]
+
+    def test_no_boundary_and_no_search_limit_is_inconclusive(self):
         out = _mod.gate_decision(None)
         assert out["verdict"] == "FAIL"
-        assert "no fall induced" in out["reason"]
+        assert "inconclusive" in out["reason"]
+
+    def test_search_limit_at_the_trained_range_does_not_pass(self):
+        assert _mod.gate_decision(None, searched_max_scale=1.0)["verdict"] == "FAIL"
 
     def test_reports_relative_margin(self):
         out = _mod.gate_decision(1.5)

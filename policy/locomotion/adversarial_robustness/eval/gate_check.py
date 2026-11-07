@@ -193,7 +193,9 @@ def _run(args) -> int:
     attack_env.assert_policy_frozen(policy, frozen_snapshot)
     summary = attack_math.summarise_modalities(results)
     combined = results.get("combined", {})
-    decision = attack_math.gate_decision(combined.get("minimum_score"), trained_range_score=1.0)
+    decision = attack_math.gate_decision(
+        combined.get("minimum_score"), trained_range_score=1.0, searched_max_scale=args.max_scale
+    )
 
     out_dir = Path(args.out_dir) if args.out_dir else DEFAULT_OUT_DIR / datetime.now(timezone.utc).strftime("%Y-%m-%d_%H-%M-%S")
     out_dir.mkdir(parents=True, exist_ok=True)

@@ -40,8 +40,8 @@ AST-scan test enforces this. Isaaclab/arena imports live inside method bodies.
 Status (2026-10-05, overnight run): both backends are implemented
 (`common/cerberus_worlds/backends/arena_backend.py`, `plain_usd_backend.py`). Arena embodiments live in
 `common/cerberus_worlds/arena_assets/go2_embodiment.py` (legs-only Go2) and `go2_arx5_embodiment.py`
-(fixed-base Go2+ARX5 with a gripper). Nothing is committed yet; results are in
-`data/reports/overnight/NOTES.md`.
+(fixed-base Go2+ARX5 with a gripper). Both are committed (`7653b8c`); the overnight run's results are in
+`data/reports/overnight/NOTES.md` (local, gitignored).
 
 | Backend | Wraps | Use |
 |---|---|---|
@@ -52,7 +52,7 @@ Status (2026-10-05, overnight run): both backends are implemented
 
 | Source | Content | License | Role |
 |---|---|---|---|
-| GRScenes-100 | 69 home + 30 commercial plain-USD scenes | CC BY-NC-SA 4.0 + access gate | Phase 1 navigation, secondary missions |
+| GRScenes-100 | 69 home + 30 commercial plain-USD scenes | CC BY-NC-SA 4.0 (HF `gated: false`, no approval step) | Phase 1 navigation, secondary missions |
 | Lightwheel RoboCasa/LIBERO via Arena | 100 kitchen scenes (10 layouts × 10 styles) | Apache-2.0 | Phase 2 manipulation |
 | InternScenes | ~40k scenes, Real2Sim only released, Sim 4.1 | CC BY-NC-SA 4.0 | Watch item, not planned |
 
@@ -67,6 +67,10 @@ Measured results (Lab v3.0.0-EA and the pinned Sim 6.1 stack, 16 envs unless not
 - Lightwheel kitchens via Arena: Gate B passes. Pinned stack 1:1 at 98 ms/step (57.19 MB SDK download), 6:8 at 102 ms/step
   (112.19 MB); EA 1:1 in 72.8 s. The Lightwheel SDK works anonymously, no account needed for the tested assets.
 - Fixed-base Go2+ARX5 in a Lightwheel kitchen (Arena mimic smoke): 16 envs pass, arm drift 7.6e-5 rad (gravity disabled on the fixed-base robot).
+- Arena `stock` scene on the GA stack (2026-11-06): the Arena spike reported `passed: true` while the robot had sunk through the
+  floor (`robot_z_min_max [-0.73,-0.48]`). The standing check added the same day makes that a FAIL, so the `stock`-scene Arena standing
+  check currently fails and the smoke default is `plain_usd` (`--backend plain_usd --scene stock`). See "The standing check" in
+  `arena_integration_log.md`.
 
 GRScenes data in R2: private prefix `worlds/grscenes/home/` holds scene `MVUHLWYKTKJ5EAABAAAAACY8_usd`
 (HF revision `4760b9031881c985e3582075cb2d8dbde1530a68`, 1052 objects, 1,406,493,050 B, manifest sha256
@@ -162,7 +166,8 @@ Answered (2026-10-05):
   themselves (`preprocess.py`) were not run; unverified.
 
 Still open:
-- GRScenes access-gate approval process and timing (the home zip was obtained, but the gate process itself is not documented here).
+- GRScenes access: not open. `arena_integration_log.md` records that the Hugging Face repo `InternRobotics/GRScenes` reports
+  `gated: false` (checked via the API without a token), so there is no approval step; the home zip was obtained.
 - Scene admission: **18 of 69 home scenes have a `pass` row, 0 failures** (8 on 2026-10-07; a 10-scene batch finished
   2026-10-12T01:35Z, where one scene crashed on its first attempt and passed on one retry -- a flake, see the log).
   The remaining 51 homes and all 30 commercial scenes are unswept. Measured cost on an A5000: **10-26 min per scene**,

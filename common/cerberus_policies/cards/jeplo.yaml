@@ -1,0 +1,16 @@
+# L0: documented only. Facts from docs/modular_stack_options.md; no adapter exists.
+name: jeplo
+slot: loco
+boundary: B1_LOCO
+paradigm: "D'. latent world model (JEPA, non-reconstructive) on raw LiDAR (Livox Mid-360)"
+architecture: fused
+required_sensors: [lidar]
+rate_hz: 50
+license: GPLv3
+checkpoint_url: unknown
+code_url: https://github.com/ASIG-X/JEPLO
+support_level: L0
+target_support_level: L2
+evidence:
+  - {kind: file, ref: docs/modular_stack_options.md}
+results: []

@@ -1,0 +1,16 @@
+# L0: documented only. Facts from docs/modular_stack_options.md; no adapter exists.
+name: dawn
+slot: loco
+boundary: B1_LOCO
+paradigm: "D. latent world model (reconstructive, WMP-style RSSM) on raw noisy depth"
+architecture: fused
+required_sensors: [front_camera]
+rate_hz: 50
+license: MIT
+checkpoint_url: unknown
+code_url: https://github.com/DocyNoah/dawn-parkour
+support_level: L0
+target_support_level: L1
+evidence:
+  - {kind: file, ref: docs/modular_stack_options.md}
+results: []

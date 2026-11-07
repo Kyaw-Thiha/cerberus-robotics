@@ -34,7 +34,7 @@ already-pulled-down logs) is local.
   bring-up and any live/interactive debugging session — it removes setup
   friction, not compute cost (it brokers the same underlying GPU market as
   direct providers, so it isn't inherently cheaper).
-- **Direct provider (Lambda / RunPod / vast.ai) + own `docker/remote/Dockerfile`**
+- **Direct provider (Lambda / RunPod / vast.ai) + own Dockerfile (active stack: `docker/remote_v6/Dockerfile`, Sim 6.2 / Lab 3.0 GA; `docker/remote/Dockerfile` is the legacy Sim 5.1 / Lab 2.3.2 image)**
   for unattended, long, parallel-env training runs (the expensive Phase 0/1
   PPO jobs). No streaming needed for headless training, so shop whichever
   provider is cheapest that week — the Dockerfile is reusable across all

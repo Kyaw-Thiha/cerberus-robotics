@@ -50,6 +50,24 @@ say() { echo "[p3 $(date -u +%H:%M:%S)] $*"; }
 source "$REPO_ROOT/scripts/pod_isaac_lib.sh"
 FAILS=0
 record() { echo "$1 $2 $3" | tee -a "$SUMMARY"; [[ "$2" == PASS || "$2" == SKIP ]] || FAILS=$((FAILS + 1)); }
+
+# Upload as soon as a durable artifact exists, not only at the end: the last long run lost its adversary
+# checkpoints when the pod was terminated mid-gate, and R2 was available the whole time.
+upload_path() {
+    local src="$1" dest="$2"
+    [[ $UPLOAD -eq 1 ]] || return 0
+    if [[ -z "${R2_ACCOUNT_ID:-}" || -z "${R2_ACCESS_KEY_ID:-}" || -z "${R2_SECRET_ACCESS_KEY:-}" || -z "${R2_BUCKET:-}" ]]; then
+        say "WARNING: --upload given but R2_* vars are incomplete; $(basename "$src") stays local"
+        return 1
+    fi
+    RCLONE_CONFIG_CERBERUS_R2_TYPE=s3 RCLONE_CONFIG_CERBERUS_R2_PROVIDER=Cloudflare \
+    RCLONE_CONFIG_CERBERUS_R2_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID" \
+    RCLONE_CONFIG_CERBERUS_R2_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY" \
+    RCLONE_CONFIG_CERBERUS_R2_ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com" \
+    RCLONE_CONFIG_CERBERUS_R2_ACL=private RCLONE_CONFIG_CERBERUS_R2_NO_CHECK_BUCKET=true \
+        rclone copy "$src" "cerberus_r2:${R2_BUCKET}/$dest" --min-size 1B \
+        && say "uploaded $(basename "$src") -> $dest" || say "WARNING: upload of $(basename "$src") failed"
+}
 CAP_S="$(python3 -c "print(int(float('$CAP_H') * 3600))")"
 
 GATE="policy/locomotion/adversarial_robustness/eval/gate_check.py"
@@ -97,6 +115,7 @@ else
     if [[ -n "$ADV_MODEL" ]]; then
         cp "$REPORT_DIR/train.log" "$REPORT_DIR/" 2>/dev/null
         cp "$ADV_DIR/train_manifest.json" "$REPORT_DIR/" 2>/dev/null
+        upload_path "$ADV_DIR" "migration/adversary_$(basename "$ADV_DIR")"
         record train PASS "$ADV_DIR (exit=$rc)"
     else
         record train FAIL "exit=$rc no checkpoint in $ADV_DIR"
@@ -150,17 +169,7 @@ else
         || record promote SKIP "no final checkpoint created (correct on FAIL)"
 fi
 
-if [[ $UPLOAD -eq 1 ]]; then
-    if [[ -n "${R2_ACCOUNT_ID:-}" && -n "${R2_ACCESS_KEY_ID:-}" && -n "${R2_SECRET_ACCESS_KEY:-}" && -n "${R2_BUCKET:-}" ]]; then
-        RCLONE_CONFIG_CERBERUS_R2_TYPE=s3 RCLONE_CONFIG_CERBERUS_R2_PROVIDER=Cloudflare \
-        RCLONE_CONFIG_CERBERUS_R2_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID" \
-        RCLONE_CONFIG_CERBERUS_R2_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY" \
-        RCLONE_CONFIG_CERBERUS_R2_ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com" \
-        RCLONE_CONFIG_CERBERUS_R2_ACL=private RCLONE_CONFIG_CERBERUS_R2_NO_CHECK_BUCKET=true \
-            rclone copy "$REPORT_DIR" "cerberus_r2:${R2_BUCKET}/migration/adversarial_gate_$STAMP" --min-size 1B \
-            && say "uploaded -> migration/adversarial_gate_$STAMP/" || say "WARNING: upload failed"
-    else say "WARNING: --upload without R2_* vars"; fi
-fi
+upload_path "$REPORT_DIR" "migration/adversarial_gate_$STAMP"
 
 say "done: $FAILS failed step(s). Summary: $SUMMARY"
 exit "$FAILS"

@@ -20,6 +20,8 @@ Per scene, in order: fetch from R2 → `plain_usd` preprocess (GRScenes are cent
 does not convert units, so `sim_usd_path` generates a cached metre-scale wrapper beside the raw USD) →
 load + stand check (`arena_spike_go2.py --backend plain_usd`, 16 envs, 200 zero-action steps).
 
+### Fetch, preprocess, load
+
 <!-- FILLED IN FROM THE RUN -->
 
 ## Why the scripted velocity path could not be driven (the actual finding)

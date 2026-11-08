@@ -109,6 +109,44 @@ matching the trained strength is the artifact the gate exists to catch.
 |---|---|---|---|---|
 | — | — | — | — | not started |
 
+## What the attack actually does (eval-only characterization)
+
+Frozen adversary (`model_1000.pt`), frozen candidate, 100 envs × 400 steps (8 s) per condition, no
+training. Full data: `data/reports/characterization/characterization.json` (per-env series) and
+`timeseries.png`.
+
+| condition | falls | base-contact hits | time-outs | command sign flips/s | vector reversals/s | force RMS | force peak |
+|---|---|---|---|---|---|---|---|
+| combined @ 0.568× | 52/100 | 69 | **0** | 3.51 (2.5–4.75) | 0.083 | 3.2 N | 10.2 N |
+| combined @ 0.629× | 74/100 | 123 | **0** | 3.34 (2.25–4.75) | 0.079 | 3.7 N | 11.5 N |
+| command-only @ 0.568× | 41/100 | 49 | **0** | 3.54 (2.5–5.13) | 0.079 | 0 N | 0 N |
+| command-only @ 0.629× | 60/100 | 82 | **0** | 3.33 (2.13–4.5) | 0.054 | 0 N | 0 N |
+
+Ranges are min–max across envs. "Sign flips/s" counts per-axis zero crossings with a 0.05 m/s deadband;
+"vector reversals/s" counts steps where the command vector actually turned around (negative dot product
+with the previous step).
+
+**The command attack is a square-wave dither at the clamp, and yes, it is dominated by rapid
+transients.** Each axis sits pinned at its bound (±0.803 m/s at 0.568×, ±0.889 at 0.629×) and flips sign
+every roughly 20–40 steps (0.4–0.8 s), i.e. **≈1.7 Hz per axis, 3.3–3.5 flips/s combined**, while the
+*whole vector* almost never reverses (0.05–0.08/s). So it is oscillation, not start–stop: the policy is
+being asked to march in one direction while the commanded velocity slams between opposite extremes. The
+candidate was trained with commands resampled every **10 s**, so this is a bandwidth it has never seen.
+
+**The applied force is small, and the gate's 0.568× is a budget, not an applied magnitude.** At 0.568×
+the force channel is *allowed* 68 N; what it actually applies is ~3 N RMS with ~10 N peaks — about 15%
+of its allowance. The command saturates its clamp; the force nudges. That also explains the force-only
+row: this adversary's force head never learned to produce more than ~10 N even when the bound was
+doubled, so "force-only does not break the policy" describes **this adversary's force output**, not the
+channel's capability.
+
+**The falls are real base-contact failures, not termination artefacts.** The rough task has exactly two
+termination terms — `base_contact` and `time_out` — and across all four conditions the time-out count is
+**zero** while base-contact fires 49–123 times (envs that fall, reset, and fall again inside the 8 s
+window). There is no bad-orientation term in this env that a stair edge could trip. Three recorded clips
+(`data/reports/attack_videos/attacked_rollout_run{1,2,3}.mp4`, one env each, combined at 0.568×) show
+1/1 env failing by `base_contact` in each run.
+
 ## Findings: expected vs ours
 
 **From the paper, reproduced.** Random push tests pass while a learned attack breaks the policy at a

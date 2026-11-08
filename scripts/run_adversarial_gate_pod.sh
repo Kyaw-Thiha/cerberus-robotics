@@ -115,7 +115,8 @@ else
     if [[ -n "$ADV_MODEL" ]]; then
         cp "$REPORT_DIR/train.log" "$REPORT_DIR/" 2>/dev/null
         cp "$ADV_DIR/train_manifest.json" "$REPORT_DIR/" 2>/dev/null
-        upload_path "$ADV_DIR" "migration/adversary_$(basename "$ADV_DIR")"
+        # ADV_DIR is already named adversary_<stamp>; do not repeat the prefix in the R2 path.
+        upload_path "$ADV_DIR" "migration/$(basename "$ADV_DIR")"
         record train PASS "$ADV_DIR (exit=$rc)"
     else
         record train FAIL "exit=$rc no checkpoint in $ADV_DIR"

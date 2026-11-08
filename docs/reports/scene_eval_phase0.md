@@ -20,9 +20,33 @@ Per scene, in order: fetch from R2 → `plain_usd` preprocess (GRScenes are cent
 does not convert units, so `sim_usd_path` generates a cached metre-scale wrapper beside the raw USD) →
 load + stand check (`arena_spike_go2.py --backend plain_usd`, 16 envs, 200 zero-action steps).
 
-### Fetch, preprocess, load
+### Fetch, preprocess, load — one scene reached the load step, and the loader crashed
 
-<!-- FILLED IN FROM THE RUN -->
+| step | scene `MV7J6NIKTKJZ2AABAAAAADQ8_usd` | scene `…ADY8_usd` | scene `…AAI8_usd` |
+|---|---|---|---|
+| fetch from R2 | **PASS** — 13 855 files, ~25 GB (the shared `Materials`/`models` library dominates) | started, not completed | not started |
+| plain_usd preprocess | **PASS** — `scene_metric.usd` generated from `start_result_navigation.usd` (variant `navigation`) | — | — |
+| load + stand (`arena_spike_go2`, 16 envs, 200 steps) | **FAIL — Kit crashed at launch** | — | — |
+
+The preprocess is the part that could plausibly have been broken by the GA move, and it worked: the
+backend resolved the navigation USD, generated the metre-scale wrapper
+(`.../scenes/MV7J6NIKTKJZ2AABAAAAADQ8_usd/scene_metric.usd`), and wrote the MDL path the scene needs
+(`.../MV7J6NIKTKJZ2AABAAAAADQ8_usd/Materials`). Full record: `data/reports/scene_eval/*_preprocess.json`.
+
+The load failed in the world backend's *launcher*, not in the scene: three attempts, each dying within
+seconds of `Loading user config` with `[crash] A crash has occurred`, a 0-byte dump, and
+`There was an error running python` — the driver-595 launch flake documented in `docs/runpod.md` (roughly
+one failed Kit launch in two on this host, seen repeatedly in this same session). No standing check was
+obtained for any scene.
+
+**Stopped here, not by choice of the scene pipeline but by budget**: the pod's account balance fell to
+$0.74 (≈45 min of GPU) while the first scene's 25 GB of shared assets were still being copied and the
+launcher was crashing; the run was stopped rather than risk losing artifacts when the balance hit zero,
+which is exactly what happened to the previous pod. The remaining scenes were never fetched.
+
+Exact resume point: `scripts/run_scene_eval_pod.sh` is idempotent — the fetched assets stay in
+`data/scenes/grscenes/home/`, so a re-run starts at the load step for scene 1 and at the fetch step for
+scenes 2-3.
 
 ## Why the scripted velocity path could not be driven (the actual finding)
 
@@ -61,5 +85,6 @@ scripts/run_scene_eval_pod.sh                       # default: the three scenes 
 scripts/run_scene_eval_pod.sh --scenes <id>,<id> --num_envs 16
 ```
 
-Artifacts: `data/reports/scene_eval_<stamp>/` (per-scene fetch log, preprocess JSON, spike JSON and log,
-summary), uploaded to R2 under `migration/scene_eval_<stamp>/`.
+Artifacts: `data/reports/scene_eval/` (per-scene fetch logs, preprocess JSON, spike JSON/log, the
+`incomplete (still running or killed)` report from the crashed attempt, and the summary), uploaded to R2
+under `migration/scene_eval_20261108T213809Z/`.

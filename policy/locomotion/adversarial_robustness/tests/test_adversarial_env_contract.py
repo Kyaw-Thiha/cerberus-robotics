@@ -36,37 +36,48 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 
-def _stub_isaac_modules():
-    """Minimal stand-ins so the wrapper modules can be imported without Isaac Lab.
+def _install_stub_isaac_modules():
+    """Stand-ins so the wrapper modules import without Isaac Lab; returns the names added.
 
     Importing ``policy.locomotion`` runs its platform auto-discovery, which calls
-    ``isaaclab_tasks.utils.import_packages``; stubbing that as a no-op is enough for the wrappers,
-    which only touch Isaac inside their build functions.
+    ``isaaclab_tasks.utils.import_packages``; a no-op is enough because the wrappers only touch Isaac
+    inside their build functions. ``isaaclab_rl.rsl_rl`` is stubbed because ``attack_env`` imports the
+    vec-env adapter inside ``build_attack_env`` and the tests only need the type to exist.
     """
-    for name in ("isaaclab", "isaaclab.app", "isaaclab_rl", "isaaclab_tasks"):
+    added = []
+    for name in ("isaaclab", "isaaclab.app", "isaaclab_rl", "isaaclab_tasks", "isaaclab_tasks.utils"):
         if name not in sys.modules:
             sys.modules[name] = types.ModuleType(name)
-    utils = types.ModuleType("isaaclab_tasks.utils")
+            added.append(name)
+    utils = sys.modules["isaaclab_tasks.utils"]
     utils.import_packages = lambda *args, **kwargs: None
-    sys.modules["isaaclab_tasks.utils"] = utils
     sys.modules["isaaclab_tasks"].utils = utils
-    if "isaaclab_rl.rsl_rl" not in sys.modules:
+
+    rsl = sys.modules.get("isaaclab_rl.rsl_rl")
+    if rsl is None:
         rsl = types.ModuleType("isaaclab_rl.rsl_rl")
+        sys.modules["isaaclab_rl.rsl_rl"] = rsl
+        added.append("isaaclab_rl.rsl_rl")
 
         class RslRlVecEnvWrapper:
-            """Placeholder; the tests build their own fake vec env."""
+            """Placeholder."""
 
         rsl.RslRlVecEnvWrapper = RslRlVecEnvWrapper
-        sys.modules["isaaclab_rl.rsl_rl"] = rsl
+    return added
 
 
-_stub_isaac_modules()
+# The stubs are removed again after the import: a fake ``isaaclab`` left in sys.modules for the rest of
+# the session makes every test that asserts "this module does not import Isaac" fail.
+_ADDED_STUBS = _install_stub_isaac_modules()
 
 from policy.locomotion.adversarial_robustness import (
     attack_env,
     attack_math,
     robustify_env,
 )
+
+for _name in _ADDED_STUBS:
+    sys.modules.pop(_name, None)
 
 NUM_ENVS = 4
 OBS_DIM = 12

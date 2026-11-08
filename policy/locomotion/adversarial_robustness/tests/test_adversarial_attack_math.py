@@ -360,17 +360,25 @@ class TestAttackCharacterizationStats:
         import sys
         import types
 
-        for name in ("isaaclab", "isaaclab.app", "isaaclab_rl", "isaaclab_tasks"):
-            sys.modules.setdefault(name, types.ModuleType(name))
-        utils = types.ModuleType("isaaclab_tasks.utils")
+        # Stub, import, then restore sys.modules: leaving a fake "isaaclab" behind breaks other tests
+        # that assert a module is Isaac-free.
+        added = []
+        for name in ("isaaclab", "isaaclab.app", "isaaclab_rl", "isaaclab_tasks", "isaaclab_tasks.utils"):
+            if name not in sys.modules:
+                sys.modules[name] = types.ModuleType(name)
+                added.append(name)
+        utils = sys.modules["isaaclab_tasks.utils"]
         utils.import_packages = lambda *a, **k: None
-        sys.modules["isaaclab_tasks.utils"] = utils
         sys.modules["isaaclab_tasks"].utils = utils
-        path = Path(__file__).resolve().parents[1] / "eval" / "characterize_attack.py"
-        spec = importlib.util.spec_from_file_location("_characterize_under_test", path)
-        module = importlib.util.module_from_spec(spec)
-        sys.modules["_characterize_under_test"] = module
-        spec.loader.exec_module(module)
+        try:
+            path = Path(__file__).resolve().parents[1] / "eval" / "characterize_attack.py"
+            spec = importlib.util.spec_from_file_location("_characterize_under_test", path)
+            module = importlib.util.module_from_spec(spec)
+            sys.modules["_characterize_under_test"] = module
+            spec.loader.exec_module(module)
+        finally:
+            for name in added:
+                sys.modules.pop(name, None)
         return module
 
     def test_square_wave_flips_and_reversals(self):

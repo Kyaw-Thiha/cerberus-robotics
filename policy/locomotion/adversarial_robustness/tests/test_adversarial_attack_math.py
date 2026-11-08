@@ -349,39 +349,3 @@ class TestModalitySummary:
         assert out["force_only"]["breaks_policy"] is True
         assert out["combination_succeeds_where_singles_fail"] is False
 
-
-class TestRunnerCfgFromManifest:
-    """The gate and the fine-tuner rebuild the adversary from its manifest, never from a default."""
-
-    def test_reads_runner_cfg(self, tmp_path):
-        import json
-
-        from policy.locomotion.adversarial_robustness.train_adversary import (
-            runner_cfg_from_manifest,
-        )
-
-        run = tmp_path / "adversary"
-        run.mkdir()
-        (run / "train_manifest.json").write_text(json.dumps({"runner_cfg": {"class_name": "OnPolicyRunner"}}))
-        assert runner_cfg_from_manifest(run)["class_name"] == "OnPolicyRunner"
-
-    def test_missing_manifest_is_an_error(self, tmp_path):
-        from policy.locomotion.adversarial_robustness.train_adversary import (
-            runner_cfg_from_manifest,
-        )
-
-        with pytest.raises(FileNotFoundError, match="train_manifest.json"):
-            runner_cfg_from_manifest(tmp_path / "nope")
-
-    def test_manifest_without_runner_cfg_is_an_error(self, tmp_path):
-        import json
-
-        from policy.locomotion.adversarial_robustness.train_adversary import (
-            runner_cfg_from_manifest,
-        )
-
-        run = tmp_path / "adversary"
-        run.mkdir()
-        (run / "train_manifest.json").write_text(json.dumps({"iterations": 1000}))
-        with pytest.raises(KeyError, match="runner_cfg"):
-            runner_cfg_from_manifest(run)

@@ -1,8 +1,8 @@
 # GA retrain, parity and the adversarial gate — report
 
 Executed 2026-11-07 on a RunPod RTX 4090 (`cerberus-h2`, image `cerberus-remote-v6:v6-ga`, driver
-595.91.07). Runs on `main`; no separate branch, no R2 credentials available on either side, so artifacts
-were pulled down instead of pushed up (see the last section).
+595.91.07). Runs on `main`; no separate branch. Artifacts were pulled down rather than pushed up — R2 credentials
+were available in `.env` but an operator scan missed them, so `--upload` was never passed (see §7).
 
 ## 1. What was done, in order
 
@@ -156,8 +156,8 @@ is fixed in `main` with a test where the logic is testable off-pod.
   now checks the four variables and authenticates against the bucket, so this cannot recur silently.
 - The September checkpoint cannot load through rsl-rl 5 at all (verified), so "try the `.pt` first" is
   answered by the format guard rather than by an attempt that could have succeeded.
-- Scene eval (P4) needs the GRScenes package from R2; with no R2 credentials it stops at its first
-  step, and with no GPU pod it cannot run at all.
+- Scene eval (P4) needs the GRScenes package from R2. Credentials for it exist; it stops for lack of a
+  GPU pod, not for lack of access.
 - **The pod was terminated mid-gate.** The account balance hit zero. Everything that mattered had been
   pulled down first (the candidate, its ONNX export, the sidecar, both sweeps, the rollout clip), except
   the in-flight adversary run, which was lost. The loss was survivable because of the manual pull; had

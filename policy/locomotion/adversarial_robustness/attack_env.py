@@ -202,11 +202,20 @@ class AttackEnvWrapper:
         zero = torch.zeros_like(attack_action[:, :1])
         force_raw = attack_action[:, :2] if "force" in self._channels else torch.cat([zero, zero], dim=1)
         command_raw = attack_action[:, 2:] if "command" in self._channels else torch.cat([zero, zero], dim=1)
+        # The channel peak scales with `scale`, so the reduce-until-survives search can probe ABOVE the
+        # trained range as well as below it. Clamping at the base peak made every scale > 1 identical to
+        # 1, which would have let the gate report "no boundary up to 2x" without ever testing 2x.
         self._force_state = self._step_channel(
-            self._force_state, force_raw, self.bounds.force_peak_n, self.bounds.max_force_delta_per_step
+            self._force_state,
+            force_raw,
+            self.bounds.force_peak_n * self.scale,
+            self.bounds.max_force_delta_per_step,
         )
         self._command_state = self._step_channel(
-            self._command_state, command_raw, self.bounds.command_peak_mps, self.bounds.max_command_delta_per_step
+            self._command_state,
+            command_raw,
+            self.bounds.command_peak_mps * self.scale,
+            self.bounds.max_command_delta_per_step,
         )
         force = torch.as_tensor(self._force_state, dtype=torch.float32, device=attack_action.device)
         command = torch.as_tensor(self._command_state, dtype=torch.float32, device=attack_action.device)

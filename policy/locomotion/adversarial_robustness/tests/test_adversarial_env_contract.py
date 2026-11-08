@@ -234,6 +234,21 @@ class TestRateLimitPerEnv:
         assert torch.allclose(second - first, torch.full_like(first, 0.1 * 100.0))
 
 
+class TestScaleReachesBeyondTheTrainedRange:
+    def test_scale_above_one_actually_allows_more_force(self):
+        # The regression this guards: clamping at the base peak made every scale > 1 identical to 1, so a
+        # "no boundary up to 2x" verdict would have been reported without ever applying 2x.
+        hooks = FakeHooks(NUM_ENVS)
+        wrapper = attack_env.AttackEnvWrapper(
+            env=FakeVecEnv(NUM_ENVS), policy=GroupedPolicy(), bounds=make_bounds(), hooks=hooks, modality="force_only"
+        )
+        wrapper.scale = 2.0
+        for _ in range(30):  # ramp past the base peak (10 N per step at rate 0.1 of 100 N)
+            wrapper.step(torch.full((NUM_ENVS, 4), 1000.0))
+        assert torch.all(hooks.forces[-1].abs() > 100.0), hooks.forces[-1]
+        assert torch.all(hooks.forces[-1].abs() <= 200.0 + 1e-6)
+
+
 class TestRobustifyWrapper:
     def _wrapper(self, mix, num_envs=NUM_ENVS):
         hooks = FakeHooks(num_envs)

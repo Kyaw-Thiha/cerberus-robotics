@@ -144,8 +144,11 @@ channel's capability.
 termination terms — `base_contact` and `time_out` — and across all four conditions the time-out count is
 **zero** while base-contact fires 49–123 times (envs that fall, reset, and fall again inside the 8 s
 window). There is no bad-orientation term in this env that a stair edge could trip. Three recorded clips
-(`data/reports/attack_videos/attacked_rollout_run{1,2,3}.mp4`, one env each, combined at 0.568×) show
-1/1 env failing by `base_contact` in each run.
+(`data/reports/attack_videos/attacked_rollout_run{1,2,3}.mp4`, one env each, combined at 0.568×) each
+show the single env failing by `base_contact`, and the clip lengths match the fall steps exactly —
+57 steps → 1.14 s, 217 → 4.34 s, 257 → 5.14 s at 50 Hz, i.e. recording stops when the episode
+terminates. A frame from the longest clip (4 s) shows the Go2 lying on its side on the terrain, which is
+what `base_contact` means here.
 
 ## Findings: expected vs ours
 

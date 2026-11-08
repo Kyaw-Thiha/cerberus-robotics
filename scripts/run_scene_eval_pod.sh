@@ -28,6 +28,9 @@ export CERBERUS_ALLOW_BAD_DRIVER_RENDER=1
 ISAACLAB_PATH="${ISAACLAB_PATH:-/workspace/isaaclab}"
 LAB="$ISAACLAB_PATH/isaaclab.sh"
 CAP_S="${SCENE_EVAL_CAP_S:-3600}"
+# One scene's shared assets (Materials + models/object, tens of GB) dominate the first fetch; later
+# scenes reuse them. 600 s was enough only once the mirror is partly local.
+FETCH_TIMEOUT="${SCENE_FETCH_TIMEOUT_S:-1800}"
 
 SCENES="MV7J6NIKTKJZ2AABAAAAADQ8_usd,MV7J6NIKTKJZ2AABAAAAADY8_usd,MVUCSQAKTKJ5EAABAAAAAAI8_usd"
 NUM_ENVS=16
@@ -60,7 +63,7 @@ for scene in "${SCENE_LIST[@]}"; do
     fi
 
     say "fetch $scene"
-    if ! timeout 600 python3 scripts/fetch_grscenes_from_r2.py --scene-id "$scene" > "$REPORT_DIR/${scene}_fetch.log" 2>&1; then
+    if ! timeout "$FETCH_TIMEOUT" python3 scripts/fetch_grscenes_from_r2.py --scene-id "$scene" > "$REPORT_DIR/${scene}_fetch.log" 2>&1; then
         record "${scene}_fetch" FAIL "see ${scene}_fetch.log"
         continue
     fi

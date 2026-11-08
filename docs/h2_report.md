@@ -44,7 +44,7 @@ Reference cells, September → September-on-GA → GA retrain:
 | P2 | 73.5 min total (training 66.8 min) | 2.95 h | 38% of the cap |
 | P3 | 25.3 min training + 6.5 min gate eval | 3 h training | 23% of the cap |
 | P3 wasted | ~80 min | — | interface mismatches on the first attempt (see §6) |
-| P4 | see scene report | 1 h | |
+| P4 | ~30 min (fetch 13 min, preprocess 1 min, 3 crashed load attempts) | 1 h | stopped by the account balance, not the cap |
 | **total** | **≈5.5 h ≈ $4.9** | | across three pod instances |
 
 ## 4. Everything synced to R2
@@ -59,6 +59,10 @@ run; the full manifest is pasted in the terminal log and summarised here):
 | `migration/adversarial_gate_20261108T051752Z/` | driver logs, zero-attack check, dry run |
 | `migration/ga_retrain_<stamp>/` | sweep CSV, sidecar, parity table/plot, rollout clip |
 | `migration/ga_stack_<stamp>/` | September-on-GA sweep and contract table |
+| `locomotion/unitree_go2_rough/2026-11-07_07-29-40/` | the retrain run: `checkpoints/model_1499.pt`, `params/`, `git/`, events, `videos/rollout.mp4`, `eval/` (sweep CSVs, contract, characterization.json, timeseries.png); `latest.json` points at it |
+| `migration/characterization_20261108T212213Z/` | attack characterization JSON + plot |
+| `migration/attack_videos_20261108T212630Z/` | three attacked-rollout clips and their logs |
+| `migration/scene_eval_20261108T213809Z/` | scene fetch logs, preprocess JSON, spike attempt logs, summary |
 
 ## 5. Findings for H3 (ROS inference node)
 
@@ -88,7 +92,7 @@ run; the full manifest is pasted in the terminal log and summarised here):
 | item | reason |
 |---|---|
 | Robustification (P3e) | **decided against by the project owner** after the FAIL; no round was run and no new adversary was trained |
-| P4 scene eval | see the scene report: status and the exact stopping point are recorded there |
+| P4 scripted-velocity scene eval | blocked twice over: the `plain_usd` env's observation contract does not match the locomotion policy (33 dims, no velocity command, dict-shaped vs 235 concatenated), and the load step died in Kit's launcher three times (driver-595 flake). Fetch and metre preprocess **did** pass for scene 1. Details and resume point: `docs/reports/scene_eval_phase0.md`. |
 | ONNX action-for-action check on the pod | done locally instead (CPU torch, no rsl-rl needed): 3.8e-06 |
 | Continuous R2 syncing during the first pod | R2 credentials were present in `.env` and the driver supports `--upload`; an operator key scan missed them, so no upload was attempted until the last run. Corrected in the run report, and `scripts/preflight_local.sh` now authenticates against the bucket before a pod is started. |
 

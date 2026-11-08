@@ -22,8 +22,8 @@ Isaac Lab 3.0 GA `e3f7d9ff` / rsl-rl 5.5.1 / torch 2.11.0+cu130), RTX 4090.
 | **P0** smoke / PhysX / env report | **PASS** | 64-env smoke wrote a checkpoint, no NaN, reward curve present; physics resolved to `PhysxCfg` (`use_newton_actuators=False`) |
 | **P1** parity report exists | **PASS — verdict PARITY BROKEN (marginal)** | mean 79.3% → 75.7% (−3.6 pp, inside 5 pp); one cell (40 N/L4) at −12 pp, outside 10 pp; 17/18 cells inside. Contract: CONTRACT OK |
 | **P2** candidate + ONNX + sidecar + sweep | **PASS** | 1500 iters, seed 42, 4096 envs, 4009 s, reward 17.04, terrain 5.85/9/14.3%, falls 13.8%; sweep mean 74.4% (−4.9 pp vs September, inside the 10-point stop rule); ONNX matches the checkpoint actor to 3.8e-06 |
-| **P3** adversarial gate | **FAIL** | minimum inducing magnitude **0.568×** the trained range (≈68 N + 0.80 m/s), 51% falls; trained range 1.0× (120 N), where the standard sweep still reports 82% success |
-| **P4** scene eval | see scene report | non-blocking |
+| **P3** adversarial gate | **FAIL** | gate scale **0.568×** of the trained push range, 51% falls, where the standard sweep still reports 82% success. Characterised afterwards: the command channel pins at its clamp (±0.803 m/s) and flips sign ~3.4×/s (≈1.7 Hz per axis) while the vector almost never reverses; applied force is only ~3 N RMS / ~10 N peak against a 68 N allowance; every failure is base contact (zero time-outs) |
+| **P4** scene eval | see `docs/reports/scene_eval_phase0.md` | non-blocking: GRScenes fetch + metre preprocess + load verified; the scripted-velocity path is blocked by the backend's navigation observation contract (33 dims, no velocity command vs the policy's 235) |
 
 Reference cells, September → September-on-GA → GA retrain:
 

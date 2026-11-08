@@ -53,7 +53,7 @@ def _stub_isaac_modules():
     if "isaaclab_rl.rsl_rl" not in sys.modules:
         rsl = types.ModuleType("isaaclab_rl.rsl_rl")
 
-        class RslRlVecEnvWrapper:  # noqa: D401 - only used as a type reference in imports
+        class RslRlVecEnvWrapper:
             """Placeholder; the tests build their own fake vec env."""
 
         rsl.RslRlVecEnvWrapper = RslRlVecEnvWrapper
@@ -62,7 +62,11 @@ def _stub_isaac_modules():
 
 _stub_isaac_modules()
 
-from policy.locomotion.adversarial_robustness import attack_env, attack_math, robustify_env  # noqa: E402
+from policy.locomotion.adversarial_robustness import (
+    attack_env,
+    attack_math,
+    robustify_env,
+)
 
 NUM_ENVS = 4
 OBS_DIM = 12
@@ -178,14 +182,14 @@ class TestAttackWrapperContract:
 
     def test_five_value_step_is_accepted(self):
         wrapper, _, env = self._wrapper(step_shape=5)
-        obs, reward, dones, extras = wrapper.step(torch.zeros((NUM_ENVS, 4)))
+        _obs, _reward, dones, extras = wrapper.step(torch.zeros((NUM_ENVS, 4)))
         assert env.steps == 1
         assert "time_outs" in extras
         assert dones.shape == (NUM_ENVS,)
 
     def test_four_value_step_is_accepted(self):
         wrapper, _, _ = self._wrapper(step_shape=4)
-        _, reward, dones, extras = wrapper.step(torch.zeros((NUM_ENVS, 4)))
+        _obs, _reward, dones, extras = wrapper.step(torch.zeros((NUM_ENVS, 4)))
         assert dones.shape == (NUM_ENVS,)
         assert "time_outs" in extras
 

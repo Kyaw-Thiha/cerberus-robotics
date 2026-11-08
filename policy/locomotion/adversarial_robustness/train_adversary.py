@@ -96,13 +96,34 @@ def load_frozen_policy(task: str, checkpoint: str):
     return policy
 
 
+def runner_cfg_from_manifest(run_dir) -> dict:
+    """The adversary's runner config, as recorded by its own training run.
+
+    Pure (no Isaac): the gate and the fine-tuner both rebuild the adversary from this, and a mismatch
+    between the shape it was trained with and the shape it is loaded with would fail at the first
+    forward pass rather than at load time.
+    """
+    import json
+    from pathlib import Path
+
+    run_dir = Path(run_dir)
+    manifest_path = run_dir / "train_manifest.json"
+    if not manifest_path.is_file():
+        raise FileNotFoundError(
+            f"{manifest_path} missing: the adversary's runner config lives in its training manifest"
+        )
+    runner_cfg = json.loads(manifest_path.read_text()).get("runner_cfg")
+    if not runner_cfg:
+        raise KeyError(f"{manifest_path} has no runner_cfg")
+    return runner_cfg
+
+
 def load_adversary_policy(env, run_dir: str):
     """Rebuild a trained adversary from its run dir and return it as an inference policy.
 
     Uses the runner config stored in that run's manifest: the adversary's shape and observation groups
     have to match exactly what was trained, so they are read back rather than re-derived.
     """
-    import json
     from pathlib import Path
 
     from common.cerberus_compat.rsl_rl_compat import (
@@ -111,8 +132,7 @@ def load_adversary_policy(env, run_dir: str):
     )
 
     run_dir = Path(run_dir)
-    manifest = json.loads((run_dir / "train_manifest.json").read_text())
-    runner_cfg = manifest["runner_cfg"]
+    runner_cfg = runner_cfg_from_manifest(run_dir)
     checkpoints = sorted(
         (p for p in run_dir.glob("model_*.pt") if p.stem[len("model_"):].isdigit()),
         key=lambda p: int(p.stem[len("model_"):]),

@@ -297,20 +297,13 @@ def _zero_attack_only(args, policy, bounds, frozen_snapshot) -> int:
 
 def _load_adversary(wrapper, checkpoint: Path, args):
     """Load the trained adversary through a runner built on this wrapper (never trained here)."""
-    import json as _json
-
     from common.cerberus_compat.rsl_rl_compat import (
         check_checkpoint_format,
         make_runner,
     )
     from policy.locomotion.adversarial_robustness import train_adversary
 
-    manifest_path = Path(args.adversary_dir) / "train_manifest.json"
-    runner_cfg = _json.loads(_json.dumps(train_adversary.DEFAULT_RUNNER_CFG))
-    if manifest_path.is_file():
-        stored = _json.loads(manifest_path.read_text()).get("runner_cfg")
-        if stored:
-            runner_cfg = stored
+    runner_cfg = train_adversary.runner_cfg_from_manifest(args.adversary_dir)
     check_checkpoint_format(str(checkpoint))
     runner = make_runner(wrapper, runner_cfg, log_dir=None, device=wrapper.device)
     runner.load(str(checkpoint))

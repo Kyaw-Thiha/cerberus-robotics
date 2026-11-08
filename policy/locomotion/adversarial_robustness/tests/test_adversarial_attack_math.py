@@ -349,3 +349,51 @@ class TestModalitySummary:
         assert out["force_only"]["breaks_policy"] is True
         assert out["combination_succeeds_where_singles_fail"] is False
 
+
+
+class TestAttackCharacterizationStats:
+    """Switching statistics, checked against a signal whose answers are known by construction."""
+
+    @staticmethod
+    def _module():
+        import importlib.util
+        import sys
+        import types
+
+        for name in ("isaaclab", "isaaclab.app", "isaaclab_rl", "isaaclab_tasks"):
+            sys.modules.setdefault(name, types.ModuleType(name))
+        utils = types.ModuleType("isaaclab_tasks.utils")
+        utils.import_packages = lambda *a, **k: None
+        sys.modules["isaaclab_tasks.utils"] = utils
+        sys.modules["isaaclab_tasks"].utils = utils
+        path = Path(__file__).resolve().parents[1] / "eval" / "characterize_attack.py"
+        spec = importlib.util.spec_from_file_location("_characterize_under_test", path)
+        module = importlib.util.module_from_spec(spec)
+        sys.modules["_characterize_under_test"] = module
+        spec.loader.exec_module(module)
+        return module
+
+    def test_square_wave_flips_and_reversals(self):
+        module = self._module()
+        dt = 0.02
+        series = [[0.8 if (int(t * dt / 0.5) % 2 == 0) else -0.8, 0.0] for t in range(400)]
+        stats = module.series_stats(series, deadband=0.05, dt=dt)
+        assert stats["sign_flips_x"] == 15          # 16 half-second segments -> 15 sign changes
+        assert stats["direction_reversals"] == 15
+        assert stats["sign_flips_per_s"] == pytest.approx(15 / 8.0)
+        assert stats["max_abs_x"] == pytest.approx(0.8)
+
+    def test_constant_command_has_no_switching(self):
+        module = self._module()
+        stats = module.series_stats([[0.6, 0.0]] * 400, deadband=0.05, dt=0.02)
+        assert stats["sign_flips_x"] == 0
+        assert stats["direction_reversals"] == 0
+        assert stats["rms"] == pytest.approx(0.6)
+
+    def test_deadband_ignores_noise_around_zero(self):
+        module = self._module()
+        series = [[0.01 * (-1) ** t, 0.0] for t in range(100)]  # jitter well inside the deadband
+        assert module.series_stats(series, deadband=0.05, dt=0.02)["sign_flips_x"] == 0
+
+    def test_empty_series_is_empty(self):
+        assert self._module().series_stats([], deadband=0.05, dt=0.02) == {}

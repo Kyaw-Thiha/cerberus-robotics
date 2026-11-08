@@ -338,6 +338,7 @@ def build_attack_env(
     root_body_name: str = "base",
     play: bool = True,
     env_cfg_overrides: dict | None = None,
+    configure_env_cfg=None,
 ):
     """Create the Go2 env and wrap it. Call AFTER AppLauncher has started.
 
@@ -367,6 +368,9 @@ def build_attack_env(
     env_cfg.scene.num_envs = num_envs
     for key, value in (env_cfg_overrides or {}).items():
         setattr(env_cfg, key, value)
+    if configure_env_cfg is not None:
+        # e.g. Isaac Lab 3.0's video recorders, which must be configured before gym.make
+        configure_env_cfg(env_cfg)
     raw_env = gym.make(task, cfg=env_cfg)
     hooks = ManagerBasedHooks(raw_env, root_body_name=root_body_name)
     # The rsl-rl vec-env wrapper is what turns the manager's observations into the TensorDict the

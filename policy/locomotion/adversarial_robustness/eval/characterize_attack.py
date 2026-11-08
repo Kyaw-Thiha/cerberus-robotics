@@ -45,6 +45,12 @@ def parse_args(argv=None):
     parser.add_argument("--deadband_mps", type=float, default=0.05, help="Ignore command sign changes below this.")
     parser.add_argument("--out_dir", default=None)
     parser.add_argument("--csv", action="store_true", help="Also write the raw per-env time series as CSV.")
+    parser.add_argument(
+        "--video",
+        action="store_true",
+        help="Record each condition as an mp4 (single env) with Isaac Lab's own recorder, for visual "
+        "confirmation that the failures are real falls.",
+    )
     from common.cerberus_compat.launcher import add_launcher_args
 
     add_launcher_args(parser)
@@ -166,8 +172,15 @@ def _run(args) -> int:
         for scale in scales:
             key = f"{modality}@{scale:g}"
             print(f"\n[characterize] {key}: {args.envs} envs, {args.steps} steps")
+            video_cfg = _video_configurer(args, out_dir, key) if args.video else None
             wrapper = attack_env.build_attack_env(
-                args.task, policy=None, bounds=_bounds(), num_envs=args.envs, modality=modality, play=True
+                args.task,
+                policy=None,
+                bounds=_bounds(),
+                num_envs=args.envs,
+                modality=modality,
+                play=True,
+                configure_env_cfg=video_cfg,
             )
             hooks = RecordingHooks(wrapper.hooks)
             wrapper.hooks = hooks
@@ -268,6 +281,23 @@ def _examples(per_env, force_series, command_series, count: int = 2):
             }
         )
     return out
+
+
+def _video_configurer(args, out_dir, tag):
+    """Isaac Lab 3.0 records through env_cfg.video_recorders, which must be set before gym.make."""
+    from types import SimpleNamespace
+
+    from policy.locomotion.core.script_utils import (
+        configure_video_recorders,
+    )
+
+    video_args = SimpleNamespace(video=True, video_length=int(args.steps), enable_cameras=True, headless=True)
+
+    def configure(env_cfg):
+        ok = configure_video_recorders(env_cfg, video_args, str(out_dir / "videos"), phase=tag)
+        print(f"[characterize] video recorder configured for {tag}: {ok}")
+
+    return configure
 
 
 def _bounds():

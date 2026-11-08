@@ -126,18 +126,24 @@ created. Resume path: `docs/reports/phase05_adversarial_report.md` ("What remain
 
 ## 5. Wall clock and cost
 
-| package | wall clock | note |
-|---|---|---|
-| pod bring-up, stack report, probe | 06:14 → 06:33 (19 min) | includes ~14 min image pull |
-| P1 parity eval | 07:12 → 07:27 (15 min) | 1800-trial sweep |
-| P2 retrain | 07:29 → 08:37 (68 min) | 4009 s logged training + video + finalize + sweep |
-| P3 prerequisites + adversary training | 08:44 → ~09:35 (~50 min) | training interrupted at ~100/1000 |
-| total pod time | ~3.3 h at $0.89/h ≈ **$2.9** | pod terminated by RunPod at zero balance |
+Every GPU step, against the cap the handoff set for it:
 
-Debugging inside that time was substantial and is visible in the commit log: Kit launches that crashed
-or hung on driver 595, a physics-preset type error, a fixed-batch ONNX export, `TensorDict`
-observation shapes, a shadowed `policy` name, and a training loop that never wrote a checkpoint. Each
-is fixed in `main` with a test where the logic is testable off-pod.
+| package | step | wall clock | cap | note |
+|---|---|---|---|---|
+| P0 | stack check (env report, probe, 64-env smoke) | 101 s | smoke only | probe re-run after the physics-preset fix; the first attempt failed on `RoughPhysicsCfg` |
+| P1 | parity sweep, 18 cells × 100 trials | **103 s** | — | 1800 envs in one pass |
+| P2 | retrain, 1500 iterations | **4009 s** (66.8 min) | 10 620 s (2.95 h) | 38% of the cap |
+| P2 | video + finalize + candidate sweep | ~5 min | — | finalize 46 s of that |
+| P3 | adversary training, 1000 iterations @256 envs | **1516.7 s** (25.3 min) | 10 800 s (3 h) | 23% of the cap |
+| P3 | gate evaluation, 3 modalities | **390 s** (6.5 min) | — | 100 trials per probe |
+| P3 | *wasted*: first attempt, driver/API mismatches | ~80 min | — | crashed launches, `TensorDict`, shadowed `policy`, missing checkpoints |
+
+Total pod time across the three instances: **≈5.5 h ≈ $4.9** at $0.89/h. Two of the three instances
+were reclaimed by the host, not by the budget; the third was terminated when the balance hit zero.
+
+The useful compute is small — 68 minutes of training and 7 minutes of evaluation — which is the point:
+almost all of the spend was interface discovery that `scripts/preflight_local.sh` now covers before a
+pod is ever started.
 
 ## 6. Verification performed
 

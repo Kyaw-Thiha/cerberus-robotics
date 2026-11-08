@@ -168,6 +168,11 @@ def _run(args) -> int:
     modalities = [m.strip() for m in args.modalities.split(",") if m.strip()]
     results = {}
 
+    # Load the frozen policy FIRST, through its own short-lived env: Isaac allows one SimulationContext
+    # per process, so building another env after the attack env exists raises "Simulation context
+    # already exists". (This is the order the gate already uses.)
+    frozen_policy = train_adversary.load_frozen_policy(args.task, args.checkpoint)
+
     for modality in modalities:
         for scale in scales:
             key = f"{modality}@{scale:g}"
@@ -175,7 +180,7 @@ def _run(args) -> int:
             video_cfg = _video_configurer(args, out_dir, key) if args.video else None
             wrapper = attack_env.build_attack_env(
                 args.task,
-                policy=None,
+                policy=frozen_policy,
                 bounds=_bounds(),
                 num_envs=args.envs,
                 modality=modality,
@@ -185,9 +190,9 @@ def _run(args) -> int:
             hooks = RecordingHooks(wrapper.hooks)
             wrapper.hooks = hooks
             wrapper.scale = scale
-            # The frozen locomotion policy, loaded against this env, then installed on the wrapper.
-            wrapper.policy = train_adversary.load_frozen_policy(args.task, args.checkpoint)
-            adversary = train_adversary.load_adversary_policy(wrapper.env, args.adversary_dir)
+            # Pass the WRAPPER, not its inner env: the runner sizes the adversary's output from
+            # env.num_actions, and the inner env's is the locomotion action space (12), not the attack's (4).
+            adversary = train_adversary.load_adversary_policy(wrapper, args.adversary_dir)
 
             raw_env = wrapper.env.unwrapped
             dt = float(raw_env.step_dt)
@@ -351,7 +356,13 @@ def _plot(results: dict, path: Path) -> None:
 
         ax = axes[row][2]
         ax.set_title("sign flips per second across envs")
-        flips = [e["sign_flips_per_s"] for e in data["per_env"]] if data.get("per_env") else []
+        # Per-env statistics are nested under "command"; an env whose episode ended before its first
+        # recorded step has no statistics at all, so skip it rather than KeyError.
+        flips = [
+            e["command"]["sign_flips_per_s"]
+            for e in (data.get("per_env") or [])
+            if (e.get("command") or {}).get("sign_flips_per_s") is not None
+        ]
         if flips:
             ax.hist(flips, bins=20)
             ax.axvline(sum(flips) / len(flips), color="red", lw=1, label="mean")

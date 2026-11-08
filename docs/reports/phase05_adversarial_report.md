@@ -75,6 +75,12 @@ single-modality attacks; the combination breaks it. Recorded as a measurement, n
 | command only | 0.629× | 54% | **yes** |
 | combined | **0.568×** | 51% | **yes** |
 
+**How the single-modality rows were produced:** by masking the *combined* adversary's outputs — zeroing
+its command channel for force-only, and its force channel for command-only. **No dedicated
+single-modality adversary was trained.** A dedicated force-only or command-only adversary could behave
+differently (different exploration, different Lipschitz pressure), so these rows characterise *this
+adversary's* channels, not the best achievable single-modality attack.
+
 Bisection trace for the combined attack (100 trials per probe): scale 1.025 → 92% falls, 0.781 → 97%,
 0.5375 → 43%, converging on 0.568. The attack is not a threshold effect: it breaks the policy well
 inside the magnitude the standard sweep tests.
@@ -110,14 +116,19 @@ matching the trained strength is the artifact the gate exists to catch.
 it with 68 N + 0.80 m/s (0.568×). The gate's whole premise — passing the random-push eval is not
 evidence of robustness — is confirmed on this checkpoint.
 
-**Half-reproduced, and worth stating plainly.** The paper's Table IV reports single-modality attacks
-failing against a push-randomised policy and only combinations succeeding. Here, **command-only alone
-breaks the policy at 0.629×**; the combination only lowers that to 0.568×. So this policy is weaker
-than the paper's reference case, and the "single modalities fail" half of the claim does **not** hold.
+**Not directly comparable to the paper's Table IV, and not claimed to be.** The paper reports
+single-modality attacks failing against a push-randomised policy and only combinations succeeding.
+Here, the combined adversary's command channel *on its own* (with its force channel masked) breaks the
+policy at 0.629×, and the combination lowers that to 0.568×. Because no dedicated single-modality
+adversary was trained, this does **not** test the paper's claim: it says that **this** adversary's
+command channel is sufficient, which is weaker evidence than "a single-modality attack succeeds". The
+paper's single-modality result is therefore **untested here**, not contradicted.
 
 **Ours (Go2-specific).**
-- A **command-space** attack is the effective channel, not force: force-only found no breaking
-  magnitude even at 2× the trained range, while a smoothly varying velocity-command override did.
+- Within this adversary, the **command channel** is what carries the attack: masking to force-only found
+  no breaking magnitude even at 2× the trained range, while the command channel alone (masked to
+  command-only) did. That is a statement about this adversary's learned policy, not a proof that force
+  alone cannot break the policy.
   The training command range is ±1 m/s with 10 s resampling; the adversary exploits a channel the
   curriculum never randomises.
 - The absolute numbers are Go2-specific and small in absolute terms (68 N is a shove, not a battering

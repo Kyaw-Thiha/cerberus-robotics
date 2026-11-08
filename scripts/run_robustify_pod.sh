@@ -22,7 +22,6 @@ export PYTHONPATH="$REPO_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 export CERBERUS_ALLOW_BAD_DRIVER_RENDER=1
 ISAACLAB_PATH="${ISAACLAB_PATH:-/workspace/isaaclab}"
 LAB="$ISAACLAB_PATH/isaaclab.sh"
-TASK="Isaac-Velocity-Rough-Unitree-Go2-Cerberus-Play-v0"
 
 CANDIDATE=""; ADVERSARY_DIR=""; VERDICT=""; ITERATIONS=300; MIX=0.05; ROUND=1; UPLOAD=0
 while [[ $# -gt 0 ]]; do

@@ -149,14 +149,17 @@ is fixed in `main` with a test where the logic is testable off-pod.
 ## 7. Deviations and things that contradict the handoff
 
 - H1 was not merged into `main` when this started; per instruction the work went on `main` directly.
-- No R2 credentials on the workstation or the pod, so `scripts/sync_to_r2.py` could not run; artifacts
-  were pulled to `data/reports/` with `scripts/pull_pod_artifacts.sh` instead.
+- **Correction (2026-11-08): R2 credentials were present all along.** `R2_ACCOUNT_ID`,
+  `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY` and `R2_BUCKET` are in `.env`, which the pod drivers
+  source before every step, so `--upload` would have worked. An earlier key-name scan missed them and
+  the run went ahead believing they were absent; no upload was ever attempted. `scripts/preflight_local.sh`
+  now checks the four variables and authenticates against the bucket, so this cannot recur silently.
 - The September checkpoint cannot load through rsl-rl 5 at all (verified), so "try the `.pt` first" is
   answered by the format guard rather than by an attempt that could have succeeded.
 - Scene eval (P4) needs the GRScenes package from R2; with no R2 credentials it stops at its first
   step, and with no GPU pod it cannot run at all.
 - **The pod was terminated mid-gate.** The account balance hit zero. Everything that mattered had been
   pulled down first (the candidate, its ONNX export, the sidecar, both sweeps, the rollout clip), except
-  the in-flight adversary run, which was lost. This is the concrete cost of not having R2 credentials
-  on the pod: the "sync before you stop" step had to be a manual pull, and the last two hours of
-  compute could not be recovered.
+  the in-flight adversary run, which was lost. The loss was survivable because of the manual pull; had
+  the upload been enabled (it could have been — see below), the adversary checkpoints would have
+  survived too.

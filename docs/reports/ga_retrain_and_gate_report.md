@@ -89,11 +89,12 @@ Artifacts (`policy/locomotion/checkpoints/`): `go2_locomotion_ga_v1_candidate.pt
 holds the sweep CSV, per-trial CSV, contract table, sidecar copy, parity table and plot, the run's
 `params/` + `git/` snapshot, its event file, and `rollout.mp4`.
 
-One verification gap, stated rather than implied: the ONNX export was checked by loading it and running
-it (input `obs [1, 235]`, output `actions [1, 12]`, weights resolved from the `.data` sidecar), and the
-`.pt` was exercised end to end by the evaluation sweep through rsl-rl. The two were **not** compared
-action-for-action (1e-4), which would need torch and the rsl-rl model class off-pod; that comparison is
-worth doing on the next pod before the ONNX export is used for anything but evaluation.
+Export equivalence, checked off-pod with CPU torch + onnxruntime (no Isaac, no GPU):
+`scripts/verify_onnx_matches_checkpoint.py` rebuilds the actor from the checkpoint's own
+`actor_state_dict` (235→512→256→128→12, ELU) and compares it against the ONNX on random observations.
+Worst absolute difference over five trials: **3.8e-06** (float32 noise; tolerance 1e-4), and the graph
+responds to its input rather than ignoring it. The overlay actor is a plain MLP — the distribution's
+`std_param` is present in the checkpoint but is not part of the exported deterministic policy.
 
 Sweep result: mean 74.4% vs September's 79.3% (−4.9 pp, inside the 10-point stop threshold), so the
 adversarial gate proceeds. Five cells move >10 pp in both directions — better at 0 N / level 8 (+11),

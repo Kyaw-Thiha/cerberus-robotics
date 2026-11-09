@@ -152,6 +152,8 @@ classification of the 30 commercial scenes before stratified sampling is possibl
 
 ## Remote workflow
 
+**Pod-only (2026-11-09):** scene assets are downloaded, preprocessed and read on the pod only -- nothing scene-sized is ever fetched to the development laptop, and every script that touches scenes refuses to run without `CERBERUS_ON_POD=1` (`scripts/pod_guard.py`), because a house is tens of GB and the laptop disk is a few GB.
+
 Scene assets are fetched to gitignored `data/scenes/` (from R2 with `scripts/fetch_grscenes_from_r2.py`; correction 2026-10-05: no
 network volume is used, and the old OmniGibson volume text no longer applies), not into git. Cerberus code stays outside the image and is git-synced per pod, as in
 `isaac_lab_workflow.md`. GRScenes needs the `MDL_SYSTEM_PATH` env var and its own preprocess

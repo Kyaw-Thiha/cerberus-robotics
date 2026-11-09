@@ -170,4 +170,7 @@ def main(argv=None) -> None:
 
 
 if __name__ == "__main__":
+    from pod_guard import require_pod
+
+    require_pod("fetch_grscenes_from_r2.py")
     main()

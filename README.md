@@ -22,6 +22,8 @@ restaurant and office come from GRScenes' commercial scenes. Scenes sit behind `
 - **GRScenes-100** (69 home + 30 commercial, plain USD) through the `plain_usd` backend, for navigation.
 - **Lightwheel RoboCasa/LIBERO kitchens** through Isaac Lab Arena (`arena` backend), for manipulation and Mimic demos.
 
+Scene assets are pod-only: they are downloaded, preprocessed and read on the pod, never on a laptop (tens of GB per house; the scene scripts require `CERBERUS_ON_POD=1`).
+
 ## Phase status (2026-11-09)
 
 | Phase | What | Status |

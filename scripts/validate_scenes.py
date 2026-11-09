@@ -875,6 +875,9 @@ def main(argv: list[str] | None = None) -> int:
 
 
 if __name__ == "__main__":
+    from pod_guard import require_pod
+
+    require_pod("validate_scenes.py")
     exit_code = main()
     sys.stdout.flush()
     sys.stderr.flush()

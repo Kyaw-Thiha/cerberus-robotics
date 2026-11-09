@@ -25,6 +25,8 @@ if [[ -f /etc/cerberus_env.sh ]]; then source /etc/cerberus_env.sh; fi
 if [[ -f .env ]]; then set -a; source .env; set +a; fi
 export PYTHONPATH="$REPO_ROOT${PYTHONPATH:+:$PYTHONPATH}"
 export CERBERUS_ALLOW_BAD_DRIVER_RENDER=1
+# Scene assets are pod-only (docs/worlds.md); this unlocks the guarded fetch/preprocess scripts.
+export CERBERUS_ON_POD=1
 ISAACLAB_PATH="${ISAACLAB_PATH:-/workspace/isaaclab}"
 LAB="$ISAACLAB_PATH/isaaclab.sh"
 CAP_S="${SCENE_EVAL_CAP_S:-3600}"

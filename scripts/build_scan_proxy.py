@@ -86,6 +86,9 @@ def is_fresh(source: Path, proxy: Path, params: dict[str, float]) -> bool:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    from pod_guard import require_pod
+
+    require_pod("build_scan_proxy.py")
     try:
         backend = registry.get_backend(PLAIN_USD_BACKEND)
         info = backend.describe_scene(backend.normalize_scene_ref(args.scene))

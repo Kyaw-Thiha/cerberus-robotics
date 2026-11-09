@@ -44,6 +44,9 @@ def build_parser() -> argparse.ArgumentParser:
 
 def main(argv: list[str] | None = None) -> int:
     args = build_parser().parse_args(argv)
+    from pod_guard import require_pod
+
+    require_pod("build_occupancy.py")
     from common.cerberus_worlds import registry
 
     backend = registry.get_backend("plain_usd")

@@ -331,6 +331,10 @@ enforcement); anything outside that wrapper (eval sweeps, video capture)
 should call `scripts/sync_to_r2.py sync-run` explicitly after each step in
 your pipeline script, not just once at the very end.
 
+## Scene assets are pod-only
+
+Scene assets (GRScenes homes; tens of GB of shared `Materials`/`models`) are downloaded, preprocessed and read on the pod only; nothing scene-sized is ever fetched to the laptop, and the scene-touching scripts (`scripts/fetch_grscenes_*.py`, `scripts/validate_scenes.py`, `scripts/build_lidar_proxy.py`, `scripts/build_scan_proxy.py`, `scripts/build_occupancy.py`) refuse to run without `CERBERUS_ON_POD=1`, which the `*_pod.sh` runners set.
+
 ## Run artifacts: every eval records clips
 
 Every pod evaluation in Phase 1 (scene stand, scripted smoke, navigation eval) records video and syncs it, not

@@ -56,6 +56,8 @@ set -u
 
 # Isaac Sim's launcher and Kit need a TERM over non-tty ssh (docs/runpod.md).
 export TERM=xterm
+# Scene assets are pod-only (docs/worlds.md); build_lidar_proxy.py is guarded.
+export CERBERUS_ON_POD=1
 
 if [[ -f /etc/cerberus_env.sh ]]; then
     # shellcheck disable=SC1091

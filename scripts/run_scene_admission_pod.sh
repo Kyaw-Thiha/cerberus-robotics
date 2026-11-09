@@ -57,6 +57,8 @@ if [[ -f .env ]]; then set -a; source .env; set +a; fi
 STAGE="${STAGE:-/workspace/grscenes}"
 export CERBERUS_SCENES_DIR="${CERBERUS_SCENES_DIR:-$REPO_ROOT/data/scenes}"
 export PYTHONPATH="$REPO_ROOT${PYTHONPATH:+:$PYTHONPATH}"
+# Scene assets are pod-only (docs/worlds.md); this unlocks the guarded fetch/validate scripts.
+export CERBERUS_ON_POD=1
 STATE="$STAGE/state"
 CATEGORIES="home,commercial"
 LIMIT=""

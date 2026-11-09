@@ -1,3 +1,7 @@
+> **ARCHIVED 2026-11-08 — superseded by `docs/isaac_lab_workflow.md` (remote/stack workflow) and
+> `policy/locomotion/runs/RUN_001.md` / `RUN_002.md` (what a run's timing, eval and video actually look
+> like). Kept for history; do not update.**
+
 # Training/Eval/Video Mechanics — FAQ
 
 Conceptual reference for how a Phase 0 locomotion run actually works under the

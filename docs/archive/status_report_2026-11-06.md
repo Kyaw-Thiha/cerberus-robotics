@@ -1,3 +1,6 @@
+> **ARCHIVED 2026-11-08 — byte-identical duplicate of `docs/status_report_2026-11-06.md`, which is the
+> canonical copy (`README.md` links it). Kept only so no history is lost; do not update.**
+
 # Cerberus Status Report (2026-11-06)
 Machine: local (Arch Linux, no Isaac/GPU run)   Branch: main   HEAD: 6b2ed37   Last commit: 2026-11-06 17:15:50 -0500
 

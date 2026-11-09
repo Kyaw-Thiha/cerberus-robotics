@@ -1,0 +1,25 @@
+# Occupancy-grid parameters (planning/occupancy.py). Ground-truth-derived map for H4: rasterised from the scene's
+# static meshes, not from a sensor. Change values here, not in the algorithms.
+#
+# resolution_m: cell size. 5 cm resolves a doorway and keeps a 20 m x 10 m house at ~800 x 400 cells.
+resolution_m: 0.05
+# band_low_m / band_high_m: a cell is BLOCKED when static geometry intersects this band above the LOCAL floor.
+# 0.12 m clears a rug/threshold; 0.45 m is just under a Go2's standing body height, so a table top above it is
+# walk-under rather than an obstacle (its legs still block).
+band_low_m: 0.12
+band_high_m: 0.45
+# floor_window_m: how far an up-facing surface may sit from the chosen level and still count as its floor.
+# Deliberately wider than max_step_m: a step up to the window is "this level's floor at a different height"
+# (and is then judged by max_step_m), while anything higher is a different level and reads UNKNOWN.
+floor_window_m: 0.20
+# max_step_m: a floor-height jump larger than this between neighbours blocks both cells (stairs are not walkable).
+max_step_m: 0.12
+# robot_radius_m: circular inflation radius. A Go2 is about 0.7 x 0.31 m standing. 0.35 m (half the body LENGTH)
+# would close a 0.9 m doorway to a 0.2 m corridor and make ordinary homes unnavigable for the PLANNER, not the robot;
+# 0.25 m covers the half-width (0.155 m) plus margin and leaves 0.4 m through a 0.9 m door. The circle over-blocks
+# along the body axis either way -- a rectangle would be tighter, and is the obvious next refinement.
+robot_radius_m: 0.25
+# sample_spacing_m: surface-sample pitch before binning into cells (finer than resolution_m so no cell is missed).
+sample_spacing_m: 0.03
+# Safety valve: cap on samples per triangle chunk (memory, not accuracy).
+max_samples: 40000000

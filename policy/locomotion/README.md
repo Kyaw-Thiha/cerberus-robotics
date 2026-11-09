@@ -98,6 +98,12 @@ else holds up well even under a strong push.
 - This checkpoint is a candidate, not final. It still needs to pass a
   separate adversarial robustness check before anything else builds on it.
 
+## Video helpers
+
+Demo clips for the checkpoint come from `eval/push_recovery_showcase.py` (rough terrain: one clip per
+magnitude x level cell) and `eval/push_recovery_showcase_flat.py` (flat terrain, the multi-clip capture
+path). Both take `--checkpoint` and write under the run's `videos/` directory.
+
 ---
 
 ## References

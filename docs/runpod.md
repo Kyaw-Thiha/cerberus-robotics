@@ -321,6 +321,27 @@ bites scripts with multiple manual resets across separate inference_mode
 scopes in one process — existing single-continuous-rollout scripts in this
 repo never hit it because they never manually reset mid-script.
 
+## Pod drivers in `scripts/` — which one to run
+
+Each driver chains its own steps, judges every step from its artifacts (SimulationApp exits 0 whatever
+happened), retries crashed or stalled Kit launches through `scripts/pod_isaac_lib.sh`, and writes a
+per-step summary:
+
+| driver | what it does | when |
+|---|---|---|
+| `run_ga_smoke_pod.sh` | train smoke (tiny preset) → `play.py --video` on the checkpoint it just wrote → Arena/plain_usd spike | after an image or stack change, to prove the three launch paths still work |
+| `run_ga_stack_check_pod.sh` | environment report → quaternion/physics probe → 64-env smoke → push-recovery sweep of a reference checkpoint | before any long run on a new stack, to record what the stack actually is |
+| `run_ga_retrain_pod.sh` | RUN_002-recipe retrain under a wall-clock cap → finalize (checkpoint + ONNX + sidecar) → sweep → parity table | producing a new candidate |
+| `run_adversarial_gate_pod.sh` | zero-attack wrapper check → adversary dry run → adversary training → per-modality gate verdict; promotes only on PASS | gating a candidate before it is frozen |
+| `run_robustify_pod.sh` | fine-tune against a FAIL verdict with mixed adversarial rollouts, then a fresh re-attack | only after a FAIL, and only with the owner's decision |
+| `run_scene_eval_pod.sh` | fetch GRScenes homes → metre preprocess → load/stand check | checking a policy or a scene pipeline outside procedural terrain |
+
+`scripts/pull_pod_artifacts.sh` copies `data/reports/` and `docs/reports/` off a pod with `tar`/`ssh`.
+It exists for sessions where the R2 upload is unavailable or not yet trusted: `scripts/sync_to_r2.py`
+pushes a *run directory* to the bucket, and the `fetch_*` scripts pull *specific* artifacts back down,
+so neither covers "grab whatever this session produced". Pull before deleting a pod; instances are
+disposable and their container disk is not backed up.
+
 ## R2 artifact sync
 
 See `docs/artifact_storage.md` for the full bucket layout and rationale.

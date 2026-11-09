@@ -96,6 +96,7 @@ class PerturbationBounds:
 # --------------------------------------------------------------------------------------------
 
 
+# kept for the planned B1 slew limiter (H3)
 @dataclass
 class RateLimitedChannel:
     """One 2-D perturbation channel (force or command) with a per-step rate cap.

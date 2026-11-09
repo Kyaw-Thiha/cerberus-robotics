@@ -35,6 +35,7 @@ from common.cerberus_worlds.scene_geometry import (
     PROXY_SIDECAR_NAME,
     gather_world_triangles,
     lidar_proxy_path,
+    write_triangle_mesh_usd,
 )
 
 PLAIN_USD_BACKEND = "plain_usd"
@@ -88,27 +89,19 @@ def check_stage_units(stage: Any) -> dict[str, Any]:
 
 
 def write_proxy_usd(points, triangles, out: Path, units: dict[str, Any]) -> None:
-    """One static triangle Mesh at ``/Proxy`` (default prim), nothing else: no physics, collision or material."""
-    import numpy as np
-    from pxr import Gf, Usd, UsdGeom, Vt
+    """One static triangle Mesh at ``/Proxy`` (default prim), nothing else: no physics, collision or material.
 
-    out.parent.mkdir(parents=True, exist_ok=True)
-    tmp = out.with_name(f"{out.stem}.partial{out.suffix}")
-    stage = Usd.Stage.CreateNew(str(tmp))
-    UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.z)
-    UsdGeom.SetStageMetersPerUnit(stage, float(units["meters_per_unit"]))
-    root = UsdGeom.Xform.Define(stage, PROXY_ROOT_PRIM)
-    mesh = UsdGeom.Mesh.Define(stage, PROXY_MESH_PRIM)
-    mesh.CreatePointsAttr(Vt.Vec3fArray.FromNumpy(np.ascontiguousarray(points, dtype=np.float32)))
-    mesh.CreateFaceVertexCountsAttr(Vt.IntArray.FromNumpy(np.full(len(triangles), 3, dtype=np.int32)))
-    mesh.CreateFaceVertexIndicesAttr(Vt.IntArray.FromNumpy(np.ascontiguousarray(triangles, dtype=np.int32).reshape(-1)))
-    mesh.CreateSubdivisionSchemeAttr(UsdGeom.Tokens.none)
-    lo, hi = points.min(axis=0), points.max(axis=0)
-    mesh.CreateExtentAttr(Vt.Vec3fArray([Gf.Vec3f(*map(float, lo)), Gf.Vec3f(*map(float, hi))]))
-    stage.SetDefaultPrim(root.GetPrim())
-    stage.GetRootLayer().Save()
-    del stage
-    tmp.replace(out)
+    The writer itself lives in ``scene_geometry`` so the height-scan proxy (``scripts/build_scan_proxy.py``) and this
+    one cannot drift apart.
+    """
+    write_triangle_mesh_usd(
+        points,
+        triangles,
+        out,
+        meters_per_unit=float(units["meters_per_unit"]),
+        root_prim=PROXY_ROOT_PRIM,
+        mesh_prim=PROXY_MESH_PRIM,
+    )
 
 
 def build_proxy(source: Path, proxy: Path, budget_s: float) -> dict[str, Any]:

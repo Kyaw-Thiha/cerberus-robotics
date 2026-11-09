@@ -106,7 +106,52 @@ else
     record onnx-equivalence SKIP "checkpoint/onnx not present locally"
 fi
 
-step "6. R2 credentials"
+step "6. H4 eval modules (imports and dry runs, no Isaac)"
+# The pure modules must import without torch/ROS/Isaac; the pod-only composition must at least compile, and the
+# drivers must answer --dry-run/--help without the app (that is the only local check of their argument plumbing).
+if pixi run python - <<'PY'
+import common.cerberus_eval.kinematics          # noqa: F401
+import common.cerberus_eval.nav_metrics         # noqa: F401
+import common.cerberus_eval.scene_assertions    # noqa: F401
+import common.cerberus_eval.scripted_path       # noqa: F401
+import common.cerberus_eval.video_clips         # noqa: F401
+import common.cerberus_worlds.scene_geometry    # noqa: F401
+import common.cerberus_eval.nav_loop            # noqa: F401
+import planning.occupancy                        # noqa: F401
+import planning.sources                          # noqa: F401
+import planning.sampling                         # noqa: F401
+import planning.kinematic_sim                    # noqa: F401
+import planning.global_planner.core.astar        # noqa: F401
+import planning.local_planner.core.pure_pursuit  # noqa: F401
+print("imports ok")
+PY
+then
+    record "h4-imports" PASS
+else
+    record "h4-imports" FAIL
+fi
+if pixi run python -m py_compile policy/locomotion/eval/scene_env.py; then
+    record "h4-scene-env-compile" PASS
+else
+    record "h4-scene-env-compile" FAIL
+fi
+if pixi run python scripts/scene_eval.py --dry-run --num_envs 2 > /tmp/preflight-scene-eval.log 2>&1; then
+    record "h4-scene-eval-dry-run" PASS
+else
+    record "h4-scene-eval-dry-run" FAIL "/tmp/preflight-scene-eval.log"
+fi
+if pixi run python scripts/build_scan_proxy.py --help > /dev/null 2>&1; then
+    record "h4-build-scan-proxy-help" PASS
+else
+    record "h4-build-scan-proxy-help" FAIL
+fi
+if pixi run python scripts/nav_eval.py --dry-run > /dev/null 2>&1 && pixi run python scripts/build_occupancy.py --help > /dev/null 2>&1 && pixi run python scripts/kinematic_eval.py --help > /dev/null 2>&1; then
+    record "h4-driver-clis" PASS
+else
+    record "h4-driver-clis" FAIL
+fi
+
+step "7. R2 credentials"
 # A wrong assumption here already cost this phase its artifacts once: the credentials were in .env but
 # the operator's key scan missed them, so no upload was ever attempted. Check the variables exist and,
 # if rclone is present, that they actually authenticate.

@@ -330,3 +330,21 @@ training invocation (survives a mid-run force-kill from RunPod's own balance
 enforcement); anything outside that wrapper (eval sweeps, video capture)
 should call `scripts/sync_to_r2.py sync-run` explicitly after each step in
 your pipeline script, not just once at the very end.
+
+## Run artifacts: every eval records clips
+
+Every pod evaluation in Phase 1 (scene stand, scripted smoke, navigation eval) records video and syncs it, not
+just numbers. A metric table cannot show whether a "success" walked through a doorway or through a wall, and the
+failure clips are the ones that explain a bad rate.
+
+Rules:
+
+- Record clips with `common/cerberus_eval/video_clips.ClipRecorder` (headless viewport capture; `--no-video`
+  switches it off for pure-metrics reruns). Default 3 clips per run at half resolution.
+- Keep the **first success** and the **first failure** when both occur, then fill up to the count
+  (`video_clips.plan_clips`). Failure clips are mandatory when a run has any failure.
+- Name clips `<scene>_<seed>_<outcome>.mp4` and write the matching `<scene>_<seed>_<outcome>.json` beside each
+  clip, so a clip cannot be separated from its numbers.
+- Sync after each step with `scripts/sync_to_r2.py sync-run ...` and print the manifest (see above). Do not wait
+  for the end of the session: a balance cut-off has already cost this project a run's artifacts.
+- The report quotes the clip filenames; a number without a clip is a number nobody can check.

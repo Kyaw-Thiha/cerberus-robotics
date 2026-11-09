@@ -36,6 +36,17 @@ file's default prim onto the requested path.
 PROXY_MESH_PRIM = "/LidarProxy/Proxy"
 """The single Mesh prim holding the proxy geometry (a child of :data:`PROXY_ROOT_PRIM`)."""
 
+SCAN_PROXY_NAME = "scan_proxy.usd"
+"""Proxy for the locomotion policy's height scanner: same idea as the LiDAR proxy (one clean triangle mesh), but
+with the ceiling/roof slabs removed so a downward ray from 20 m above the base hits the floor, walls and furniture
+instead of the ceiling. Built by ``scripts/build_scan_proxy.py``; consumed by the H4 scene env."""
+
+SCAN_PROXY_SIDECAR_NAME = "scan_proxy.json"
+SCAN_PROXY_ROOT_PRIM = "/ScanProxy"
+SCAN_PROXY_MESH_PRIM = "/ScanProxy/Proxy"
+SCAN_PROXY_SCHEMA_VERSION = 1
+
+
 
 
 def metric_scene_usd(source: str | Path, *, force: bool = False) -> Path:
@@ -248,3 +259,156 @@ def gather_world_triangles(
     if not points:
         raise RuntimeError(f"no Mesh prims with geometry under {root_path!r} ({skipped} empty)")
     return np.concatenate(points), np.concatenate(faces)
+
+
+# ---------------------------------------------------------------------------------------------------------
+# triangle-mesh writer and the height-scan proxy
+# ---------------------------------------------------------------------------------------------------------
+def write_triangle_mesh_usd(
+    points: Any,
+    triangles: Any,
+    out: str | Path,
+    *,
+    meters_per_unit: float = 1.0,
+    root_prim: str,
+    mesh_prim: str,
+) -> Path:
+    """Write one static triangle Mesh under ``root_prim`` (default prim), nothing else: no physics or material.
+
+    ``root_prim`` is an Xform with the Mesh below it, for the reason documented on :data:`PROXY_ROOT_PRIM`: the
+    ray caster searches the target prim and its descendants.
+    """
+    import numpy as np
+    from pxr import Gf, Usd, UsdGeom, Vt
+
+    out = Path(out)
+    out.parent.mkdir(parents=True, exist_ok=True)
+    tmp = out.with_name(f"{out.stem}.partial{out.suffix}")
+    stage = Usd.Stage.CreateNew(str(tmp))
+    UsdGeom.SetStageUpAxis(stage, UsdGeom.Tokens.z)
+    UsdGeom.SetStageMetersPerUnit(stage, float(meters_per_unit))
+    root = UsdGeom.Xform.Define(stage, root_prim)
+    mesh = UsdGeom.Mesh.Define(stage, mesh_prim)
+    mesh.CreatePointsAttr(Vt.Vec3fArray.FromNumpy(np.ascontiguousarray(points, dtype=np.float32)))
+    mesh.CreateFaceVertexCountsAttr(Vt.IntArray.FromNumpy(np.full(len(triangles), 3, dtype=np.int32)))
+    mesh.CreateFaceVertexIndicesAttr(Vt.IntArray.FromNumpy(np.ascontiguousarray(triangles, dtype=np.int32).reshape(-1)))
+    mesh.CreateSubdivisionSchemeAttr(UsdGeom.Tokens.none)
+    lo, hi = np.min(points, axis=0), np.max(points, axis=0)
+    mesh.CreateExtentAttr(Vt.Vec3fArray([Gf.Vec3f(*map(float, lo)), Gf.Vec3f(*map(float, hi))]))
+    stage.SetDefaultPrim(root.GetPrim())
+    stage.GetRootLayer().Save()
+    del stage
+    tmp.replace(out)
+    return out
+
+
+def scan_proxy_path(scene_usd: str | Path) -> Path:
+    """``<scene folder>/scan_proxy.usd`` for a scene USD path (what ``scripts/build_scan_proxy.py`` writes)."""
+    return Path(scene_usd).parent / SCAN_PROXY_NAME
+
+
+def filter_scan_triangles(
+    points: Any,
+    faces: Any,
+    *,
+    floor_z: float,
+    cutoff_m: float = 0.6,
+    ceiling_min_area_m2: float = 3.0,
+    ceiling_min_height_m: float = 1.5,
+):
+    """Drop ceiling/roof slabs so a DOWNWARD height-scan ray hits the floor, walls and furniture.
+
+    A vertical ray only registers a wall through the wall's top face, so walls must keep theirs; that makes "drop
+    everything above a height" wrong (it would make walls invisible and read the floor through them). Instead this
+    drops only what a ceiling is: a HORIZONTAL triangle, at least ``ceiling_min_area_m2`` in area, entirely above
+    ``floor_z + ceiling_min_height_m``. Furniture tops and wall-top strips are small or low and stay.
+
+    Multi-level scenes: an upper floor slab is a large horizontal plane high up and is dropped by the same rule, so
+    the scan sees through to the level below. That matches the single-floor assumption of the occupancy grid
+    (documented in the design note); it is not a claim about multi-floor navigation.
+
+    Points must be in METRES. Returns compacted ``(points, faces)``.
+    """
+    import numpy as np
+
+    points = np.asarray(points, dtype=np.float64)
+    faces = np.asarray(faces, dtype=np.int64)
+    if len(faces) == 0:
+        raise ValueError("scan proxy filter needs at least one triangle")
+    tri = points[faces]  # (M, 3, 3)
+    min_z = tri[:, :, 2].min(axis=1)
+    normal = np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0])
+    norm = np.linalg.norm(normal, axis=1)
+    area = 0.5 * norm
+    with np.errstate(invalid="ignore", divide="ignore"):
+        horizontal = np.abs(normal[:, 2]) >= 0.9 * norm
+    is_ceiling = horizontal & (area >= ceiling_min_area_m2) & (min_z > floor_z + ceiling_min_height_m)
+    kept = faces[~is_ceiling]
+    if len(kept) == 0:
+        raise ValueError("every triangle was classified as a ceiling; check floor_z/cutoff")
+    used, inverse = np.unique(kept, return_inverse=True)
+    return points[used], inverse.reshape(-1, 3).astype(np.int32)
+
+
+def build_scan_proxy(
+    source: str | Path,
+    out: str | Path,
+    *,
+    floor_z: float,
+    cutoff_m: float = 0.6,
+    ceiling_min_area_m2: float = 3.0,
+    ceiling_min_height_m: float = 1.5,
+    budget_s: float = 1800.0,
+) -> dict[str, Any]:
+    """Gather ``source``'s world triangles, convert to metres, filter ceilings, write the scan proxy + sidecar."""
+    import json
+
+    import numpy as np
+    from pxr import Usd, UsdGeom
+
+    source, out = Path(source), Path(out)
+    t0 = time.perf_counter()
+    stage = Usd.Stage.Open(str(source))
+    if not stage:
+        raise RuntimeError(f"cannot open {source}")
+    if str(UsdGeom.GetStageUpAxis(stage)) != "Z":
+        raise ValueError(f"scene stage is up_axis={UsdGeom.GetStageUpAxis(stage)!r}; the scan proxy needs Z-up")
+    mpu = float(UsdGeom.GetStageMetersPerUnit(stage))
+    stats: dict[str, int] = {}
+    points, triangles = gather_world_triangles(stage, "/", frozenset(), budget_s, stats)
+    points = points.astype(np.float64) * mpu
+    filtered_points, filtered_faces = filter_scan_triangles(
+        points,
+        triangles,
+        floor_z=floor_z,
+        cutoff_m=cutoff_m,
+        ceiling_min_area_m2=ceiling_min_area_m2,
+        ceiling_min_height_m=ceiling_min_height_m,
+    )
+    write_triangle_mesh_usd(
+        filtered_points,
+        filtered_faces,
+        out,
+        meters_per_unit=1.0,
+        root_prim=SCAN_PROXY_ROOT_PRIM,
+        mesh_prim=SCAN_PROXY_MESH_PRIM,
+    )
+    meta = {
+        "schema_version": SCAN_PROXY_SCHEMA_VERSION,
+        "source": str(source),
+        "source_mtime_ns": source.stat().st_mtime_ns,
+        "source_meters_per_unit": mpu,
+        "floor_z": float(floor_z),
+        "cutoff_m": float(cutoff_m),
+        "ceiling_min_area_m2": float(ceiling_min_area_m2),
+        "ceiling_min_height_m": float(ceiling_min_height_m),
+        "triangles_in": len(triangles),
+        "triangles_out": len(filtered_faces),
+        "vertices_out": len(filtered_points),
+        "bounds_min": [round(float(v), 3) for v in filtered_points.min(axis=0)],
+        "bounds_max": [round(float(v), 3) for v in filtered_points.max(axis=0)],
+        "build_s": round(time.perf_counter() - t0, 1),
+        **stats,
+    }
+    out.with_name(SCAN_PROXY_SIDECAR_NAME).write_text(json.dumps(meta, indent=2, sort_keys=True))
+    return meta

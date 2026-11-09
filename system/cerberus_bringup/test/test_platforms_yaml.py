@@ -97,13 +97,12 @@ def test_go2_locomotion_mode_declares_checkpoint_derived_constants(mode_name):
 @pytest.mark.parametrize("mode_name", ["blind", "perceptive"])
 def test_go2_locomotion_mode_declares_sensor_requirements(mode_name):
     # Same field AlgorithmCfg.sensor_requirements uses -- validated the same
-    # way in bringup.launch.py. Neither mode needs a real rig sensor today
-    # (height_scan isn't part of SensorSuiteCfg's namespace), so both are
-    # empty, but the field must exist for that to be an explicit fact
-    # rather than an absent key.
+    # way in bringup.launch.py. H3 wired the node's IMU input (projected
+    # gravity + base angular velocity), so an IMU is required; height_scan
+    # is still not a rig sensor (it comes from terrain_perception).
     go2 = _load_platforms()["go2"]
     mode = go2["locomotion_modes"][mode_name]
-    assert mode["sensor_requirements"] == {}
+    assert mode["sensor_requirements"] == {"imu": "required"}
 
 
 def test_go2_default_locomotion_mode_is_blind():

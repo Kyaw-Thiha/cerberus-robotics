@@ -1,40 +1,37 @@
 go2:
   urdf_relative_path: urdf/go2.urdf.xacro
-  # PLACEHOLDER: matches this repo's URDF joint order, NOT independently
-  # verified against Isaac Lab's actual training-time articulation joint
-  # order (requires a pod-side check: import the trained env, read
-  # env.scene['robot'].joint_names). Do not trust this for real hardware
-  # until verified. See docs/locomotion_architecture.md's "Known
-  # verification gaps" section.
+  # Training-time articulation order, FL -> FR -> RL -> RR. Sourced from the GA run's saved
+  # params and mirrored in common/cerberus_policies/contracts/heightscan_ppo_v1.yaml (a test
+  # keeps the two in sync). The old FR-first list was the URDF order, which is NOT what the
+  # policy was trained on -- joint values are remapped by name, never by position.
   joint_names:
-    - FR_hip_joint
-    - FR_thigh_joint
-    - FR_calf_joint
     - FL_hip_joint
     - FL_thigh_joint
     - FL_calf_joint
-    - RR_hip_joint
-    - RR_thigh_joint
-    - RR_calf_joint
+    - FR_hip_joint
+    - FR_thigh_joint
+    - FR_calf_joint
     - RL_hip_joint
     - RL_thigh_joint
     - RL_calf_joint
-  # PLACEHOLDER: zero vector, not sourced from the real Go2 default joint
-  # angles (that sourcing hasn't happened in this session). One value per
-  # entry in joint_names, same order.
+    - RR_hip_joint
+    - RR_thigh_joint
+    - RR_calf_joint
+  # Default joint angles from the same saved params (env init_state.joint_pos patterns).
+  # One value per entry in joint_names, same order.
   default_joint_pos:
-    - 0.0
-    - 0.0
-    - 0.0
-    - 0.0
-    - 0.0
-    - 0.0
-    - 0.0
-    - 0.0
-    - 0.0
-    - 0.0
-    - 0.0
-    - 0.0
+    - 0.1
+    - 0.8
+    - -1.5
+    - -0.1
+    - 0.8
+    - -1.5
+    - 0.1
+    - 1.0
+    - -1.5
+    - -0.1
+    - 1.0
+    - -1.5
   # sensor_requirements: rig sensors this mode needs (same field as
   # AlgorithmCfg's) -- fails launch if missing. height_scan doesn't count:
   # it comes from terrain_perception, not raw hardware (see below).
@@ -43,17 +40,24 @@ go2:
   # fail, since running with a stub is a supported bring-up config.
   locomotion_modes:
     blind:
+      # No contract/backend for the 48-D flat policy yet: the node uses its deprecated inline
+      # ONNX path (backend: "") for this mode.
+      backend: ""
       checkpoint: policy/locomotion/checkpoints/go2_locomotion_flat_v1_candidate.onnx
       observation_shape: proprioception_only
       height_scan_size: 187
       action_scale: 0.25
-      sensor_requirements: {}
+      # H3: the node takes projected gravity and base angular velocity from IMU orientation,
+      # so an IMU-less rig (camera_only) cannot run this policy. height_scan still isn't a rig
+      # sensor -- it comes from terrain_perception / the sim ray-caster.
+      sensor_requirements: {imu: required}
       requires_implemented: []
     perceptive:
+      backend: heightscan_ppo
       checkpoint: policy/locomotion/checkpoints/go2_locomotion_v1_candidate.onnx
       observation_shape: proprioception_plus_height_scan
       height_scan_size: 187
       action_scale: 0.25
-      sensor_requirements: {}
+      sensor_requirements: {imu: required}
       requires_implemented: [terrain_perception]
   default_locomotion_mode: blind

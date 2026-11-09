@@ -190,6 +190,15 @@ def _launch_setup(context, *args, **kwargs):
             output="screen",
             parameters=[
                 {"checkpoint_path": checkpoint_path},
+                {"backend": mode.get("backend", "")},
+                {"repo_root": repo_root},
+                {"contract_path": os.path.join(
+                    repo_root, "common/cerberus_policies/contracts/heightscan_ppo_v1.yaml"
+                )},
+                {"command_limiter_config": os.path.join(
+                    repo_root, "common/cerberus_policies/config/command_limiter.yaml"
+                )},
+                {"enable_command_limiter": True},
                 {"observation_shape": mode["observation_shape"]},
                 {"joint_names": joint_names},
                 {"default_joint_pos": default_joint_pos},

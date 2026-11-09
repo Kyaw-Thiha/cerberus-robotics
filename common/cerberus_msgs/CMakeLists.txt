@@ -12,6 +12,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/LocoCommand.msg"
   "msg/ArmCommand.msg"
   "msg/BodyCommand.msg"
+  "msg/HeightScan.msg"
   DEPENDENCIES sensor_msgs std_msgs geometry_msgs
 )
 

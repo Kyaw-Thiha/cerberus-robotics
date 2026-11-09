@@ -12,7 +12,7 @@ Scope: the **merged** tree (`main` @ `5d18f9f`, after H1 was merged in), branch 
 - **Empty files**: every tracked file of size 0, with its role checked.
 - **Dead code**: `ruff check` (the H1 baseline, `ruff.toml`) plus targeted greps for definitions with no
   production callers.
-- **Stale docs**: every Markdown link `](target)` in every tracked `.md` resolved against disk —
+- **Stale docs**: every relative Markdown link target in every tracked `.md` resolved against disk —
   **0 broken links**.
 - **Committed build output**: tracked `__pycache__/`, `*.pyc`, `*.log`, `*.DS_Store`, editor backups —
   **0 files**.

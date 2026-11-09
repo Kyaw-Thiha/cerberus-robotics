@@ -42,3 +42,14 @@ register_algorithm(AlgorithmCfg(
     sensor_requirements={"front_camera": "required"},
     description="Jeong et al. 2026, mapless hierarchical RL navigation, arxiv.org/abs/2604.26504",
 ))
+
+# A* -- the classical baseline actually implemented for H4: 8-connected search on the inflated
+# ground-truth-derived occupancy grid (planning/global_planner/core/astar.py), with greedy line-of-sight
+# shortcutting. It consumes a map, not a sensor, so it declares no sensor requirements; the map's source
+# (ground truth now, SLAM later) is the MapSource seam in planning/sources.py.
+register_algorithm(AlgorithmCfg(
+    name="astar",
+    sensor_requirements={},
+    description="8-connected A* on the inflated ground-truth occupancy grid, planning/global_planner/core/astar.py",
+    implemented=True,
+))

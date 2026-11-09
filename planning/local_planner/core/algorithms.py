@@ -49,3 +49,13 @@ register_algorithm(AlgorithmCfg(
     sensor_requirements={"lidar": "required"},
     description="Wu et al. 2026, learned velocity-obstacle planning from raw LiDAR, arxiv.org/abs/2607.15036",
 ))
+
+# Pure pursuit -- implemented for H4: pose + path -> (vx, vy, wz) through the B1 CommandRateLimiter
+# (planning/local_planner/core/pure_pursuit.py). Consumes a pose and a path, not a sensor, so it declares no
+# sensor requirements; the pose and map sources are the H4c SLAM seams in planning/sources.py.
+register_algorithm(AlgorithmCfg(
+    name="pure_pursuit",
+    sensor_requirements={},
+    description="pure pursuit path follower, planning/local_planner/core/pure_pursuit.py",
+    implemented=True,
+))

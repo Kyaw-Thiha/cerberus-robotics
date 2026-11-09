@@ -1,0 +1,66 @@
+{
+  "scene": "synthetic_flat",
+  "grid_shape": [
+    163,
+    243
+  ],
+  "resolution_m": 0.05,
+  "free_fraction": 0.8901090322412761,
+  "inflated_fraction": 0.36602792294680503,
+  "sampling": {
+    "requested": 6,
+    "attempts": 11,
+    "free_cells": 25111,
+    "rejected_unreachable": 0,
+    "rejected_distance": 5,
+    "rejected_too_close": 0,
+    "pairs": 6,
+    "mean_shortest_path_m": 5.040541731606395,
+    "min_shortest_path_m": 3.545635020774413,
+    "max_shortest_path_m": 7.368626976753304
+  },
+  "plans": [
+    {
+      "success": true,
+      "length_m": 3.8304699450589617,
+      "expanded": 278,
+      "reason": ""
+    },
+    {
+      "success": true,
+      "length_m": 4.9368545547390665,
+      "expanded": 297,
+      "reason": ""
+    },
+    {
+      "success": true,
+      "length_m": 5.081323638053707,
+      "expanded": 1434,
+      "reason": ""
+    },
+    {
+      "success": true,
+      "length_m": 5.480340254258919,
+      "expanded": 3079,
+      "reason": ""
+    },
+    {
+      "success": true,
+      "length_m": 7.368626976753304,
+      "expanded": 3321,
+      "reason": ""
+    },
+    {
+      "success": true,
+      "length_m": 3.545635020774413,
+      "expanded": 331,
+      "reason": ""
+    }
+  ],
+  "paths_collision_free": true,
+  "pngs": [
+    "h4_occupancy_synthetic.png",
+    "h4_path_single_synthetic.png",
+    "h4_paths_synthetic.png"
+  ]
+}

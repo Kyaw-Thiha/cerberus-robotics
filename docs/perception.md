@@ -98,6 +98,13 @@ contradicting it.
 
 ### 4. Global Planner (route / exploration)
 
+**Implementation status (H4, 2026-11-09):** an 8-connected **A\*** on the inflated ground-truth occupancy grid is
+implemented (`planning/global_planner/core/astar.py`, registered as `astar`), together with pure pursuit as the local
+controller (`planning/local_planner/core/pure_pursuit.py`, registered as `pure_pursuit`). They are the classical
+baselines the H4 navigation eval runs on; RAEM/HiPAN/SCAN-Planner/VOP-Nav remain declared candidates, not code. The
+map is rasterised from the scene's static meshes (ground truth, not SLAM); estimated-map experiments are H4c.
+
+
 **RAEM** — hybrid local-global traversability: a robot-centric local tomography map + explicitly-categorized local 3D grid map drive an incrementally-built global topological graph, purpose-built for multi-floor structures (staircases, cross-floor connectivity) that planar/2.5D representations can't model. Classical, not learned.
 - Yuan, Ren, Wang, Wang, Fang, Zhang, Cheng, Chen, Ho, Zhu, Xu, Cheng, Yang (multi-institution HK/China) — Aug 2026
 - **Metrics:** 20/20 successful trials completing every floor across 4 simulated multi-floor buildings, vs. baselines (TARE, FAEL, HPHS) which fail to progress past the first floor in every scene (0/20 success on floors 2+; HPHS scores 0/20 entirely on the hardest scene). Real-world: Unitree Go2 + Mid-360S LiDAR + Jetson Orin NX + FAST-LIO2 — autonomously explored a real 5-floor stairwell.

@@ -101,3 +101,20 @@ Validation: L1 and above need non-empty `evidence`; **levels are cumulative — 
 6. **Endpoints that are not policy backends** (a ROS planner, the actuation layer) are declared through `external_producers` / `external_consumers`.
 7. **Evidence is typed** (`file|report|commit`) so level rules can be checked mechanically; `unknown` is a literal string permitted only on `required_sensors`, `rate_hz`, `license`, `checkpoint_url`, `code_url` at L0.
 8. **L0 cards cite `modular_stack_options.md` as their source** and carry `rate_hz: 50` (the doc states all locomotion paradigms emit leg targets at ~50 Hz); anything the doc does not state is `unknown`.
+
+
+## Planning seams: `PoseSource` and `MapSource` (H4)
+
+Two tiny protocols in `planning/sources.py` are where SLAM plugs into navigation. H4 runs with ground-truth
+implementations; H4c swaps them and nothing downstream changes.
+
+- `PoseSource.get_pose() -> (x, y, yaw)` -- world frame, metres and radians. Ground truth:
+  `GroundTruthPoseSource(pose_fn)` wrapping the simulator's base pose.
+- `MapSource.get_grid() -> OccupancyGrid` -- the grid the planner runs on (`planning/occupancy.py`: `FREE` /
+  `BLOCKED` / `UNKNOWN`, plus the robot-radius inflation). Ground truth: `GroundTruthMapSource(grid)`, rasterised
+  from the scene's static meshes.
+
+What the navigation loop needs from a backend is the same shape: `reset(poses)`, `step(commands)`, `poses()`,
+`falls()` (`common/cerberus_eval/nav_loop.py`). A SLAM-derived pose source feeds `poses()`; an estimated map feeds
+`MapSource`. **Neither is claimed today**: the H4 numbers are ground-truth pose and map with a simulator-provided
+height scan.

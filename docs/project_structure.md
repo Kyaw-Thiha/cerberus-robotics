@@ -147,9 +147,17 @@ cerberus/
 │       ├── ground_truth/              # sim ground-truth pose/sensor bridge (zmq IPC to the Sim interpreter)
 │       └── eval/                      # mission-bag scoring with evo, remote eval drivers
 │
-├── planning/                        # no package.xml yet (registries only)
+├── planning/                        # no package.xml yet (pure python; H4 adds real implementations)
+│   ├── occupancy.py                   # scene USD -> ground-truth occupancy grid (+ inflation), config in config/
+│   ├── sources.py                     # PoseSource / MapSource seams (ground truth now, SLAM in H4c)
+│   ├── sampling.py                    # seeded reachable start-goal pairs on the inflated grid
+│   ├── kinematic_sim.py               # closed-loop unicycle test: A* + pure pursuit (upper bound)
+│   ├── viz.py                         # grid / path PNGs
+│   ├── config/occupancy.yaml          # every occupancy parameter (band, radius, resolution)
 │   ├── global_planner/              # planned ROS2 pkg: A*/D*/RRT over the SLAM map
+│   │   └── core/astar.py              # implemented: 8-connected A* on the inflated grid
 │   ├── local_planner/               # planned ROS2 pkg: local planner candidates
+│   │   └── core/pure_pursuit.py       # implemented: pose+path -> (vx, vy, wz) via CommandRateLimiter
 │   └── task_orchestrator/           # (planned, not yet created) planned ROS2 pkg: state machine, fault recovery/retry
 │
 ├── policy/

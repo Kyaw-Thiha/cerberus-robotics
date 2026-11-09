@@ -28,7 +28,7 @@ restaurant and office come from GRScenes' commercial scenes. Scenes sit behind `
 |---|---|---|
 | 0 | Go2 locomotion RL (PPO, push curriculum) | **Trained on the GA stack** (Isaac Sim 6.2 / Isaac Lab 3.0): parity vs the September checkpoint, mean push-recovery 79.3% → 75.7% (Sept-on-GA) → **74.4%** (GA retrain) over 18 cells |
 | 0.5 | Adversarial robustness gate | **Run — gate FAIL.** The learned attack breaks the candidate at **0.568×** the trained push range (51% falls) by dithering the velocity command at its clamp (~3.4 sign flips/s), not by force (~3 N RMS). Not robustified by decision; `go2_locomotion_final.pt` was not created |
-| 1 | Navigation: SLAM, planner, composed policy | Partial: 6 SLAM backend adapters and a sim ground-truth bridge; planner/perception are registries only |
+| 1 | Navigation: SLAM, planner, composed policy | **In progress — ground-truth pose and map, simulator-provided height scan.** A* global planner and pure-pursuit controller implemented and tested (kinematic upper bound); the frozen locomotion policy is composed into GRScenes homes. SLAM-derived pose/map (H4c) not started |
 | 2 | Manipulation (IL, Mimic) | Partial: Go2+ARX5 Mimic env; fixed-base W2a passes, Lightwheel-kitchen W2b not passed |
 | 3 | Safety filter (CBF/shielding) | Not started |
 | 4 | Continual learning + world model | Not started |

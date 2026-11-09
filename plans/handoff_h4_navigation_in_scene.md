@@ -8,7 +8,7 @@ The frozen Go2 rough policy (`go2_locomotion_ga_v1_candidate`; it failed the adv
 
 ## Budget and rules
 
-- Pod: **at most about 3 GPU-hours total, one session**. If the Kit launcher crash seen in H2 (driver-595 flake) repeats after one retry, sync what you have, stop, and report.
+- Pod: **at most about 3 GPU-hours total, one session.** Scene fetch, preprocessing and the occupancy grids (R0c) are CPU work in that same session; they do not add a session, but they must not idle the pod. If the Kit launcher crash seen in H2 (driver-595 flake) repeats after one retry, sync what you have, stop, and report.
 - **No retraining, no policy changes, no limiter tuning, no robustification.**
 - Every eval records video clips (rule below) and syncs them.
 - Anything that contradicts this handoff: report and stop at the next safe point.
@@ -37,9 +37,10 @@ The existing `plain_usd` env builds a 33-D observation with no velocity command;
 
 - B1. Add `usd-core` (`pxr`) as an optional pixi feature (for example `geometry`) so the default env is not bloated; re-lock; keep CI green. If it cannot install for Python 3.12 here, say so and fall back to building the grid inside the Isaac eval (ray-casts) while keeping the same output format.
 - B2. Fetch 2-3 already-preprocessed GRScenes homes to gitignored `data/scenes/` using the existing fetch scripts (R2 credentials come from the environment; never print them). Do not commit scene assets.
+  **Moved to the pod (2026-11-09 owner decision):** scene assets are downloaded, preprocessed and read on the pod only; nothing scene-sized comes to the laptop, and the scene scripts refuse to run without `CERBERUS_ON_POD=1`. The fetch and the real-grid build now happen in R0c, in the same pod session.
 - B3. `planning/` module `occupancy.py`: read static mesh geometry from the scene USD, transform to world space, and rasterize to a 2D grid (default 5 cm cells). A cell is **blocked** if geometry intersects a configurable body-clearance band above the local floor (suggest 0.12 m to 0.45 m; parameters in config, not hardcoded), **free** otherwise, **unknown** if outside the scene extent. Output `.npz` (grid, origin, resolution, band params, scene id) next to the scene, and a small PNG preview. Handle floor height changes reasonably, and say what it does with multi-level scenes (single-floor selection is acceptable; document it).
 - B4. **Inflation**: dilate blocked cells by a robot radius parameter (Go2 about 0.7 x 0.31 m standing; start with a circle radius from config and report the choice).
-- B5. Local tests on synthetic grids and, when scene files are present, a smoke test on the real grids (skip otherwise). Commit only the small PNG previews and the grid parameters, not the scenes.
+- B5. Local tests on synthetic grids; the real-grid smoke test and the kinematic run on real grids are R0c on the pod (scene files exist nowhere else). Commit only the small PNG previews and the grid parameters, not the scenes.
 
 ### Package C: Planning interfaces and global planner
 
@@ -62,7 +63,16 @@ The existing `plain_usd` env builds a 33-D observation with no velocity command;
 
 ## Part 2: Remote (only after the owner says go)
 
-- **R0. Bring-up.** Per `docs/runpod.md` and `docker/remote_v6`; fresh clone of `origin/main`; branch `h4-nav-in-scene`; write `outputs/env_report.json`; run the preflight checks on the pod; pull the candidate checkpoint/ONNX and the scene assets and occupancy grids from R2 or rebuild them locally-equivalent (grids are small).
+- **R0. Bring-up.** Per `docs/runpod.md` and `docker/remote_v6`; fresh clone of `origin/main`; branch `h4-nav-in-scene`; write `outputs/env_report.json`; run the preflight checks on the pod; pull the candidate checkpoint/ONNX from R2.
+- **R0b. Credentials check FIRST, before downloading anything.** On the pod, verify R2 access with a listing or a HEAD of one small object. If it returns 403, **STOP immediately**, sync nothing, and report: do not burn GPU time diagnosing it. H2's pod fetch worked earlier, so a 403 means the token or the bucket permissions changed, not that the code is wrong.
+- **R0c. Scene fetch, preprocessing and the real occupancy grids (CPU only, no simulator).** In the same pod session as everything below -- do not open a second session. In order:
+  1. fetch the 2-3 scenes (`scripts/fetch_grscenes_from_r2.py`, `CERBERUS_ON_POD=1`);
+  2. run the existing preprocess (the `plain_usd` metric wrapper, as H2 did);
+  3. run `scripts/build_occupancy.py` on each scene: writes `<scene>/occupancy.npz` and a PNG preview;
+  4. commit the small PNG previews, the `.npz` files (they are small) and the grid parameters; **never** commit scene USD;
+  5. run the kinematic closed-loop test on the REAL grids (`scripts/kinematic_eval.py --grid <npz>`, CPU, seconds) and record per scene: reachability, rejected pairs, kinematic success, mean path length.
+  - **Gate G.** Look at the previews. A grid is clearly wrong if walls are missing, the floor reads as blocked or unknown, doorways are closed, or reachability is under 50%. Diagnose from the previews; fix on the pod if it is quick (under about 15 minutes), otherwise sync and stop and report. **Do not start the physics runs on a bad grid.**
+  - The grid stage is CPU work on a rented pod: keep it short and do not let the pod idle while results are inspected.
 - **R1. Stand test**, 1 scene, 16 envs, zero command, 200 steps: `assertions.json`. **Gate R1:** joint order OK, 235-D OK, no NaN, robot stands (no sinking or fall-through). If not, record the exact diagnosis (scene collision, spawn height, physics preset) and stop; do not tune.
 - **R2. Scripted-path smoke**, 1 scene, short: validates the env, the command hook and the video helper. Cap 10 minutes.
 - **R3. Navigation eval**, 2-3 scenes, N seeded start-goal pairs per scene (start with N=20; reduce if GPU time is tight), same seeds for every scene. Cap 90 minutes of GPU time.

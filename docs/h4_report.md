@@ -52,13 +52,17 @@ preview rather than by a metric:
 
 The preview is the check that matters here: a success rate alone would have hidden both.
 
-## Blocked locally (needs the owner)
+## Real scenes moved to the pod (owner decision, 2026-11-09)
 
-1. **Scene fetch.** `scripts/fetch_grscenes_from_r2.py` fails with `403 AccessDenied` on `ListObjectsV2` using the
-   credentials the repo's own documented pattern loads from `.env` (preflight's credential check passes because it
-   only verifies presence). Separately, the disk has **3.3 GB free**; one scene's shared `Materials`/`models` are
-   tens of GB (H2 recorded ~25 GB for the first scene). So B2/B3's real-scene grids and B5's real-scene smoke test
-   are **not done**, and every number above is synthetic.
+Scene assets are downloaded, preprocessed and read on the pod only; nothing scene-sized is ever fetched to this
+machine, and the scene scripts refuse to run without `CERBERUS_ON_POD=1` (`scripts/pod_guard.py`).
+
+The reason is measured, not precautionary: `scripts/fetch_grscenes_from_r2.py` returns `403 AccessDenied` on
+`ListObjectsV2` with the credentials the repo's documented `.env` pattern loads, and the disk has **2.6 GB free**
+against tens of GB per scene (H2 recorded ~25 GB for the first scene). So the grids, the real-grid smoke test and
+the kinematic run on real scenes all happen in **R0c**, the first CPU stage of the pod session, and only the small
+`.npz`/PNG outputs come back. **Every number in this report is synthetic**; there is no local real-scene result and
+none is implied.
 2. **Git remote.** `git fetch` fails with `Permission denied (publickey)` (no SSH identity loaded in this session).
    All commits are local; the Gate L push is pending.
 
@@ -84,13 +88,15 @@ Per `docs/runpod.md` and `docker/remote_v6`, on a short-lived `h4-nav-in-scene` 
 
 | step | what | GPU minutes (estimate) |
 |---|---|---|
-| R0 | bring-up, `outputs/env_report.json`, preflight, checkpoint + scenes + grids | 10–15 |
+| R0 | bring-up, `outputs/env_report.json`, preflight, checkpoint | 5–10 |
+| R0b | R2 credential check first; 403 stops the session before anything is downloaded | 2 |
+| R0c | fetch + preprocess 2–3 scenes, build occupancy grids, kinematic run on real grids, Gate G (CPU, no simulator) | 15–25 |
 | R1 | stand test, 1 scene, 4 envs, 200 zero-command steps, `assertions.json` | 10 |
 | R2 | scripted-path smoke, short | 10 |
 | R3 | nav eval, 2–3 scenes x 20 seeded pairs, 4 envs, 3 clips/scene | 20–40 |
 | R4 | wrap-up, sync, report | 10 |
 
-Total estimate ~60–85 minutes, inside the 3-hour cap. R1 is the gate: if the joint order, the 235-D observation, the
+Total estimate ~70–105 minutes, inside the 3-hour cap; R0c is CPU work in the same session. R1 is the gate: if the joint order, the 235-D observation, the
 height-scan constant or the standing check fail, Part 2 stops with the diagnosis instead of tuning.
 
 ## Deferred (unchanged from the handoff)

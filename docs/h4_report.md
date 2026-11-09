@@ -18,7 +18,7 @@ Design note: `docs/reports/loco_in_scene_design.md`. Run-artifact rule: `docs/ru
 
 ## Local verification
 
-- `pixi run pytest -q` passes, including 150+ new tests: scripted paths, metrics (including "success after a fall is
+- `pixi run pytest -q` passes, including 130+ new tests: scripted paths, metrics (including "success after a fall is
   a fall" and "truncated trace"), assertions with mocked joint lists, clip selection, occupancy band/step/inflation,
   A* optimality/unreachable/corner-cutting, sampler determinism, pure pursuit limits, kinematic episodes, the
   navigation loop, and the "success through geometry" guard.

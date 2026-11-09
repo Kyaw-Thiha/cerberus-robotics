@@ -3,8 +3,9 @@
 # passes without a mass reformat. Burn this list down over time; do not add to it
 # for new code.
 #
-# Burned down on 2026-11-08: I001 (unsorted-imports) and RUF100 (unused-noqa) are
-# now enforced -- 119 mechanical fixes, no behaviour change.
+# Burned down on 2026-11-08: I001 and RUF100 (42 mechanical fixes), plus UP035,
+# PLR0402, C408, SIM118, SIM102, RUF015, PLW1510 and EXE001 (behaviour-neutral
+# hand edits). Remaining ignores are the ones that need a judgement call.
 extend-exclude = ["third_party", "build", "install", "log", "artifacts"]
 
 [lint]
@@ -12,16 +13,8 @@ ignore = [
     "B008",    # function-call-in-default-argument
     "RUF059",  # unused-unpacked-variable
     "RUF012",  # mutable-class-default
-    "PLW1510", # subprocess-run-without-check
-    "RUF015",  # unnecessary-iterable-allocation-for-first-element
     "DTZ005",  # call-datetime-now-without-tzinfo
-    "EXE001",  # shebang-not-executable
-    "C408",    # unnecessary-collection-call
     "F841",    # unused-variable
-    "SIM102",  # collapsible-if
-    "UP035",   # deprecated-import
-    "SIM118",  # in-dict-keys
-    "PLR0402", # manual-from-import
     "UP031",   # printf-string-formatting
     "S110",    # try-except-pass
     "TRY004",  # type-check-without-type-error

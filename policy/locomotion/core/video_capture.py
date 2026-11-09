@@ -32,8 +32,8 @@ each condition's own window (local_step 0 is that env's first recorded step).
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 import imageio
 import torch

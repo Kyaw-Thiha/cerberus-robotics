@@ -204,10 +204,9 @@ class PlainUsdBackend(WorldBackend):
         physics: ``sim.device = 'cuda:0'`` (PhysX GPU pipeline follows the device).
         """
         import gymnasium as gym
-        import isaaclab.envs.mdp as mdp
         import isaaclab.sim as sim_utils
         from isaaclab.assets import ArticulationCfg, AssetBaseCfg
-        from isaaclab.envs import ManagerBasedRLEnvCfg
+        from isaaclab.envs import ManagerBasedRLEnvCfg, mdp
         from isaaclab.managers import EventTermCfg, RewardTermCfg, TerminationTermCfg
         from isaaclab.scene import InteractiveSceneCfg
 

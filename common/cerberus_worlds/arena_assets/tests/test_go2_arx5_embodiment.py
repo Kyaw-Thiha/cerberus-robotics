@@ -453,11 +453,11 @@ def test_object_grasped_by_gripper_with_fakes():
         obj = SimpleNamespace(data=SimpleNamespace(root_pos_w=torch.tensor([obj_pos])))
         return SimpleNamespace(scene={"robot": robot, "ee_frame": ee, "obj": obj})
 
-    cfgs = dict(
-        robot_cfg=SimpleNamespace(name="robot"),
-        ee_frame_cfg=SimpleNamespace(name="ee_frame"),
-        object_cfg=SimpleNamespace(name="obj"),
-    )
+    cfgs = {
+        "robot_cfg": SimpleNamespace(name="robot"),
+        "ee_frame_cfg": SimpleNamespace(name="ee_frame"),
+        "object_cfg": SimpleNamespace(name="obj"),
+    }
     f = emb.object_grasped_by_gripper
     assert bool(f(fake_env([0.02, 0.02], [0, 0, 0.3], [0, 0, 0.31]), **cfgs)[0])
     assert not bool(

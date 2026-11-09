@@ -84,12 +84,13 @@ def test_kitchen_table_matches_vendored_arena_source_if_present():
     tree = ast.parse(factory.read_text())
     tables = {}
     for node in tree.body:
-        if isinstance(node, ast.Assign) and isinstance(node.targets[0], ast.Name):
-            if node.targets[0].id in (
-                "_LIGHTWHEEL_KITCHEN_LAYOUTS",
-                "_LIGHTWHEEL_KITCHEN_STYLES",
-            ):
-                tables[node.targets[0].id] = ast.literal_eval(node.value)
+        if (
+            isinstance(node, ast.Assign)
+            and isinstance(node.targets[0], ast.Name)
+            and node.targets[0].id
+            in ("_LIGHTWHEEL_KITCHEN_LAYOUTS", "_LIGHTWHEEL_KITCHEN_STYLES")
+        ):
+            tables[node.targets[0].id] = ast.literal_eval(node.value)
     assert tables["_LIGHTWHEEL_KITCHEN_LAYOUTS"] == ab.LIGHTWHEEL_KITCHEN_LAYOUTS
     assert tables["_LIGHTWHEEL_KITCHEN_STYLES"] == ab.LIGHTWHEEL_KITCHEN_STYLES
 

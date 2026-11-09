@@ -113,7 +113,7 @@ def test_missing_names_detected():
 
 def test_cli_help():
     out = subprocess.run(
-        [sys.executable, str(SCRIPT), "--help"], capture_output=True, text=True
+        [sys.executable, str(SCRIPT), "--help"], capture_output=True, text=True, check=False
     )
     assert out.returncode == 0 and "--urdf" in out.stdout
 
@@ -284,6 +284,6 @@ def test_axis_and_effort_mismatch_never_fail():
 
 def test_cli_flags_exist():
     out = subprocess.run(
-        [sys.executable, str(SCRIPT), "--help"], capture_output=True, text=True
+        [sys.executable, str(SCRIPT), "--help"], capture_output=True, text=True, check=False
     )
     assert "--inertia-abs-tol" in out.stdout and "--ignore-usd-only-mass" in out.stdout

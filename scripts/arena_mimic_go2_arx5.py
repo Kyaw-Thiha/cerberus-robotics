@@ -1039,7 +1039,7 @@ def _run_annotate(args: argparse.Namespace, plan: dict, report: dict, report_pat
     # --- recorder terms, as in annotate_demos.py (they are defined inside that script, not importable) ---------------
     class PreStepDatagenInfoRecorder(RecorderTerm):
         def record_pre_step(self):
-            eef_pose_dict = {n: self._env.get_robot_eef_pose(eef_name=n) for n in self._env.cfg.subtask_configs.keys()}
+            eef_pose_dict = {n: self._env.get_robot_eef_pose(eef_name=n) for n in self._env.cfg.subtask_configs}
             datagen_info = {
                 "object_pose": self._env.get_object_poses(),
                 "eef_pose": eef_pose_dict,

@@ -43,7 +43,7 @@ Drones and aerial manipulation were explicitly considered and rejected for now, 
 
 **Primary mission: household activities.** Scenes come from pluggable sources behind `cerberus_worlds` (see `docs/worlds.md`), chosen over warehouse/logistics (most-used portfolio backdrop, least differentiated) and hospital (narrower variety):
 
-- **GRScenes-100** (plain USD, 69 home + 30 commercial): full-house scenes for navigation (Phase 1) and the commercial secondary missions. CC BY-NC-SA 4.0 plus an access gate.
+- **GRScenes-100** (plain USD, 69 home + 30 commercial): full-house scenes for navigation (Phase 1) and the commercial secondary missions. CC BY-NC-SA 4.0; the Hugging Face repo reports `gated: false`, so there is no approval step (see `arena_integration_log.md`).
 - **Lightwheel RoboCasa/LIBERO kitchens via Isaac Lab Arena** (Apache-2.0): room/tabletop-scale scenes with Isaac Lab-native objects, for manipulation and Mimic demos (Phase 2).
 
 BEHAVIOR-1K/OmniGibson was evaluated and dropped (CPU-physics only in our Isaac Lab setup); see git history.
@@ -53,6 +53,8 @@ BEHAVIOR-1K/OmniGibson was evaluated and dropped (CPU-physics only in our Isaac 
 **Articulated-object interaction (cabinet/drawer opening)** stays a secondary Phase 2 mission, reusing Isaac Lab's existing cabinet/drawer asset.
 
 **Isaac Sim/Lab versions:** correction 2026-10-05. Two stacks now exist. Old: Sim 5.1.0 / Lab 2.3.2 / Python 3.11, image `cerberus-remote:v3`, kept (the stack on which all locomotion results were produced; no longer needed to build the fused USD). New: Sim 6.1.0 / Python 3.12, image family `cerberus-remote-v6`, with a pinned Isaac Lab commit `bb0c8e1b9` (pkg 16.4.0, Arena main's pin) and a `v3.0.0-EA` build (pkg 17.0.2). Update 2026-10-25: Lab 3.0 GA (`v3.0.0`) + Sim 6.2.0 + Arena `main` are now the pinned stack (image `v6-ga`), pod-verified for train, Arena, mimic, scene render and video capture; see `docs/arena_integration_log.md`. Code migration to the 3.0 line (quaternions XYZW, Warp data arrays, headless flag, rsl-rl 5.x) went through `common/cerberus_compat/`; old-stack behaviour was re-verified (train smoke exit 0), new-stack training only got a 3-iteration smoke. See `data/reports/overnight/NOTES.md` and `docs/runpod.md`.
+
+**Current stack pin (2026-11-06):** Sim 6.2 / Lab 3.0 GA on `docker/remote_v6/Dockerfile`. Sim 5.1 / Lab 2.3.2 (`docker/remote/Dockerfile`) is the legacy stack, kept because the Phase 0 locomotion results were produced on it.
 
 ## Novelty framing
 
@@ -68,15 +70,26 @@ Framing for the README and any public description: be explicit about what is bor
 
 Important caveat to state honestly wherever this project is described: since there is no real hardware, "real world demo" means a well instrumented simulation demo, not a claim of physical deployment.
 
+## Platform philosophy
+
+Cerberus is a platform, not one pipeline. The repo has built-in support for several locomotion, manipulation, whole-body and sensor-rig paradigms, each integrated through a swappable backend behind three command boundaries (see `interfaces.md`). We do not train everything: only a few backends are trained by us, others are integrated and evaluated with released weights or without training (SLAM, for example), and others are integrated and contract-tested only. Every backend carries a support level, so claims stay tied to evidence:
+
+- **L0 Documented**: backend card only, no code.
+- **L1 Integrated**: adapter exists and passes contract tests (loads, `act()` returns correct shapes, sensor needs validate against a rig).
+- **L2 Evaluated**: run on our scenes or shared evals with released weights or without training; numbers recorded.
+- **L3 Trained by us**: trained and evaluated by us; result recorded in a report.
+
+Backends are either modular (consume a map or other upstream module output) or fused (consume raw sensor streams, with the perception encoder trained jointly inside the policy, as in JEPLO, DAWN/WMP and Omni-Perception). Both plug in at the same boundary.
+
 ## Stack architecture
 
 Six sequential stages, wrapped in a ROS2 middleware integration layer, with a training loop feeding back into the policy layer.
 
 **Perception.** Terrain and obstacle perception from onboard depth and RGB, for navigation. Separately, object level perception (detection plus 6D pose estimation) for manipulation targets, since the manipulation policy needs to know what and where to grasp, not just that something is nearby.
 
-**SLAM.** Persistent mapping and localization, built and maintained during navigation. Specific SLAM approach and tooling not yet confirmed, to be decided later.
+**SLAM.** Persistent mapping and localization, built and maintained during navigation. Six backend adapters exist (`slam/slam/backends/`); the final selection is still an ablation, not a lock.
 
-**Planning and orchestration.** Global path planning (A*, D*, or RRT family) over the SLAM built map, plus a task orchestrator sequencing multi step behavior such as navigate to A, pick up X, navigate to B, place X. Should include basic fault recovery or retry logic (for example, retry grasp on failure, replan on navigation stall), not just a hardcoded happy path script. Longer term, the orchestrator's task decomposition is planned to be driven by a VLM/VLA layer rather than a hardcoded state machine (e.g. following ODYSSEY's language-instruction → navigate/pick/place/push/pull decomposition, or a quadruped-native VLA like QUART or MobileVLA-R1) — see `manipulator.md` for current thinking, which is explicitly a placeholder for Phase 2 research, not a locked decision.
+**Planning and orchestration.** Global path planning (A*, D*, or RRT family) over the SLAM built map, plus a task orchestrator sequencing multi step behavior such as navigate to A, pick up X, navigate to B, place X. Should include basic fault recovery or retry logic (for example, retry grasp on failure, replan on navigation stall), not just a hardcoded happy path script. Longer term, the orchestrator's task decomposition is planned to be driven by a VLM/VLA layer rather than a hardcoded state machine (e.g. following ODYSSEY's language-instruction → navigate/pick/place/push/pull decomposition, or a VLA; QUART and MobileVLA-R1 are no longer leading candidates, see `modular_stack_options.md`) — see `manipulator.md` for current thinking, which is explicitly a placeholder for Phase 2 research, not a locked decision.
 
 **Policy layer.** The learned core. RL for locomotion, IL for manipulation. This is where the hierarchical composition happens: a frozen low level locomotion policy driven by a high level policy that outputs velocity commands conditioned on perception input and a goal, following Isaac Lab's native support for this composition pattern.
 
@@ -156,7 +169,7 @@ Project name is confirmed as Cerberus, not open anymore.
 
 Most other module level implementation specifics are intentionally not locked in yet. The architecture and phase structure above are settled, but the exact algorithm, library, or technique within each module will be researched and decided when that phase is actually reached, the same way the SLAM approach is being left open for now. Known open items so far:
 
-- SLAM approach and tooling for Phase 1, not yet confirmed.
+- SLAM approach and tooling for Phase 1: six backends exist with adapters, configs and Dockerfiles (`fast_lio2`, `bievr_lio`, `orb_slam3`, `multicam_slam`, `fast_livo2`, `gs_livo`); the final selection is still an ablation, not a lock.
 - Safety filter approach, CBF versus shielding, pick one to start.
 - Number of IL algorithms to compare in Phase 2 (two, three, or four including a VLA option), depends on compute budget as it becomes concrete.
 - Whether to build the visualization dashboard as a late Phase 2 or Phase 4 item, has not been scheduled yet.
@@ -168,6 +181,7 @@ Most other module level implementation specifics are intentionally not locked in
 - IL data-mixing fallback: general prior-sim co-training (RoboCasa/MimicGen-style, ~90-99% mix ratio, Maddukuri et al. 2025) is a proven lever for the ARX5 grasp/place sub-skill if raw demos are thin — but nothing covers the loco-manip (base+arm) motion itself; that stays fully self-collected and could be a small contribution.
 - Arena viability (updated 2026-10-05): Arena hosts Go2 (legs-only) and the fixed-base Go2+ARX5 through our own embodiments, and Lightwheel kitchens work through it. It does not handle the multi-room GRScenes scene (stalled ~17 min in PhysX warmup, Gate A FAILED); the `plain_usd` backend passed on that scene and is the fallback. The EA stock-scene Gate A "pass" had the robot falling through the floor, so it is not evidence. The fused USD is built by the URDF merge + `UrdfConverter` workflow, which works on both stacks (see `docs/embodiment_asset_composition.md`); the mount height is the spec value 0.07 m, with the real mounting-plate thickness unchecked and W2a not re-run on the new default asset (it passed on the earlier z=0 asset).
 - Arm role during locomotion training (measured 2026-10-05, old stack, fused 20-DoF USD): the legs-only policy `flat_v1_candidate` transfers with the arm attached: standing pitch -1.07 deg stock vs -1.33 fused, push recovery 1.0 at 40/80/120 N for both (with `--fall_height_m 0.05`; the default 0.15 fall rule is a harness artifact because the policy crouches to 0.11-0.17 m). The earlier claim that `go2_locomotion_final.pt` does not transfer was an assumption from the ~22% mass increase and is not supported; the fused robot is 18.47 kg with a 3.455 kg arm. The free-base hold leans pitch -12.4 deg, but the stock legs-only Go2 leans -11.9 deg, so the lean is Go2 PD sag at stock gains, not the arm. This is one policy, flat ground, push forces only; the full Phase 0.5 adversarial gate on `go2_arx5` has not been re-run. Whole-body EE tracking vs differential-IK arm control remains a Phase 2 choice.
+  - Resolved (2026-11-06): the arm-role question is answered by the whole-body tiers in `modular_stack_options.md`. T1 (decoupled: frozen legs policy + arm IK) is the current plan, and the measurement above supports it. T2 (unified whole-body controller) is a later, separate backend, not a replacement for Phase 0 locomotion.
 - ARX5 gripper (corrected 2026-10-05): the 6-DoF-only/18 DoF wording described the older simulation assets (ARX5 X5 URDF, LeggedManip_Lab USD, MuJoCo model), not the hardware. The real arm has a motorised gripper (0.082 m width). The official ARX model (`ARXroboticsX/ARX_Model`, X5A) has two prismatic fingers, now used as the arm source: fused robot is 20 DoF (12 leg + 6 arm + 2 fingers). The model has no license file, so it is gitignored (`third_party/arx-model`) and not redistributable. Gripper gains are provisional (stiffness 1000 -> 5000 N/m in W2a).
-- Concrete embodiment-config module design (how `UNITREE_GO2_CFG` and `ARX5_CFG` compose, and how ROS2 nodes/safety filter consume it) — pattern is decided (see `project_structure.md`), exact implementation is not yet written.
+- Embodiment-config module: exists as `common/cerberus_description/{go2_arx5_cfg.py,go2_arx5_spec.py,embodiment.py}` (`GO2_ARX5_CFG`, name-indexed `joint_groups`, `compose_embodiments`). Still open: a named `ARX5_CFG` and a locally defined `UNITREE_GO2_CFG` (today imported from `isaaclab_assets`), and how ROS2 nodes/safety filter consume the config.
 - VLM/VLA architecture for the orchestrator's task decomposition — see `manipulator.md`, explicitly a placeholder pending Phase 2 research.

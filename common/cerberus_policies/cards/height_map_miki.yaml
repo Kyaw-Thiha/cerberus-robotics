@@ -1,0 +1,16 @@
+# L0: documented only. Facts from docs/modular_stack_options.md; no adapter exists.
+name: height_map_miki
+slot: loco
+boundary: B1_LOCO
+paradigm: "B. modular map -> policy (height-scan teacher, elevation-map student, Miki et al.) + GPU elevation mapping"
+architecture: modular
+required_sensors: unknown
+rate_hz: 50
+license: unknown
+checkpoint_url: unknown
+code_url: https://github.com/leggedrobotics/elevation_mapping_cupy
+support_level: L0
+target_support_level: L1
+evidence:
+  - {kind: file, ref: docs/modular_stack_options.md}
+results: []

@@ -1,0 +1,10 @@
+# Mirrors the pixi `build` task (`colcon build --symlink-install`), restricted to
+# the top-level dirs that actually carry a package.xml. This keeps colcon out of
+# third_party/ (vendored, gitignored) and docker/ (patch trees that ship their own
+# package.xml files). Add a dir here when a new ROS2 package appears under it.
+{
+  "build": {
+    "symlink-install": true,
+    "base-paths": ["common", "policy", "slam", "system"]
+  }
+}

@@ -26,6 +26,7 @@ pyzmq = "*"
 build = "colcon build --symlink-install"
 lint = "ruff check ."
 test = "pytest"
+backend-table = "python scripts/gen_backend_table.py"
 
 # --- SLAM Docker-only environments -----------------------------------------
 # Deliberately NOT part of `[dependencies]`/`default` -- these provision the

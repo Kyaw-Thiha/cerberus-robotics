@@ -1,5 +1,10 @@
-import gymnasium as gym
 import pytest
+
+# Skip cleanly when the dep is absent (local dev env); runs as-is on a pod with Isaac Lab.
+pytest.importorskip("gymnasium", reason="gymnasium not installed in this environment")
+pytest.importorskip("isaaclab_tasks", reason="policy/locomotion/__init__.py imports isaaclab_tasks (pod-only)")
+
+import gymnasium as gym  # noqa: E402
 
 # NOTE on local test execution: importing this module via its normal dotted path
 # (policy.locomotion.core.platforms.registry) forces Python to first import every
@@ -13,7 +18,7 @@ import pytest
 # pytest there -- verified working this way when this file was written. On a pod
 # with isaaclab_tasks installed, this file runs as-is, in place, no workaround
 # needed.
-from policy.locomotion.core.platforms.registry import (
+from policy.locomotion.core.platforms.registry import (  # noqa: E402
     PlatformCfg,
     available_platforms,
     get_platform,

@@ -46,7 +46,7 @@ Don't build Shape C support (onboard encoder, real depth-sensor integration) now
 
 ## Known verification gaps
 
-- **`platforms.yaml` `joint_names` is an unverified placeholder.** Populated from the URDF's own joint order (FR, FL, RR, RL, each hip/thigh/calf), not verified against Isaac Lab's real training-time articulation order — that requires pod access this session didn't have. To verify: on a pod with the trained env, `import` and instantiate it, then read `env.scene["robot"].joint_names` and compare against the YAML. Until checked, treat real-hardware runs as using an unverified joint mapping — the inference node's name-based remapping (`observation_assembly._build_permutation`) makes this a one-line YAML fix once verified, but doesn't make the current placeholder correct.
+- **`platforms.yaml` `joint_names` — fixed in H3, live check still open.** It used to carry the URDF order (FR, FL, RR, RL), which is not the training order; H3 replaced it with the saved-params order (FL, FR, RL, RR) and the real default angles, mirrored in `common/cerberus_policies/contracts/heightscan_ppo_v1.yaml` and pinned by a test. The only remaining check is pod-side: read `env.scene["robot"].joint_names` from the trained env and diff it against the contract. The node remaps by name (`observation_assembly._build_permutation`), so a mismatch is a one-line YAML fix, not a code change.
 
 ## Open items for whenever this gets revisited
 

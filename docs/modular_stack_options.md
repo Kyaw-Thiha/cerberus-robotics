@@ -83,7 +83,7 @@ Five paradigms are live, and all five consume a B1 velocity command and emit 12 
 
 | Paradigm | Candidate | Sensor input | Real robot | Code | Why it's a candidate |
 | --- | --- | --- | --- | --- | --- |
-| **A. Blind proprioceptive** | Isaac Lab `Isaac-Velocity-Rough-Unitree-Go2` PPO (Rudin et al. 2022) | IMU + joints | Go2 | Yes (Isaac Lab) | Phase 0 baseline; already the project default |
+| **A. Blind proprioceptive** | Isaac Lab `Isaac-Velocity-Rough-Unitree-Go2` PPO (Rudin et al. 2022) | IMU + joints | Go2 | Yes (Isaac Lab) | Phase 0 baseline; already the project default. Note (2026-11-09): in this repo the *rough* task is height-scan-conditioned — paradigm B with a privileged map — so the truly blind variant is the *flat* task (48-D observation). |
 | A. Blind | CTS, concurrent teacher-student (Wang et al., RA-L 2024) | IMU + joints | Go1 | No standalone repo found; CTS training ships inside JEPLO's RSL-RL fork | Single-stage teacher-student; JEPLO reuses its training scheme |
 | **B. Modular: map → policy** | Height-scan teacher → elevation map student (Miki et al., Sci. Robotics 2022) + GPU elevation mapping (Miki et al., IROS 2022) | LiDAR or depth via odometry + elevation map | ANYmal | Mapping code public; policy is the standard Isaac Lab height-scan task | Most interpretable; reuses the SLAM stack's odometry; the map is inspectable and safety-filterable |
 | B. Modular | [AME-2](https://www.alphaxiv.org/abs/2601.08485) / [DELTA](https://www.alphaxiv.org/abs/2608.22033) map encoders | Elevation map | ANYmal-D, RAIBO2 | Not found | Best reported terrain success; already in `perception.md` |

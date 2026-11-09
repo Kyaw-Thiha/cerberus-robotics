@@ -98,7 +98,7 @@ cerberus/
 ├── build/ install/ log/           # colcon artifacts — gitignored
 │
 ├── common/                        # shared, dependency-only, no standalone behavior
-│   ├── cerberus_msgs/               # custom msgs: TaggedMap + LocoCommand/ArmCommand/BodyCommand (B1/B2/B3)
+│   ├── cerberus_msgs/               # custom msgs: TaggedMap + LocoCommand/ArmCommand/BodyCommand (B1/B2/B3) + HeightScan
 │   ├── cerberus_description/        # UNITREE_GO2_CFG + ARX5_CFG, composed into GO2_ARX5_CFG — see
 │   │   │                               # embodiment config pattern above. Today only GO2_ARX5_CFG is a named
 │   │   │                               # symbol
@@ -123,9 +123,13 @@ cerberus/
 │   ├── cerberus_policies/           # policy-backend abstraction (B1/B2/B3) — see docs/interfaces.md
 │   │   ├── base.py                    # PolicyBackend ABC + Boundary/Role enums + command-dict checks
 │   │   ├── registry.py                # LOCO_BACKEND / ARM_BACKEND / BODY_BACKEND; lazy, no silent default
-│   │   ├── backend_card.py            # validated YAML cards + support levels L0-L3
+│   │   ├── backend_card.py            # validated YAML cards + support levels L0-L3 (cumulative)
 │   │   ├── validate_config.py         # one producer/consumer per boundary; sensors ⊆ rig
-│   │   ├── backends/                    # never imported outside registry (null_loco, scripted_loco)
+│   │   ├── command_limiter.py         # B1 slew limiter + clamp (pure Python)
+│   │   ├── config/command_limiter.yaml # limiter values -- placeholders, untested
+│   │   ├── contracts/                 # observation/action/control contracts (heightscan_ppo_v1)
+│   │   ├── backends/                    # never imported outside registry (null_loco, scripted_loco,
+│   │   │                                #  heightscan_ppo_onnx)
 │   │   └── cards/                       # one YAML per backend; feeds docs/backend_support.md
 │   │
 │   └── cerberus_compat/             # Isaac Lab 2.x <-> 3.0 adapters (quat, Warp data, rsl-rl, launcher);
@@ -168,7 +172,8 @@ cerberus/
 │   │   └── eval/                      # (planned, not yet created) demo-efficiency, forgetting curve, refinement
 │   ├── whole_body/                  # (planned, not yet created) T2 whole-body controller; composes
 │   │                                   # locomotion + manipulation (see docs/modular_stack_options.md)
-│   ├── locomotion_policy/           # ROS2 pkg: inference node, frozen (final) checkpoint
+│   ├── locomotion_policy/           # ROS2 pkg: inference node (thin rclpy wrapper + pure core.py),
+│   │                                   # frozen (final) checkpoint
 │   └── manipulation_policy/         # (planned, not yet created) planned ROS2 pkg: inference node
 │
 ├── safety_filter/                   # (planned, not yet created)

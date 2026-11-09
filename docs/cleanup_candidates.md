@@ -68,7 +68,7 @@ were enabled today:
 
 | rule | hits | auto-fixable | verdict |
 |---|---|---|---|
-| `RUF100` unused-noqa | 98 | 98 | **safe**: every hit is a `# noqa: PLC0415`-style marker whose rule is not enabled; deleting them changes no behaviour |
+| `RUF100` unused-noqa | 21 | 21 | **safe**: every hit is a `# noqa: PLC0415`-style marker whose rule is not enabled; deleting them changes no behaviour |
 | `I001` unsorted-imports | 21 | 21 | **safe**: import order only, no semantics |
 | `UP035` deprecated-import | 1 | 1 | **safe**: mechanical replacement |
 | `PLR0402` manual-from-import | 1 | 1 | **safe**: mechanical |
@@ -86,10 +86,43 @@ were enabled today:
 | `S110` try/except-pass | 1 | 0 | deliberate in that location — keep ignored |
 | `TRY004` type-check-without-TypeError | 1 | 0 | deliberate — keep ignored |
 
-Recommended burn-down, cheapest first: `RUF100` + `I001` (119 mechanical fixes, zero behaviour change),
-then `UP035`/`PLR0402`/`C408`/`SIM118`/`SIM102`/`RUF015`/`EXE001` (10 hand edits), then decide the
-`PLW1510`/`DTZ005`/`F841`/`B008`/`RUF012` group individually. Enabling them is **not** part of this
-cleanup; it is reported here for a separate change.
+**Correction (applied in Phase B):** the counts above were measured with `ruff check --select <rule>`,
+and for `RUF100` that mode under-reports the rule's dependencies — it judges a noqa as unused only
+against the *selected* rules, so it strips legitimate `# noqa: BLE001`/`F401` markers. Re-measured with
+the full rule set the numbers are **RUF100 21, I001 21 (42 fixes)**, and that is what was applied.
+Everything else in the table was verified with the full ruleset during Phase B:
+
+**Applied (commits `style: ruff autofix (RUF100, I001)` and `style: enable the behaviour-neutral ignored
+rules…`):** RUF100 21, I001 21, UP035 1, PLR0402 1, C408 2, SIM118 1, SIM102 1, RUF015 3, PLW1510 4,
+EXE001 3. All behaviour-neutral; pytest unchanged at 1056 passed / 19 skipped. Those ten families are no
+longer in `ruff.toml`'s ignore list.
+
+### Deferred (still ignored, listed with their exact hits)
+
+| rule | hits | where |
+|---|---|---|
+| `DTZ005` naive `datetime.now()` | 1 | `policy/locomotion/core/script_utils.py:27` — adding a tz changes generated run-directory names, so it is a deliberate choice, not a style fix |
+| `F841` unused variable | 5 | `policy/locomotion/adversarial_robustness/eval/characterize_attack.py:146`, `…/eval/gate_check.py:131`, `…/train_adversary.py:187` (all three keep the Kit app alive; the assignment is the point), `policy/manipulation/go2_arx5_stack/tests/test_waypoints.py:206`, `scripts/tests/test_compare_go2_urdf_to_usd.py:48` |
+| `B008` call in default argument | 6 | `policy/locomotion/core/push_impulse_event.py:65,86`, `policy/manipulation/go2_arx5_stack/env_cfg.py:73,74,91,92` — `SceneEntityCfg(...)` defaults are the Isaac Lab term-cfg idiom; replacing them with module singletons would be a real refactor |
+| `RUF012` mutable class default | 3 | `common/cerberus_worlds/arena_assets/go2_arx5_embodiment.py:626`, `…/go2_embodiment.py:251,290` — dataclass-style configs that Isaac Lab mutates by design |
+| `S110` try/except-pass | 1 | deliberate at its site — stays ignored |
+| `TRY004` type-check without TypeError | 1 | deliberate at its site — stays ignored |
+
+## Phase B — what was applied (2026-11-08)
+
+| decision | outcome |
+|---|---|
+| Stranded handoff `plans/handoff_h2_ga_retrain_and_phase05.md` | recovered verbatim from branch `h2-phase0-ga-and-phase05` (`0101435…`) onto this branch; branch then deleted with `-D` |
+| SAFE rows | **none existed**, so nothing was deleted |
+| `policy/locomotion/TRAINING_MECHANICS_FAQ.md` | moved to `docs/archive/` with a banner → `docs/isaac_lab_workflow.md` + `RUN_001/002` |
+| `docs/reports/status_report_2026-11-06.md` (duplicate) | moved to `docs/archive/` with a banner naming the canonical `docs/status_report_2026-11-06.md` (linked from `README.md`) |
+| `docs/reports/gate_verdict_20261108T055128Z.json` (duplicate) | moved to `docs/archive/`; JSON cannot hold a comment, so `docs/archive/README.md` carries the pointer to the canonical `policy/locomotion/adversarial_robustness/eval/results/gate_eval_20261108T055128Z/gate_verdict.json` |
+| `RateLimitedChannel` | **kept**, with a one-line note that the planned B1 slew limiter may start from it |
+| `policy/locomotion/checkpoints/.gitkeep` | **kept** |
+| `scripts/pull_pod_artifacts.sh` | **kept**: its job (pull arbitrary artifacts off a pod) is not covered by `sync_to_r2.py` (run dirs → R2) or the `fetch_*` scripts (specific artifacts ← R2); documented in `docs/runpod.md` |
+| `run_ga_smoke_pod.sh` / `run_ga_stack_check_pod.sh` | **both kept**: the stack check is not a subset (env report + quat/physics probe + parity sweep); each is now described in a `docs/runpod.md` table |
+| showcase pair | **kept**, both named in `policy/locomotion/README.md` |
+| ruff | RUF100 + I001 autofixed and enforced; ten more families fixed by hand and enforced; four families deferred with their exact hits (below) |
 
 ## Proposed Phase B actions (awaiting approval)
 

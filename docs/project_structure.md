@@ -189,7 +189,8 @@ cerberus/
 ├── plans/                            # handoff docs (phase 0, 0.5, arena, slam, sensor setup, H1)
 ├── docs/                             # this file, interfaces.md,
 │                                       # backend_support.md (generated), worlds.md, arena_integration_log.md, status reports,
-│                                       # modular_stack_options.md, archive/ + superpowers/ (history);
+│                                       # modular_stack_options.md, cleanup_candidates.md (the cleanup audit),
+│                                       # archive/ (superseded material + its README index) + superpowers/ (history);
 │                                       # architecture.svg (planned, not yet created)
 ├── docker/
 │   ├── remote/                       # LEGACY stack image (Sim 5.1 / Lab 2.3.2 / Py 3.11): Dockerfile, start.sh

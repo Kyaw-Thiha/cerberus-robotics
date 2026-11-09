@@ -29,7 +29,7 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from common.cerberus_compat.isaac_data import as_tensor, physx_view  # noqa: E402
+from common.cerberus_compat.isaac_data import as_tensor, physx_view
 from common.cerberus_description.go2_arx5_spec import (
     ARX5_BODY_NAMES,
     ARX5_EEF_BODY,
@@ -308,7 +308,7 @@ def _finish(simulation_app, exit_code: int) -> None:
     try:
         sys.stdout.flush()
         sys.stderr.flush()
-    except Exception:  # noqa: BLE001, S110 - nothing sensible to do if flushing fails while exiting
+    except Exception:  # noqa: BLE001 - nothing sensible to do if flushing fails while exiting
         pass
     os._exit(exit_code)
 
@@ -359,7 +359,10 @@ def _run(args: argparse.Namespace, thresholds: HoldThresholds, progress: dict | 
     from isaaclab.scene import InteractiveScene, InteractiveSceneCfg
     from isaaclab.utils import configclass
 
-    from common.cerberus_description.go2_arx5_cfg import GO2_ARX5_CFG, GO2_ARX5_FIXED_BASE_CFG
+    from common.cerberus_description.go2_arx5_cfg import (
+        GO2_ARX5_CFG,
+        GO2_ARX5_FIXED_BASE_CFG,
+    )
 
     robot_cfg = GO2_ARX5_FIXED_BASE_CFG if args.fix_base else GO2_ARX5_CFG
 

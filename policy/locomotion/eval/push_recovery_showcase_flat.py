@@ -71,27 +71,31 @@ simulation_app = app_launcher.app
 
 """Rest everything follows."""
 
-import torch
 import gymnasium as gym
-
-
+import isaaclab_tasks  # noqa: F401
+import torch
 from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.utils.assets import retrieve_file_path
-
 from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper
-
-import isaaclab_tasks  # noqa: F401
-import policy.locomotion  # noqa: F401  -- registers the Cerberus Go2 tasks
 from isaaclab_tasks.utils import get_checkpoint_path
-from common.cerberus_compat.rsl_rl_compat import check_checkpoint_format, hydra_task_config, make_runner
+
+import policy.locomotion  # noqa: F401  -- registers the Cerberus Go2 tasks
+from common.cerberus_compat.rsl_rl_compat import (
+    check_checkpoint_format,
+    hydra_task_config,
+    make_runner,
+)
 from policy.cli_common import resolve_task_id
 from policy.locomotion.core.platforms.registry import get_platform
-from policy.locomotion.eval.push_recovery_event import apply_single_push
 from policy.locomotion.core.push_disturbance_cfg import IMPULSE_DURATION_S
 from policy.locomotion.core.push_impulse_event import clear_expired_push_impulses
-from policy.locomotion.core.script_utils import checkpoints_root, ensure_capture_visualizer
+from policy.locomotion.core.script_utils import (
+    checkpoints_root,
+    ensure_capture_visualizer,
+)
 from policy.locomotion.core.video_capture import record_condition_clips
+from policy.locomotion.eval.push_recovery_event import apply_single_push
 
 # now that policy.locomotion has registered every platform's gym tasks, resolve
 # --platform/--terrain to a concrete task id (unless --task was passed explicitly)

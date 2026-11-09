@@ -68,13 +68,17 @@ for _p in (str(_REPO_ROOT), str(_SCRIPTS_DIR)):
     if _p not in sys.path:
         sys.path.insert(0, _p)
 
+from record_scripted_demos_go2_arx5 import summarize_hdf5
+
 from common.cerberus_compat.reset import reset_all
 from common.cerberus_description.go2_arx5_spec import GO2_ARX5_EMBODIMENT
 from common.cerberus_worlds import registry
 from common.cerberus_worlds.arena_assets import go2_arx5_embodiment as emb
 from policy.manipulation.go2_arx5_stack import layout
-from policy.manipulation.go2_arx5_stack.waypoints import PickPlaceConfig, ScriptedPickPlace
-from record_scripted_demos_go2_arx5 import summarize_hdf5
+from policy.manipulation.go2_arx5_stack.waypoints import (
+    PickPlaceConfig,
+    ScriptedPickPlace,
+)
 
 COMMANDS = ("smoke", "record", "annotate", "generate")
 BACKEND = "arena"
@@ -525,7 +529,7 @@ def _finish(exit_code: int) -> None:
     try:
         sys.stdout.flush()
         sys.stderr.flush()
-    except Exception:  # noqa: BLE001, S110 - nothing sensible to do if flushing fails while exiting
+    except Exception:  # noqa: BLE001 - nothing sensible to do if flushing fails while exiting
         pass
     os._exit(exit_code)
 

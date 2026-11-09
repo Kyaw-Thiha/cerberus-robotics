@@ -1,6 +1,5 @@
 import numpy as np
 import pytest
-
 from locomotion_policy.observation_assembly import ProprioSample, assemble_observation
 
 

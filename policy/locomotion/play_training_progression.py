@@ -104,18 +104,18 @@ simulation_app = app_launcher.app
 
 """Rest everything follows."""
 
-import imageio
 import gymnasium as gym
+import imageio
+import isaaclab_tasks  # noqa: F401
 import torch
-
-
 from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper
 
-import isaaclab_tasks  # noqa: F401
 import policy.locomotion  # noqa: F401  -- registers the Cerberus Go2 tasks
-
 from policy.cli_common import resolve_task_id
-from policy.locomotion.core.script_utils import capture_viewport_frame, ensure_capture_visualizer
+from policy.locomotion.core.script_utils import (
+    capture_viewport_frame,
+    ensure_capture_visualizer,
+)
 from policy.locomotion.core.terrain_pinning import pin_terrain
 
 # now that policy.locomotion has registered every platform's gym tasks, resolve

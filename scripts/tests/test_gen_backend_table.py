@@ -1,6 +1,7 @@
 """docs/backend_support.md must be regenerated whenever a backend card changes."""
 
 import gen_backend_table
+
 from common.cerberus_policies.backend_card import load_all_cards
 
 

@@ -38,7 +38,10 @@ from typing import Callable
 import imageio
 import torch
 
-from policy.locomotion.core.script_utils import capture_viewport_frame, point_viewport_at_env
+from policy.locomotion.core.script_utils import (
+    capture_viewport_frame,
+    point_viewport_at_env,
+)
 
 
 def record_condition_clips(

@@ -4,7 +4,10 @@ import pytest
 
 from common.cerberus_policies import registry
 from common.cerberus_policies.base import Boundary, Role, check_command
-from common.cerberus_policies.validate_config import sensor_suite_from_profile, validate_config
+from common.cerberus_policies.validate_config import (
+    sensor_suite_from_profile,
+    validate_config,
+)
 
 NAMES = ["null_loco", "scripted_loco"]
 

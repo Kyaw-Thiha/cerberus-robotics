@@ -2,17 +2,18 @@
 # the repo already violates (baseline as of 2026-11-06) ignored so `pixi run lint`
 # passes without a mass reformat. Burn this list down over time; do not add to it
 # for new code.
+#
+# Burned down on 2026-11-08: I001 (unsorted-imports) and RUF100 (unused-noqa) are
+# now enforced -- 119 mechanical fixes, no behaviour change.
 extend-exclude = ["third_party", "build", "install", "log", "artifacts"]
 
 [lint]
 ignore = [
-    "I001",    # unsorted-imports (17 existing hits)
     "B008",    # function-call-in-default-argument
     "RUF059",  # unused-unpacked-variable
     "RUF012",  # mutable-class-default
     "PLW1510", # subprocess-run-without-check
     "RUF015",  # unnecessary-iterable-allocation-for-first-element
-    "RUF100",  # unused-noqa
     "DTZ005",  # call-datetime-now-without-tzinfo
     "EXE001",  # shebang-not-executable
     "C408",    # unnecessary-collection-call

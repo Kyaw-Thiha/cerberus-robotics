@@ -184,7 +184,7 @@ def main(argv=None) -> int:
     from isaaclab.app import AppLauncher
 
     app_launcher = AppLauncher(args)
-    simulation_app = app_launcher.app  # noqa: F841 -- keeps Kit alive for the whole run
+    simulation_app = app_launcher.app
 
     try:
         return _run(args)

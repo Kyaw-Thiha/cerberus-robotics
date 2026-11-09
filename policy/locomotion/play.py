@@ -78,8 +78,8 @@ simulation_app = app_launcher.app
 import time
 
 import gymnasium as gym
+import isaaclab_tasks  # noqa: F401
 import torch
-
 from isaaclab.envs import (
     DirectMARLEnv,
     DirectMARLEnvCfg,
@@ -88,14 +88,16 @@ from isaaclab.envs import (
     multi_agent_to_single_agent,
 )
 from isaaclab.utils.assets import retrieve_file_path
-
 from isaaclab_rl.rsl_rl import RslRlBaseRunnerCfg, RslRlVecEnvWrapper
-
-import isaaclab_tasks  # noqa: F401
-import policy.locomotion  # noqa: F401  -- registers the Cerberus Go2 tasks
 from isaaclab_tasks.utils import get_checkpoint_path
+
+import policy.locomotion  # noqa: F401  -- registers the Cerberus Go2 tasks
 from policy.cli_common import resolve_task_id
-from policy.locomotion.core.script_utils import checkpoints_root, configure_video_recorders, maybe_record_video
+from policy.locomotion.core.script_utils import (
+    checkpoints_root,
+    configure_video_recorders,
+    maybe_record_video,
+)
 
 # now that policy.locomotion has registered every platform's gym tasks, resolve
 # --platform/--terrain to a concrete task id (unless --task was passed explicitly)

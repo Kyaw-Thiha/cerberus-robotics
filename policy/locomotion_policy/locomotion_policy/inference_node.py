@@ -16,9 +16,9 @@ from pathlib import Path
 import numpy as np
 import onnxruntime as ort
 import rclpy
+from geometry_msgs.msg import Twist
 from rclpy.node import Node
 from sensor_msgs.msg import JointState
-from geometry_msgs.msg import Twist
 from std_msgs.msg import Float32MultiArray
 
 from locomotion_policy.observation_assembly import (

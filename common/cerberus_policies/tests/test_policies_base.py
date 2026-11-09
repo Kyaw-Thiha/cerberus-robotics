@@ -55,7 +55,7 @@ def test_concrete_subclass_instantiates_and_defaults():
 def test_bad_class_attributes_fail_at_definition(attrs):
     with pytest.raises(TypeError):
 
-        class Bad(PolicyBackend):  # noqa: F811
+        class Bad(PolicyBackend):
             def load(self, checkpoint_path, embodiment_cfg):
                 pass
 

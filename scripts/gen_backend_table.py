@@ -32,6 +32,8 @@ Support level is what the evidence proves today; target is what we intend to rea
 | L2 | Evaluated | Run on our scenes or shared evals with released weights or without training; numbers recorded |
 | L3 | Trained by us | Trained and evaluated by us; result recorded in a report |
 
+Levels are cumulative: L2 and L3 also need the L1 evidence (an adapter plus a passing contract test).
+
 Architecture: **modular** backends consume a map or other upstream module output; **fused** backends consume raw sensor streams and train their perception encoder inside the policy. Both plug in at the same boundary.
 
 """

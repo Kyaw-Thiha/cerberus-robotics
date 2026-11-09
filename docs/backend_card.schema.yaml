@@ -45,6 +45,22 @@ properties:
         eval: {type: string, description: scene / shared eval the number was measured on}
         source: {type: string, description: report path or commit}
         trained_by_us: {type: boolean}
+  # Optional (not in `required`): the B1 slew limiter in the deployed path. Omit when not
+  # applicable or not yet known; "unknown" is accepted only while support_level is L0.
+  max_command_rate:
+    description: "per-axis command slew limit, {axis: {value, unit}}; axes vx/vy (m/s^2) and wz (rad/s^2)"
+    oneOf:
+      - const: unknown
+      - type: object
+        minProperties: 1
+        additionalProperties:
+          type: object
+          additionalProperties: false
+          required: [value, unit]
+          properties:
+            value: {type: number, exclusiveMinimum: 0}
+            unit: {enum: ["m/s^2", "rad/s^2"]}
+  command_limiter_applied: {type: boolean, description: whether a B1 CommandRateLimiter is in the deployed path}
 x-support-levels:
   L0: Documented. Backend card only, no code.
   L1: Integrated. Adapter exists and passes contract tests (loads, act() returns correct shapes, sensor needs validate against a rig).

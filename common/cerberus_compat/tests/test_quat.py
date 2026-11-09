@@ -73,3 +73,18 @@ def test_not_installed(monkeypatch):
 
     monkeypatch.setattr(quat.metadata, "version", missing)
     assert quat.isaac_quat_convention() == "wxyz"
+
+
+def test_projected_gravity_from_quat_matches_the_ga_measurement():
+    # Measured on the GA stack (docs/h2_report.md §5): a standing Go2 with spawn yaw 0.
+    q_xyzw = [0.0645, -0.0453, 0.0007, 0.9969]
+    expected = [-0.090, -0.129, -0.988]
+    got = quat.projected_gravity_from_quat(q_xyzw)
+    assert np.allclose(got, expected, atol=2e-3), got
+    # numpy input and the identity quaternion
+    assert np.allclose(quat.projected_gravity_from_quat(np.array(q_xyzw)), expected, atol=2e-3)
+    assert quat.projected_gravity_from_quat((0.0, 0.0, 0.0, 1.0)) == (0.0, -0.0, -1.0)
+    # a unit vector: gravity is never re-scaled by a normalised input
+    assert np.isclose(np.linalg.norm(got), 1.0, atol=1e-6)
+    with pytest.raises(ValueError, match="4 components"):
+        quat.projected_gravity_from_quat([0.0, 0.0, 1.0])

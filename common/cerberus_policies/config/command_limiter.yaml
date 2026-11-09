@@ -1,0 +1,18 @@
+# B1 command slew-rate limiter configuration.
+#
+# PLACEHOLDER VALUES -- UNTESTED. 1.0 m/s^2 and 2.0 rad/s^2 are starting guesses, not tuned
+# values, and nothing here claims they make the Phase 0.5 attack pass. The limiter's effect is an
+# open question (docs/h3_report.md, Deferred to remote: attack the policy+limiter system).
+#
+# Units: vx/vy metres per second squared, wz radians per second squared; max_abs in m/s and rad/s.
+# The clamps match the training command ranges read from the GA run's saved params
+# (policy/locomotion/checkpoints/unitree_go2_rough/*/params/env.yaml:
+# commands.base_velocity.ranges = +-1.0 m/s on x/y and +-1.0 rad/s on yaw).
+max_rate:
+  vx: 1.0
+  vy: 1.0
+  wz: 2.0
+max_abs:
+  vx: 1.0
+  vy: 1.0
+  wz: 1.0

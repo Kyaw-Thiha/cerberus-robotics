@@ -25,6 +25,9 @@ GOOD_L0 = {
 }
 EV_FILE = {"kind": "file", "ref": "common/cerberus_policies/base.py"}
 EV_REPORT = {"kind": "report", "ref": "docs/h1_report.md"}
+#: the L1 evidence: an adapter under backends/ and a test_*.py contract test
+EV_ADAPTER = {"kind": "file", "ref": "common/cerberus_policies/backends/null_loco.py"}
+EV_TEST = {"kind": "file", "ref": "common/cerberus_policies/tests/test_policies_backends_contract.py"}
 RESULT = {"metric": "success", "value": 0.9, "eval": "push_recovery", "source": "docs/h1_report.md"}
 
 
@@ -58,7 +61,7 @@ def test_l1_without_evidence_fails():
 
 def test_l2_without_results_fails():
     c = good_l1()
-    c.update(support_level="L2", target_support_level="L2", evidence=[EV_FILE, EV_REPORT])
+    c.update(support_level="L2", target_support_level="L2", evidence=[EV_FILE, EV_REPORT, EV_ADAPTER, EV_TEST])
     assert "requires a results entry" in problems(c)
     c["results"] = [RESULT]
     validate_card(c)
@@ -66,16 +69,68 @@ def test_l2_without_results_fails():
 
 def test_l2_needs_report_evidence_kind():
     c = good_l1()
-    c.update(support_level="L2", target_support_level="L2", results=[RESULT])
+    c.update(support_level="L2", target_support_level="L2", results=[RESULT], evidence=[EV_ADAPTER, EV_TEST])
     assert "'report' evidence" in problems(c)
 
 
 def test_l3_needs_trained_by_us_result():
     c = good_l1()
-    c.update(support_level="L3", target_support_level="L3", evidence=[EV_FILE, EV_REPORT], results=[RESULT])
+    c.update(support_level="L3", target_support_level="L3", evidence=[EV_FILE, EV_REPORT, EV_ADAPTER, EV_TEST], results=[RESULT])
     assert "trained_by_us" in problems(c)
     c["results"] = [{**RESULT, "trained_by_us": True}]
     validate_card(c)
+
+
+def test_l2_and_l3_require_the_l1_evidence():
+    # Levels are cumulative: numbers without an adapter and a contract test do not reach L2/L3.
+    for level in ("L2", "L3"):
+        c = good_l1()
+        c.update(support_level=level, target_support_level=level,
+                 evidence=[EV_FILE, EV_REPORT], results=[{**RESULT, "trained_by_us": True}])
+        msg = problems(c)
+        assert "requires the L1 evidence" in msg and "test_*.py" in msg
+    # a test file alone is not the adapter evidence, and vice versa
+    c = good_l1()
+    c.update(support_level="L2", target_support_level="L2", evidence=[EV_TEST, EV_REPORT], results=[RESULT])
+    assert "under common/cerberus_policies/backends/" in problems(c)
+    c = good_l1()
+    c.update(support_level="L2", target_support_level="L2", evidence=[EV_ADAPTER, EV_REPORT], results=[RESULT])
+    assert "test_*.py" in problems(c)
+
+
+def test_optional_limiter_fields():
+    c = good_l1()
+    c["max_command_rate"] = {"vx": {"value": 1.0, "unit": "m/s^2"}, "wz": {"value": 2.0, "unit": "rad/s^2"}}
+    c["command_limiter_applied"] = True
+    card = validate_card(c)
+    assert card.command_limiter_applied is True and card.max_command_rate["vx"]["value"] == 1.0
+    # both are optional; a card without them validates and the fields read as None
+    assert validate_card(good_l1()).max_command_rate is None
+    # unknown only at L0; wrong units/axes/values are rejected
+    c = copy.deepcopy(GOOD_L0)
+    c["max_command_rate"] = "unknown"
+    validate_card(c)
+    c = good_l1()
+    c["max_command_rate"] = "unknown"
+    assert "only at L0" in problems(c)
+    c = good_l1()
+    c["max_command_rate"] = {"vx": {"value": 1.0, "unit": "rad/s^2"}}
+    assert "unit must be 'm/s^2'" in problems(c)
+    c = good_l1()
+    c["max_command_rate"] = {"roll": {"value": 1.0, "unit": "m/s^2"}}
+    assert "unknown axis" in problems(c)
+    c = good_l1()
+    c["max_command_rate"] = {"vx": {"value": -1.0, "unit": "m/s^2"}}
+    assert "positive number" in problems(c)
+    c = good_l1()
+    c["command_limiter_applied"] = "yes"
+    assert "must be a bool" in problems(c)
+
+
+def test_limiter_units_match_the_runtime_limiter():
+    from common.cerberus_policies.command_limiter import RATE_UNITS
+
+    assert backend_card.COMMAND_RATE_UNITS == dict(RATE_UNITS)
 
 
 def test_unknown_only_allowed_at_l0():
@@ -139,3 +194,5 @@ def test_schema_file_enums_match_validator():
     assert tuple(props["support_level"]["enum"]) == backend_card.SUPPORT_LEVELS
     assert tuple(props["target_support_level"]["enum"]) == backend_card.SUPPORT_LEVELS
     assert tuple(props["evidence"]["items"]["properties"]["kind"]["enum"]) == backend_card.EVIDENCE_KINDS
+    for optional in backend_card.OPTIONAL_FIELDS:
+        assert optional in props and optional not in schema["required"]

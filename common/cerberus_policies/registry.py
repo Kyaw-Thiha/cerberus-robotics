@@ -28,6 +28,7 @@ _BUILTINS: dict[str, dict[str, str]] = {
     "loco": {
         "null_loco": "common.cerberus_policies.backends.null_loco:NullLocoBackend",
         "scripted_loco": "common.cerberus_policies.backends.scripted_loco:ScriptedLocoBackend",
+        "heightscan_ppo": "common.cerberus_policies.backends.heightscan_ppo_onnx:HeightScanPpoOnnxBackend",
     },
     "arm": {},
     "body": {},

@@ -85,3 +85,25 @@ def from_isaac(q):
 def to_isaac(q):
     """Cerberus internal (w-first) -> native Isaac order."""
     return _convert(q, "wxyz", isaac_quat_convention())
+
+
+def projected_gravity_from_quat(q_xyzw):
+    """Gravity direction (unit vector, world) projected into the body frame, from an ``xyzw`` quat.
+
+    Returns ``(gx, gy, gz)`` in the body frame; on level ground this is ``(0, 0, -1)``. One
+    quaternion per call (4 components, tuple/list/1-D array or tensor), because that is what the ROS
+    inference node feeds per control step.
+
+    The order is explicit (``xyzw``) on purpose: Isaac Lab >= 3.0, ``geometry_msgs/Quaternion`` and
+    ``sensor_msgs/Imu.orientation`` all use scalar-last, so no reordering happens between ROS and the
+    policy. The module-level ``from_isaac``/``to_isaac`` helpers exist for the pre-3.0 ``wxyz`` stack.
+    """
+    if len(q_xyzw) != 4:
+        raise ValueError(f"quaternion must have 4 components, got {len(q_xyzw)}")
+    x, y, z, w = (float(v) for v in q_xyzw)
+    # R^T @ [0, 0, -1] with R the body->world rotation: minus the third row of R.
+    return (
+        2.0 * (y * w - x * z),
+        -2.0 * (y * z + x * w),
+        2.0 * (x * x + y * y) - 1.0,
+    )

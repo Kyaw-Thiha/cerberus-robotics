@@ -53,3 +53,26 @@ def test_scripted_is_constant_from_config():
 def test_sensor_needs_validate_against_real_rigs(name, profile):
     cls = type(registry.get_backend("loco", name))
     validate_config([cls], sensor_suite_from_profile(profile), external_consumers={Boundary.B1_LOCO: "loco_policy_node"})
+
+
+def test_heightscan_ppo_consumer_contract():
+    """L1 contract for the ONNX consumer: acts only after load, and a missing graph is an error."""
+    b = registry.get_backend("loco", "heightscan_ppo")
+    assert b.boundary is Boundary.B1_LOCO and b.role is Role.CONSUMER
+    with pytest.raises(RuntimeError):
+        b.act({})
+    with pytest.raises(FileNotFoundError):
+        b.load("/nonexistent/policy.onnx", None)
+    with pytest.raises(ValueError):
+        b.load(None, None)
+
+
+def test_heightscan_ppo_sensor_needs_validate_against_real_rigs():
+    # imu + joint encoders come from the rig (camera_only has no imu, so lidar_camera is the rig
+    # this policy is meant for); height_scan is an upstream module output, not a rig sensor.
+    cls = type(registry.get_backend("loco", "heightscan_ppo"))
+    validate_config(
+        [cls],
+        sensor_suite_from_profile("lidar_camera"),
+        external_producers={Boundary.B1_LOCO: "planner"},
+    )

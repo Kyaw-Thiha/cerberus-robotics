@@ -2,11 +2,16 @@
 
 Fields (see docs/backend_card.schema.yaml, kept in sync by a test):
 name, slot, boundary, paradigm, architecture, required_sensors, rate_hz, license, checkpoint_url,
-code_url, support_level, target_support_level, evidence, results.
+code_url, support_level, target_support_level, evidence, results; plus the optional
+max_command_rate / command_limiter_applied (B1 slew limiter).
 
 Support levels: L0 documented (card only) < L1 integrated (adapter + contract tests) < L2 evaluated
 (numbers recorded) < L3 trained by us (result in a report). ``target_support_level`` is ambition,
 ``support_level`` is what the evidence proves today.
+
+Levels are cumulative: L2 and L3 also require the L1 evidence — a ``file`` evidence entry under
+``common/cerberus_policies/backends/`` (the adapter) and one for a ``test_*.py`` contract test. A
+trained-but-unintegrated backend stays at L0 until its adapter lands, however good its numbers are.
 """
 
 from __future__ import annotations
@@ -44,6 +49,12 @@ REQUIRED_FIELDS = (
     "evidence",
     "results",
 )
+#: where a backend adapter lives; L1 evidence is a `file` entry under this prefix plus a test_*.py
+ADAPTER_EVIDENCE_PREFIX = "common/cerberus_policies/backends/"
+#: optional card fields (may be omitted); the schema declares them as non-required properties
+OPTIONAL_FIELDS = ("max_command_rate", "command_limiter_applied")
+#: axes and units for ``max_command_rate``; must match command_limiter.RATE_UNITS
+COMMAND_RATE_UNITS = {"vx": "m/s^2", "vy": "m/s^2", "wz": "rad/s^2"}
 CARDS_DIR = Path(__file__).resolve().parent / "cards"
 REPO_ROOT = Path(__file__).resolve().parents[2]
 
@@ -70,6 +81,10 @@ class BackendCard:
     target_support_level: str
     evidence: list[dict[str, str]] = field(default_factory=list)
     results: list[dict[str, Any]] = field(default_factory=list)
+    #: optional: per-axis slew limit {axis: {value, unit}}; "unknown" only at L0
+    max_command_rate: dict[str, dict[str, Any]] | str | None = None
+    #: optional: whether a B1 CommandRateLimiter is in the deployed path
+    command_limiter_applied: bool | None = None
 
 
 def _level(card: dict[str, Any], key: str, problems: list[str]) -> int | None:
@@ -93,7 +108,7 @@ def validate_card(
         raise CardValidationError(["card must be a mapping"], source)
 
     missing = [k for k in REQUIRED_FIELDS if k not in data]
-    extra = [k for k in data if k not in REQUIRED_FIELDS]
+    extra = [k for k in data if k not in REQUIRED_FIELDS and k not in OPTIONAL_FIELDS]
     if missing:
         problems.append(f"missing fields: {missing}")
     if extra:
@@ -158,10 +173,41 @@ def validate_card(
         elif "trained_by_us" in r and not isinstance(r["trained_by_us"], bool):
             problems.append(f"results[{i}].trained_by_us must be bool")
 
+    mcr = data.get("max_command_rate")
+    if mcr is not None:
+        if mcr == UNKNOWN:
+            if level is not None and level > 0:
+                problems.append("max_command_rate may be 'unknown' only at L0")
+        elif not isinstance(mcr, dict):
+            problems.append("max_command_rate must be a mapping {axis: {value, unit}} (or 'unknown' at L0)")
+        else:
+            if not mcr:
+                problems.append("max_command_rate must name at least one axis")
+            for axis, entry in mcr.items():
+                if axis not in COMMAND_RATE_UNITS:
+                    problems.append(f"max_command_rate has unknown axis {axis!r}; known: {sorted(COMMAND_RATE_UNITS)}")
+                    continue
+                if not (isinstance(entry, dict) and set(entry) == {"value", "unit"}):
+                    problems.append(f"max_command_rate[{axis!r}] must be {{value: <number>, unit: {COMMAND_RATE_UNITS[axis]!r}}}")
+                    continue
+                v = entry["value"]
+                if isinstance(v, bool) or not isinstance(v, (int, float)) or v <= 0:
+                    problems.append(f"max_command_rate[{axis!r}].value must be a positive number")
+                if entry["unit"] != COMMAND_RATE_UNITS[axis]:
+                    problems.append(f"max_command_rate[{axis!r}].unit must be {COMMAND_RATE_UNITS[axis]!r}, got {entry['unit']!r}")
+    if "command_limiter_applied" in data and not isinstance(data["command_limiter_applied"], bool):
+        problems.append("command_limiter_applied must be a bool")
+
     if level is not None:
         if level >= 1 and not evidence:
             problems.append(f"{data['support_level']} requires non-empty evidence")
         if level >= 2:
+            # Levels are cumulative: L2/L3 also need the L1 evidence (adapter + passing contract test).
+            files = [e["ref"] for e in evidence if isinstance(e, dict) and e.get("kind") == "file"]
+            if not any(f.startswith(ADAPTER_EVIDENCE_PREFIX) and f.endswith(".py") for f in files):
+                problems.append(f"{data['support_level']} also requires the L1 evidence: a file entry under {ADAPTER_EVIDENCE_PREFIX} (the adapter)")
+            if not any(Path(f).name.startswith("test_") and f.endswith(".py") for f in files):
+                problems.append(f"{data['support_level']} also requires the L1 evidence: a file entry for a test_*.py contract test")
             if not results:
                 problems.append(f"{data['support_level']} requires a results entry")
             if "report" not in kinds:
@@ -171,7 +217,10 @@ def validate_card(
 
     if problems:
         raise CardValidationError(problems, source)
-    return BackendCard(**{k: data[k] for k in REQUIRED_FIELDS})
+    return BackendCard(
+        **{k: data[k] for k in REQUIRED_FIELDS},
+        **{k: data[k] for k in OPTIONAL_FIELDS if k in data},
+    )
 
 
 def load_card(path: str | Path, *, check_paths: bool = False) -> BackendCard:

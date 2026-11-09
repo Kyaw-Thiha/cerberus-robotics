@@ -16,6 +16,10 @@ pandas = "*"
 ros-jazzy-xacro = ">=2.1.1,<3"
 onnxruntime = ">=1.29.0,<2"
 py-opencv = ">=5.0.0,<6"
+# Backend cards, observation contracts and bringup configs are YAML, and
+# scripts/gen_backend_table.py reads them; earlier it rode in as a transitive
+# dependency of the ROS stack, which is not a guarantee.
+pyyaml = ">=6,<7"
 # For local unit-testing of slam/slam/ground_truth/sim_ipc.py's wire-format
 # encode/decode logic and ros2_bridge_relay.py's dispatch logic, without
 # needing the sim-ros2 Docker-only environment.

@@ -1,0 +1,18 @@
+# L0: documented only. The flat task is the truly blind policy (48-D observation, no terrain input);
+# no GA-validated checkpoint and no adapter. Facts from docs/modular_stack_options.md,
+# docs/interfaces.md and the local candidate export (policy/locomotion/checkpoints/, gitignored).
+name: blind_ppo_flat
+slot: loco
+boundary: B1_LOCO
+paradigm: "A. blind proprioceptive flat-terrain PPO (Isaac Lab Isaac-Velocity-Flat-Unitree-Go2-Cerberus-v0 task; no terrain perception)"
+architecture: modular
+required_sensors: [imu, joint_encoders]
+rate_hz: 50
+license: unknown
+checkpoint_url: unknown
+code_url: policy/locomotion
+support_level: L0
+target_support_level: L3
+evidence:
+  - {kind: file, ref: docs/modular_stack_options.md}
+results: []

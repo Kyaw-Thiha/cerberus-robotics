@@ -1,0 +1,38 @@
+# L3: trained and evaluated by us (Phase 0/0.5, docs/reports/), with the ONNX adapter and its
+# contract test added in H3 (package C). The adversarial gate FAILED; that result is recorded below
+# rather than hidden, and it does not weaken the L3 definition (trained + evaluated + reported).
+name: heightscan_ppo
+slot: loco
+boundary: B1_LOCO
+paradigm: "rough-terrain PPO conditioned on a ground-truth height scan (privileged in sim)"
+architecture: modular
+required_sensors: [height_scan, imu, joint_encoders]
+rate_hz: 50
+license: "internal (weights trained by us; Isaac Lab BSD-3 tooling)"
+checkpoint_url: "r2://$R2_BUCKET/locomotion/unitree_go2_rough/2026-11-07_07-29-40/"
+code_url: common/cerberus_policies/backends/heightscan_ppo_onnx.py
+support_level: L3
+target_support_level: L3
+evidence:
+  - {kind: file, ref: common/cerberus_policies/backends/heightscan_ppo_onnx.py}
+  - {kind: file, ref: common/cerberus_policies/tests/test_policies_backends_contract.py}
+  - {kind: file, ref: common/cerberus_policies/contracts/heightscan_ppo_v1.yaml}
+  - {kind: report, ref: docs/reports/phase0_ga_parity.md}
+  - {kind: report, ref: docs/reports/phase05_adversarial_report.md}
+  - {kind: report, ref: docs/h2_report.md}
+results:
+  - metric: "push-recovery success, mean over 18 cells"
+    value: 0.793
+    eval: "September checkpoint, 9 push levels x 4 forces (pre-GA stack)"
+    source: docs/reports/phase0_ga_parity.md
+    trained_by_us: true
+  - metric: "push-recovery success, mean over 18 cells"
+    value: 0.744
+    eval: "GA retrain (go2_locomotion_ga_v1_candidate), PhysX, 1500 iters"
+    source: docs/reports/phase0_ga_parity.md
+    trained_by_us: true
+  - metric: "adversarial gate verdict"
+    value: "FAIL at 0.568x the trained push range (51% falls)"
+    eval: "Phase 0.5 combined attack, command channel pinned at clamp, ~3.4 sign flips/s"
+    source: docs/reports/phase05_adversarial_report.md
+    trained_by_us: true

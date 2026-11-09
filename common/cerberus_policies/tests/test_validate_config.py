@@ -89,3 +89,14 @@ def test_sensor_suite_from_real_profiles():
     assert sensor_suite_from_profile("camera_only")["lidar"] is False
     with pytest.raises(ValueError, match="Unknown sensor profile"):
         sensor_suite_from_profile("nope")
+
+
+def test_upstream_module_outputs_are_not_rig_sensors():
+    prod = _backend("Planner", Boundary.B1_LOCO, Role.PRODUCER)
+    # height_scan comes from terrain perception / the sim ray-caster, not the sensor rig
+    cons = _backend("HeightScanPolicy", Boundary.B1_LOCO, Role.CONSUMER, ["height_scan", "imu", "joint_encoders"])
+    validate_config([prod, cons], RIG)
+    # anything else still has to be on the rig
+    bogus = _backend("BogusPolicy", Boundary.B1_LOCO, Role.CONSUMER, ["elevation_map"])
+    with pytest.raises(ConfigValidationError, match="elevation_map"):
+        validate_config([prod, bogus], RIG)

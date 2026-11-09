@@ -25,6 +25,10 @@ from common.cerberus_policies.base import Boundary, PolicyBackend, Role
 
 #: proprioception every Go2 build has; not part of the sensor rig profiles
 ALWAYS_AVAILABLE = frozenset({"joint_encoders"})
+#: upstream module outputs a modular backend may consume. Not physical rig sensors: the height scan
+#: comes from the simulator's ray-caster in training and from terrain perception at deployment, so the
+#: rig profile is the wrong gate for it (the producing module has its own registry/validation).
+MODULE_OUTPUTS = frozenset({"height_scan"})
 SENSOR_PROFILES_YAML = Path(__file__).resolve().parents[2] / "system/cerberus_bringup/config/sensor_profiles.yaml"
 
 
@@ -57,7 +61,7 @@ def validate_config(
     for b, who in (external_consumers or {}).items():
         consumers.setdefault(Boundary(b), []).append(who)
 
-    active = {s for s, on in sensor_suite.items() if on} | ALWAYS_AVAILABLE
+    active = {s for s, on in sensor_suite.items() if on} | ALWAYS_AVAILABLE | MODULE_OUTPUTS
     for backend in backends:
         cls = backend if isinstance(backend, type) else type(backend)
         label = cls.__name__

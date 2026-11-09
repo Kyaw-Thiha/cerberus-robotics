@@ -11,14 +11,17 @@ Support level is what the evidence proves today; target is what we intend to rea
 | L2 | Evaluated | Run on our scenes or shared evals with released weights or without training; numbers recorded |
 | L3 | Trained by us | Trained and evaluated by us; result recorded in a report |
 
+Levels are cumulative: L2 and L3 also need the L1 evidence (an adapter plus a passing contract test).
+
 Architecture: **modular** backends consume a map or other upstream module output; **fused** backends consume raw sensor streams and train their perception encoder inside the policy. Both plug in at the same boundary.
 
 | Slot | Backend | Paradigm | Architecture | Support level | Target | Evidence |
 |---|---|---|---|---|---|---|
-| loco | `blind_ppo` | A. blind proprioceptive (Isaac Lab Isaac-Velocity-Rough-Unitree-Go2 PPO, Rudin et al. 2022) | modular | L0 | L3 | [modular_stack_options.md](modular_stack_options.md) |
+| loco | `blind_ppo_flat` | A. blind proprioceptive flat-terrain PPO (Isaac Lab Isaac-Velocity-Flat-Unitree-Go2-Cerberus-v0 task; no terrain perception) | modular | L0 | L3 | [modular_stack_options.md](modular_stack_options.md) |
 | loco | `dawn` | D. latent world model (reconstructive, WMP-style RSSM) on raw noisy depth | fused | L0 | L1 | [modular_stack_options.md](modular_stack_options.md) |
 | loco | `extreme_parkour` | C. end-to-end depth -> joints (teacher-student depth distillation) | fused | L0 | L0 | [modular_stack_options.md](modular_stack_options.md) |
 | loco | `height_map_miki` | B. modular map -> policy (height-scan teacher, elevation-map student, Miki et al.) + GPU elevation mapping | modular | L0 | L1 | [modular_stack_options.md](modular_stack_options.md) |
+| loco | `heightscan_ppo` | rough-terrain PPO conditioned on a ground-truth height scan (privileged in sim) | modular | L3 | L3 | [heightscan_ppo_onnx.py](../common/cerberus_policies/backends/heightscan_ppo_onnx.py), [test_policies_backends_contract.py](../common/cerberus_policies/tests/test_policies_backends_contract.py), [heightscan_ppo_v1.yaml](../common/cerberus_policies/contracts/heightscan_ppo_v1.yaml), [phase0_ga_parity.md](reports/phase0_ga_parity.md), [phase05_adversarial_report.md](reports/phase05_adversarial_report.md), [h2_report.md](h2_report.md) |
 | loco | `jeplo` | D'. latent world model (JEPA, non-reconstructive) on raw LiDAR (Livox Mid-360) | fused | L0 | L2 | [modular_stack_options.md](modular_stack_options.md) |
 | loco | `null_loco` | scripted B1 command source: always zero velocity (test / safe stand-still source) | modular | L1 | L1 | [null_loco.py](../common/cerberus_policies/backends/null_loco.py), [test_policies_backends_contract.py](../common/cerberus_policies/tests/test_policies_backends_contract.py) |
 | loco | `omni_perception` | E. raw LiDAR end-to-end (raw spatio-temporal point clouds) | fused | L0 | L1 | [modular_stack_options.md](modular_stack_options.md) |

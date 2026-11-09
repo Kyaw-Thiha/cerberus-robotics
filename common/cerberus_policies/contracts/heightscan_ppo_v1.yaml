@@ -1,0 +1,100 @@
+# Observation/action contract for the rough-terrain loco policy
+# go2_locomotion_ga_v1_candidate (H2). Everything here is transcribed from the GA run's saved
+# params (policy/locomotion/checkpoints/unitree_go2_rough/2026-11-07_07-29-40/params/env.yaml)
+# and docs/h2_report.md; nothing is inferred except where marked unverified.
+#
+# The policy is NOT blind: it consumes a 187-cell height scan from a simulator ray-caster.
+contract: heightscan_ppo_v1
+policy: heightscan_ppo
+source:
+  env_params: policy/locomotion/checkpoints/unitree_go2_rough/2026-11-07_07-29-40/params/env.yaml
+  report: docs/h2_report.md
+
+observation:
+  kind: concatenated_terms
+  total_dim: 235
+  dtype: float32
+  # Isaac Lab concatenates in declaration order; this is that order.
+  terms:
+    - {name: base_lin_vel, dim: 3, frame: base, noise_uniform: [-0.1, 0.1], clip: null}
+    - {name: base_ang_vel, dim: 3, frame: base, noise_uniform: [-0.2, 0.2], clip: null}
+    - {name: projected_gravity, dim: 3, frame: base, noise_uniform: [-0.05, 0.05], clip: null}
+    - {name: velocity_commands, dim: 3, frame: base, noise_uniform: null, clip: null}
+    - {name: joint_pos, dim: 12, relative_to_default: true, noise_uniform: [-0.01, 0.01], clip: null}
+    - {name: joint_vel, dim: 12, noise_uniform: [-1.5, 1.5], clip: null}
+    - {name: actions, dim: 12, meaning: previous raw network output, noise_uniform: null, clip: null}
+    - {name: height_scan, dim: 187, noise_uniform: [-0.1, 0.1], clip: [-1.0, 1.0]}
+  # 3+3+3+3+12+12+12+187 = 235
+
+height_scan:
+  source_sensor: height_scanner (isaaclab.sensors.ray_caster.RayCaster, mounted on the Go2 base)
+  publication_rate_hz: 50          # sensor update_period 0.02
+  grid: {rows: 17, cols: 11}       # 187 cells, row-major
+  resolution_m: 0.1
+  size_m: [1.6, 1.0]               # (rows-1)*res x (cols-1)*res
+  alignment: yaw                   # ray_alignment: yaw, rotates with the base yaw only
+  ray_offset_m: [0.0, 0.0, 20.0]   # spawn offset above the base prim
+  clip: [-1.0, 1.0]
+  # Convention: isaaclab.envs.mdp.observations.height_scan computes
+  #   sensor_z - ray_hit_z - offset, with offset defaulting to 0.5 and not overridden in the saved
+  #   params. The shape of that formula is read from the vendored source
+  #   (third_party/IsaacLab-Arena/submodules/IsaacLab/.../mdp/observations.py); the effective offset
+  #   and the sign were NOT checked against the live term.
+  convention_status: unverified
+
+action:
+  type: joint_position
+  dim: 12
+  scale: 0.25
+  use_default_offset: true
+  clip: null
+  target: default_joint_pos + scale * raw_action
+
+control:
+  sim_dt_s: 0.005
+  decimation: 4
+  policy_rate_hz: 50
+
+commands:
+  message: LocoCommand (B1)
+  body_frame: true
+  ranges:
+    vx_mps: [-1.0, 1.0]
+    vy_mps: [-1.0, 1.0]
+    wz_radps: [-1.0, 1.0]
+  resampling_time_s: 10.0
+  rel_standing_envs: 0.02
+
+joints:
+  # Articulation order in training (joint_ordering: null -> Isaac preserves asset order); the ROS
+  # side must map by name, never by position.
+  order:
+    - FL_hip_joint
+    - FL_thigh_joint
+    - FL_calf_joint
+    - FR_hip_joint
+    - FR_thigh_joint
+    - FR_calf_joint
+    - RL_hip_joint
+    - RL_thigh_joint
+    - RL_calf_joint
+    - RR_hip_joint
+    - RR_thigh_joint
+    - RR_calf_joint
+  default_joint_pos_rad:
+    FL_hip_joint: 0.1
+    FL_thigh_joint: 0.8
+    FL_calf_joint: -1.5
+    FR_hip_joint: -0.1
+    FR_thigh_joint: 0.8
+    FR_calf_joint: -1.5
+    RL_hip_joint: 0.1
+    RL_thigh_joint: 1.0
+    RL_calf_joint: -1.5
+    RR_hip_joint: -0.1
+    RR_thigh_joint: 1.0
+    RR_calf_joint: -1.5
+
+deferred_to_remote:
+  - height-scan convention/sign/offset against the live Lab term (contract marks it unverified)
+  - whether the 187-cell scan is emitted row-major in world-yaw or base-yaw order on the pod

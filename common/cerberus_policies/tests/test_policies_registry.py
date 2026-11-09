@@ -45,7 +45,7 @@ def test_empty_slots_have_no_backends_and_no_default(monkeypatch):
 def test_lazy_import_and_instance_caching():
     for m in [m for m in sys.modules if m.startswith("common.cerberus_policies.backends")]:
         del sys.modules[m]
-    assert registry.available_backends("loco") == ["null_loco", "scripted_loco"]
+    assert registry.available_backends("loco") == ["heightscan_ppo", "null_loco", "scripted_loco"]
     assert "common.cerberus_policies.backends.null_loco" not in sys.modules  # listing does not import
     a = registry.get_backend("loco", "null_loco")
     assert "common.cerberus_policies.backends.null_loco" in sys.modules

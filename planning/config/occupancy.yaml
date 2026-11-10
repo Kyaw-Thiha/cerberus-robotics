@@ -19,7 +19,10 @@ max_step_m: 0.12
 # 0.25 m covers the half-width (0.155 m) plus margin and leaves 0.4 m through a 0.9 m door. The circle over-blocks
 # along the body axis either way -- a rectangle would be tighter, and is the obvious next refinement.
 robot_radius_m: 0.25
-# sample_spacing_m: surface-sample pitch before binning into cells (finer than resolution_m so no cell is missed).
-sample_spacing_m: 0.03
-# Safety valve: cap on samples per triangle chunk (memory, not accuracy).
-max_samples: 40000000
+# sample_spacing_m: surface-sample pitch before binning into cells. Must stay well below resolution_m
+# (0.02 vs 0.05 gives ~6 samples per cell); never derive it from the scene's total area -- a stray backdrop
+# plane would coarsen it past the cell size.
+sample_spacing_m: 0.02
+# Safety valve: sample budget per triangle chunk (memory, not accuracy). A real house OOMed when a chunk
+# of large triangles was allowed to multiply the per-triangle cap; the budget scales the chunk down uniformly.
+max_samples: 4000000

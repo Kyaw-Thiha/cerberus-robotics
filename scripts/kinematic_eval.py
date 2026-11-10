@@ -79,8 +79,9 @@ def main(argv: list[str] | None = None) -> int:
     for record in records:
         write_run_json(out / f"{record['scene']}_seed{args.seed}_pair{record['pair_index']}.json", record)
     write_aggregate_csv(out / "kinematic_aggregate.csv", records)
+    agg = aggregate(records)
     save_plan_png(grid, out / "kinematic_paths.png", paths=paths,
-                  title=f"kinematic: {aggregate(records)['success_rate']:.0%} success, {len(records)} pairs")
+                  title=f"kinematic: {agg.get('success_rate', 0.0):.0%} success, {len(records)} pairs")
 
     summary = {
         "grid": args.grid or "synthetic_flat",

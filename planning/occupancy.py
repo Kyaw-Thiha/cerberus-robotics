@@ -150,8 +150,15 @@ def sample_surfaces(
     slanted = ~(up | down | vertical)  # stair noses, ramps, sills: obstacles, never floor
 
     spacing = float(spacing_m if spacing_m is not None else config.sample_spacing_m)
-    per_tri = np.clip(np.ceil(area / (spacing ** 2)), 1, 2_000_000).astype(np.int64)
+    per_tri = np.clip(np.ceil(area / (spacing ** 2)), 1, 300_000).astype(np.int64)
     total = int(per_tri.sum())
+    # Hard per-chunk budget: many large triangles in one chunk would otherwise multiply the per-triangle cap into
+    # billions of samples (observed as an OOM kill on a real house). Scale down uniformly; the cap still leaves a
+    # 120 m^2 slab at 2 cm fully sampled.
+    if total > config.max_samples:
+        scale = config.max_samples / total
+        per_tri = np.maximum(1, np.floor(per_tri * scale)).astype(np.int64)
+        total = int(per_tri.sum())
 
     tri_index = np.repeat(np.arange(len(faces)), per_tri)
     offsets = np.repeat(np.cumsum(per_tri) - per_tri, per_tri)
@@ -179,7 +186,7 @@ def build_grid(
     config: OccupancyConfig | None = None,
     scene_id: str = "",
     floor_z: float | None = None,
-    chunk_faces: int = 500_000,
+    chunk_faces: int = 200_000,
 ) -> OccupancyGrid:
     """Rasterise world triangles (metres) into a FREE / BLOCKED / UNKNOWN grid, then inflate.
 
@@ -200,15 +207,12 @@ def build_grid(
     origin = np.array([lo[0], lo[1]])
     n_cells = ny * nx
 
-    # One global spacing for every chunk: a big floor slab needs hundreds of thousands of samples, and scaling per
-    # triangle would leave most of its cells unsampled. If the scene's total area would exceed max_samples, widen the
-    # spacing uniformly instead of dropping coverage unevenly.
-    total_area = 0.0
-    for start in range(0, len(faces), chunk_faces):
-        total_area += float(triangle_areas(points, faces[start:start + chunk_faces]).sum())
+    # Fixed pitch, a fraction of the cell size. It must NOT be derived from the scene's total triangle area: a
+    # single stray plane far outside the house (GRScenes ships a ~500 m backdrop mesh) dominates that area and
+    # would coarsen the pitch past the cell size, leaving most cells unsampled and the map UNKNOWN. Memory is
+    # bounded by chunking instead, and a huge stray triangle cannot ask for millions of samples on its own
+    # (300k covers a 120 m^2 slab at 2 cm).
     spacing = config.sample_spacing_m
-    if total_area > 0.0:
-        spacing = max(spacing, math.sqrt(total_area / config.max_samples))
 
     up_min = np.full(n_cells, np.inf)
     up_max = np.full(n_cells, -np.inf)

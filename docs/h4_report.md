@@ -104,3 +104,77 @@ height-scan constant or the standing check fail, Part 2 stops with the diagnosis
 SLAM-derived pose/map (H4c), dynamic or unmapped obstacles, learned navigation policies, ROS wrappers for the
 planners, SCAN-Planner/VOP-Nav/HiPAN/RAEM integration, estimated-map or corrupted-scan experiments, retraining or
 robustifying any policy, `go2_locomotion_final.pt`, Arena/Lightwheel, arm or `go2_arx5`.
+
+## Part 2: pod session, 2026-11-10
+
+Ran on a fresh clone of the pushed `main` (`fb90e28`) on `cerberus-remote-v6:v6-ga` (A40 first, then a 4090 after the
+first host never published port 22). Three hours were budgeted; the session stopped after ~1h45 of pod time.
+
+### Credentials: no change was needed
+
+R0b initially failed on a 403, but the probe was wrong: `worlds` is a **prefix inside the `cerberus-robotics`
+bucket**, not a bucket name. The scenes are readable at `cerberus-robotics/worlds/grscenes/home`, and
+`fetch_grscenes_from_r2.py` already builds that full path. Re-running the check against the real path passed
+(listing 4 entries, object read 1). **No credential or bucket change is needed**; the earlier "R2 is 403" note in
+this report was a probe bug, not a permission change.
+
+### Real grids (R0c)
+
+Both target homes fetched, preprocessed and rasterised. `planning/occupancy.py` needed two fixes that only real
+scenes exposed:
+
+1. the sampling pitch was derived from the scene's total triangle area; a ~500 m GRScenes backdrop plane dominated
+   that area and coarsened the pitch past the 5 cm cell, leaving **71% of cells unknown**. The pitch is now fixed at
+   2 cm.
+2. a chunk of large triangles could multiply the per-triangle sample cap into billions of samples, which the
+   container OOM-killed. A hard per-chunk sample budget now bounds it.
+
+| scene | grid | free | blocked | unknown | traversable | largest component |
+|---|---|---|---|---|---|---|
+| `MV7J…ADQ8_usd` | 138 x 337 @ 5 cm (6.9 x 16.8 m) | 35% | 50% | 15% | 6 970 cells (15%) | 6 582 cells (94% of traversable) |
+| `MV7J…ADY8_usd` | — | — | — | — | — | — |
+
+Scene 1's preview shows rooms, walls, doorways and furniture, with unknown only outside the footprint. Gate G
+passed on that scene (previews on R2). Scene 2's grid was built and uploaded but its preview was not inspected
+before the session ended.
+
+### Kinematic upper bound on the real grids
+
+| scene | pairs | success | mean path | SPL | rejections |
+|---|---|---|---|---|---|
+| `MV7J…ADQ8_usd` | 20 | **20/20** | 5.99 m | 1.0 (capped) | 39 attempts: 2 unreachable, 17 outside 3–10 m, 2 too close |
+| `MV7J…ADY8_usd` | 20 | **20/20** | 4.44 m | 1.0 (capped) | — |
+
+As before, SPL 1.0 is a cap artefact: episodes stop at the 0.5 m goal tolerance, so the travelled length is shorter
+than the reference. The mean path length is the number to compare with physics.
+
+### Physics runs: blocked by the Kit launcher
+
+Every launch of the scene env crashed at app start with `libcarb.tasking` SIGSEGV (exit 139), the driver-595 flake
+recorded for this image. Three launches were tried (the documented one-retry allowance plus one): the 4-env stand
+crashed immediately, a second 4-env run survived 18+ minutes without ever writing `assertions.json` (this scene's
+recorded 4-env build is ~745 s, so it was still building when cut), and a 1-env navigation launch crashed at start.
+
+Consequences, stated plainly:
+
+- **No physics navigation numbers, no assertions, no clips.** The R2 prefix holds the grids, the kinematic metrics
+  and the branch bundle; `assertions/` and `*.mp4` do not exist because no run got that far.
+- **The kinematic-vs-physics gap cannot be reported this session.** The kinematic ceiling is 100% on both scenes;
+  whether the policy tracks it is untested here. Nothing was tuned.
+- The session did **not** reach R1's gate, so R2/R3 were never validly attempted.
+
+### Delivered
+
+- R2: `cerberus-robotics/migration/h4_nav/20261110T0857Z/` — 53 files: both grids (`occupancy/*/occupancy.npz`),
+  scan-proxy sidecars, both occupancy PNGs, per-pair kinematic JSON + aggregate CSV for both scenes,
+  `h4-nav-in-scene.bundle`. Manifest check: every local file present, `missing: none`.
+- Branch `h4-nav-in-scene` on the pod at commit `4c7ff31` (occupancy fixes + `docs/reports/occupancy/`), exported
+  as that bundle because the pod has no GitHub write credential. From a clone of `main`: `git fetch
+  <bundle>` then push the branch.
+- Pod `6vbmvper6uwjry` **stopped** (`EXITED`), not deleted: no artifacts remain only on it.
+
+### Next session needs
+
+A host where Kit launches. The provisioner is not the problem (one 4090 host worked, a second 4090 host never
+published port 22); the failing part is Isaac Sim's startup on driver 595. Try a different GPU/datacenter, or the
+`v6-dev`/`v6-rel2` image whose driver line was previously stable for app launches, and only then run R1 -> R2 -> R3.

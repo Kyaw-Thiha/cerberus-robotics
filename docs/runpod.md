@@ -52,7 +52,7 @@ records the tier and the observed (CUDA shown, driver) pair in `outputs/launch_p
 
 **Kit retry.** `scripts/kit_retry.sh` wraps every Isaac/Kit entrypoint in the pod drivers. It re-runs a command when it
 exits **139 within 180 s** of starting, at most **three launches**, and passes any other exit code or late crash
-through unchanged. Every attempt lands in the same CSV. This is what turns "one launch in two crashes" into a usable
+through unchanged. ``isaaclab.sh`` converts the child's 139 into exit 1, so the wrapper also matches the crash in its own log ("terminating this process with exit code 139"); without that, no retry ever fires. Every attempt lands in the same CSV, and the probe streams its output to ``outputs/probe_last.log`` so a hung launch leaves evidence. This is what turns "one launch in two crashes" into a usable
 host instead of a rejected one.
 
 | date | driver | CUDA shown | GPU | tier | Kit launches OK/fail | verdict |
@@ -62,7 +62,8 @@ host instead of a rejected one.
 | 2026-11-07..08 | 595.91.07 | unknown | unknown | B | **many OK**: GA training, gate, eval | usable behind the retry |
 | 2026-11-08 | 595.91.07 | unknown | RTX A5000 | B | ~1 in 2 OK | flaky launch, retry absorbs it |
 | 2026-11-09/10 | 595.91.07 | 13.0 | A40, RTX 4090 | B | 0/3 in the H4 attempt | probe/retry decides per host |
-| 2026-11-10 | unknown | unknown | RTX 4090 | — | n/a | provisioning only: port 22 never published |
+| 2026-11-10 | 595.91.07 | 13.2 | RTX 4090 | B | 0/1 probe: TIMEOUT, no Kit output in 300 s | host d62a57dd355f stopped; second of two non-OK hosts |
+| 2026-11-10 | 595.91.07 | 13.2 | RTX 4090 | B | one launch crashed 139 in 7.1 s (wrapper reports 1), corrected probe then TIMEOUT | host 392a4f398312 stopped; two non-OK verdicts ended the session |
 
 "unknown" means the value was not recorded in that session; the gate records it automatically. Back-filled from
 `docs/arena_integration_log.md`, `docs/reports/scene_eval_phase0.md` and the H4 session logs.
@@ -72,7 +73,7 @@ host instead of a rejected one.
 `scripts/create_pod.py` posts to the REST API with `allowedCudaVersions: ["13.0"]` **once** (it fails fast when there is
 no such stock), then creates **filter-free** and lets the gate decide. Secure cloud only; GPU priority list defaults to
 A40, RTX 4090, A5000, L40S, A6000. At most **4 pod creations per session** (counted in `outputs/pod_creations.json`),
-and every gate-rejected pod is terminated because it holds no data. The API has no `13.2` value (the enum is 13.0,
+and every gate-rejected pod is terminated because it holds no data (from the laptop: a pod-side REST DELETE currently answers 403, so `runpodctl pod stop`/`delete` is the reliable path). The API has no `13.2` value (the enum is 13.0,
 12.9 ... 11.8). The key comes from `RUNPOD_API_KEY`; it is passed to the pod (for the gate, probe and dead-man) and
 never printed.
 

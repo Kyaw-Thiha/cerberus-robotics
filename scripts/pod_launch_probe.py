@@ -70,12 +70,17 @@ def main(argv: list[str] | None = None) -> int:
     # every Kit launch goes through the retry wrapper: 139 within 180 s is retried, at most 3 launches
     cmd = ["bash", str(REPO_ROOT / "scripts" / "kit_retry.sh"), "--", lab, "-p",
            str(REPO_ROOT / "scripts" / "pod_launch_probe_env.py"), "--headless"]
+    # stream to a file so a hung launch leaves evidence instead of an empty capture
+    log_path = REPO_ROOT / "outputs" / "probe_last.log"
+    log_path.parent.mkdir(parents=True, exist_ok=True)
     try:
-        proc = subprocess.run(cmd, capture_output=True, text=True, timeout=TIMEOUT_S, env=env)
-        rc, output = proc.returncode, (proc.stdout or "") + (proc.stderr or "")
-    except subprocess.TimeoutExpired as e:
+        with log_path.open("w", encoding="utf-8") as log:
+            proc = subprocess.run(cmd, stdout=log, stderr=subprocess.STDOUT, text=True, timeout=TIMEOUT_S, env=env)
+        rc = proc.returncode
+        output = log_path.read_text(encoding="utf-8", errors="replace")
+    except subprocess.TimeoutExpired:
         rc = 124
-        output = ((e.stdout or "") if isinstance(e.stdout, str) else "") + "\nTIMEOUT"
+        output = log_path.read_text(encoding="utf-8", errors="replace") + "\nTIMEOUT"
     except OSError as e:
         rc, output = 1, f"{type(e).__name__}: {e}"
 

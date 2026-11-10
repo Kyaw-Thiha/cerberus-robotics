@@ -80,6 +80,15 @@ class AssertionReport:
             "soft": self.soft,
         }
 
+    @classmethod
+    def from_dict(cls, data: dict[str, Any]) -> AssertionReport:
+        """Rebuild a report from ``assertions.json`` so a relaunch can skip a completed stand test."""
+        report = cls()
+        for item in data.get("checks", []):
+            report.checks.append(Check(name=item["name"], passed=bool(item["passed"]), detail=item.get("detail")))
+        report.soft = dict(data.get("soft", {}))
+        return report
+
     def write(self, path: str | Path) -> Path:
         path = Path(path)
         path.parent.mkdir(parents=True, exist_ok=True)

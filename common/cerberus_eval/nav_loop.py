@@ -15,8 +15,10 @@ Per episode: reset to the start pose, plan with A*, follow with pure pursuit, st
 
 from __future__ import annotations
 
+import json
 import math
 from dataclasses import dataclass, field
+from pathlib import Path
 from typing import Any, Callable, Protocol, Sequence
 
 from common.cerberus_eval.kinematics import step_pose
@@ -196,4 +198,35 @@ def run_navigation(
             "start": item["start"], "goal": item["goal"],
         })
     records.sort(key=lambda r: r["pair_index"])
+    return records
+
+
+def run_pairs_resumable(
+    out_dir: str | Path,
+    scene_id: str,
+    pairs: Sequence[StartGoalPair],
+    run_one: Callable[[int, StartGoalPair], dict[str, Any]],
+    *,
+    skip_existing: bool = True,
+) -> list[dict[str, Any]]:
+    """Run pairs one at a time, persisting each record before the next.
+
+    A crash loses at most the pair in flight: every completed pair is a JSON file under ``<out>/pairs/``, and a
+    relaunch skips those. ``run_one(index, pair)`` returns the record; the record is written with the pair index.
+    """
+    pairs_dir = Path(out_dir) / "pairs"
+    pairs_dir.mkdir(parents=True, exist_ok=True)
+    records: list[dict[str, Any]] = []
+    for index, pair in enumerate(pairs):
+        path = pairs_dir / f"pair_{index:03d}.json"
+        if skip_existing and path.is_file():
+            records.append(json.loads(path.read_text(encoding="utf-8")))
+            continue
+        record = run_one(index, pair)
+        record.setdefault("scene", scene_id)
+        record["pair_index"] = index
+        tmp = path.with_suffix(".json.tmp")
+        tmp.write_text(json.dumps(record, indent=2, default=str) + "\n", encoding="utf-8")
+        tmp.replace(path)
+        records.append(record)
     return records

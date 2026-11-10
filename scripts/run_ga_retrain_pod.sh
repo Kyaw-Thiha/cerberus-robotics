@@ -63,7 +63,7 @@ if [[ -n "$RESUME_RUN" ]]; then
     record train SKIP "resumed existing run $RESUME_RUN"
 else
     say "training (RUN_002 recipe, tensorboard logger)"
-    run_isaac train "$CAP_S" 2 -- "$LAB" -p policy/locomotion/train.py \
+    run_isaac train "$CAP_S" 2 -- bash "$REPO_ROOT/scripts/kit_retry.sh" -- "$LAB" -p policy/locomotion/train.py \
         --platform go2 --terrain rough --headless --logger tensorboard \
         --num_envs "$NUM_ENVS" --max_iterations "$ITERATIONS" --seed "$SEED"
     rc=$?
@@ -88,7 +88,7 @@ fi
 # afterwards from the finished checkpoint, with retries, and a failed clip does not invalidate the run.
 if [[ -n "$RUN_DIR" ]]; then
     for attempt in 1 2 3 4; do
-        run_isaac video 900 1 -- "$LAB" -p policy/locomotion/play.py \
+        run_isaac video 900 1 -- bash "$REPO_ROOT/scripts/kit_retry.sh" -- "$LAB" -p policy/locomotion/play.py \
             --platform go2 --terrain rough --headless --video --video_length 200 --num_envs 8
         clip="$(find "$RUN_DIR" -name '*.mp4' -size +0 2>/dev/null | tail -1)"
         [[ -n "$clip" ]] && break
@@ -104,7 +104,7 @@ fi
 # ---- finalize: candidate .pt + .onnx + sidecar -------------------------------------------------
 if [[ -n "$RUN_DIR" ]]; then
     say "finalizing candidate from $RUN_DIR"
-    run_isaac finalize 1800 2 -- "$LAB" -p scripts/finalize_ga_checkpoint.py \
+    run_isaac finalize 1800 2 -- bash "$REPO_ROOT/scripts/kit_retry.sh" -- "$LAB" -p scripts/finalize_ga_checkpoint.py \
         --run-dir "$RUN_DIR" --name go2_locomotion_ga_v1_candidate --physics isaacsim_physx \
         --git-hash "${CERBERUS_SYNC_COMMIT:-$(_stamped_commit)}"
     rc=$?
@@ -119,7 +119,7 @@ fi
 # ---- evaluate the new candidate on the same sweep as the September reference --------------------
 if [[ -f policy/locomotion/checkpoints/go2_locomotion_ga_v1_candidate.pt ]]; then
     say "evaluating candidate"
-    run_isaac eval 5400 4 -- "$LAB" -p policy/locomotion/eval/push_recovery_eval.py \
+    run_isaac eval 5400 4 -- bash "$REPO_ROOT/scripts/kit_retry.sh" -- "$LAB" -p policy/locomotion/eval/push_recovery_eval.py \
         --platform go2 --terrain rough \
         --checkpoint policy/locomotion/checkpoints/go2_locomotion_ga_v1_candidate.pt \
         --headless \

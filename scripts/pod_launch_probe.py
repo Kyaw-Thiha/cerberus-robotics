@@ -67,7 +67,9 @@ def main(argv: list[str] | None = None) -> int:
 
     env = os.environ.copy()
     env.setdefault("CERBERUS_ALLOW_BAD_DRIVER_RENDER", "1")
-    cmd = [lab, "-p", str(REPO_ROOT / "scripts" / "pod_launch_probe_env.py"), "--headless"]
+    # every Kit launch goes through the retry wrapper: 139 within 180 s is retried, at most 3 launches
+    cmd = ["bash", str(REPO_ROOT / "scripts" / "kit_retry.sh"), "--", lab, "-p",
+           str(REPO_ROOT / "scripts" / "pod_launch_probe_env.py"), "--headless"]
     try:
         proc = subprocess.run(cmd, capture_output=True, text=True, timeout=TIMEOUT_S, env=env)
         rc, output = proc.returncode, (proc.stdout or "") + (proc.stderr or "")
@@ -78,6 +80,14 @@ def main(argv: list[str] | None = None) -> int:
         rc, output = 1, f"{type(e).__name__}: {e}"
 
     verdict = classify(rc, output)
+    if verdict != "OK":
+        # a probe that fails after three launches rejects this host; the pod holds no data yet
+        pod_id = os.environ.get("RUNPOD_POD_ID", "")
+        api_key = os.environ.get("RUNPOD_API_KEY", "")
+        if pod_id and api_key:
+            from pod_driver_gate import terminate_pod
+            ok, detail = terminate_pod(pod_id, api_key)
+            print(f"LAUNCH PROBE: terminating {pod_id} after probe failure: {'ok' if ok else 'failed'} ({detail})")
     info: HostInfo = collect_host_info()
     note = "" if verdict == "OK" else output.strip().splitlines()[-1][:300] if output.strip() else ""
     print(f"LAUNCH PROBE: {verdict} driver={info.driver} gpu={info.gpu} host={info.host} rc={rc}")

@@ -155,7 +155,7 @@ fi
 #    once from the valid geometry (scripts/build_lidar_proxy.py; cached, so reruns skip it). Needs pxr only.
 if [[ "$SCENE" != "stock" ]]; then
     echo "[run_slam_eval_remote] building/validating the LiDAR proxy mesh for $SCENE..."
-    ( cd "$REPO_ROOT" && "${ISAACLAB_PATH}/isaaclab.sh" -p scripts/build_lidar_proxy.py --scene "$SCENE" ) || {
+    ( cd "$REPO_ROOT" && bash "$REPO_ROOT/scripts/kit_retry.sh" -- "${ISAACLAB_PATH}/isaaclab.sh" -p scripts/build_lidar_proxy.py --scene "$SCENE" ) || {
         echo "[run_slam_eval_remote] ERROR: LiDAR proxy build failed for $SCENE" >&2
         exit 1
     }
@@ -228,7 +228,7 @@ BAG_PID=$!
 #    every rig renders cameras. The loop resolves --scene/--spawn* itself, sets
 #    MDL_SYSTEM_PATH before Kit starts, and writes sim_loop_report.json into
 #    the run dir (synced below).
-( cd "$REPO_ROOT" && timeout "$JOB_TIMEOUT" "${ISAACLAB_PATH}/isaaclab.sh" -p slam/slam/ground_truth/sim_ground_truth_loop.py \
+( cd "$REPO_ROOT" && timeout "$JOB_TIMEOUT" bash "$REPO_ROOT/scripts/kit_retry.sh" -- "${ISAACLAB_PATH}/isaaclab.sh" -p slam/slam/ground_truth/sim_ground_truth_loop.py \
     --mission "$MISSION" --sensor-rig "$SENSOR_RIG" --checkpoint "$CHECKPOINT" "${SCENE_ARGS[@]}" \
     --backend "$BACKEND" --run-timestamp "$RUN_TIMESTAMP" --headless )
 SIM_EXIT_CODE=$?

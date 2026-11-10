@@ -69,7 +69,7 @@ fi
 
 # ---- 2. quat convention + resolved physics -----------------------------------------------------
 if skipped probe; then record probe SKIP -; else
-    run_isaac probe 900 4 -- "$LAB" -p scripts/check_isaac_quat_convention.py \
+    run_isaac probe 900 4 -- bash "$REPO_ROOT/scripts/kit_retry.sh" -- "$LAB" -p scripts/check_isaac_quat_convention.py \
         --task Isaac-Velocity-Rough-Unitree-Go2-Cerberus-Play-v0 \
         --merge-into outputs/env_report.json \
         --output "$REPORT_DIR/quat_convention.json"
@@ -86,7 +86,7 @@ fi
 # ---- 3. headless smoke: 64 envs, ~200 steps ----------------------------------------------------
 if skipped smoke; then record smoke SKIP -; else
     MARKER="$REPORT_DIR/.smoke_marker"; : > "$MARKER"
-    run_isaac smoke 1800 2 -- "$LAB" -p policy/locomotion/train.py \
+    run_isaac smoke 1800 2 -- bash "$REPO_ROOT/scripts/kit_retry.sh" -- "$LAB" -p policy/locomotion/train.py \
         --platform go2 --terrain rough --headless --logger tensorboard \
         --num_envs 64 --max_iterations 8 --video_interval 100000
     rc=$?
@@ -110,7 +110,7 @@ if skipped eval; then record eval SKIP -; else
         ONNX="${SEPT_CHECKPOINT%.pt}.onnx"
         ONNX_ARGS=()
         [[ -f "$ONNX" ]] && ONNX_ARGS=(--policy_onnx "$ONNX")
-        run_isaac eval 5400 4 -- "$LAB" -p policy/locomotion/eval/push_recovery_eval.py \
+        run_isaac eval 5400 4 -- bash "$REPO_ROOT/scripts/kit_retry.sh" -- "$LAB" -p policy/locomotion/eval/push_recovery_eval.py \
             --platform go2 --terrain rough \
             --checkpoint "$SEPT_CHECKPOINT" "${ONNX_ARGS[@]}" --headless \
             --contract_reference "$SEPT_RUN_DIR" \

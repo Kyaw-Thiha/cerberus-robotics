@@ -31,7 +31,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ALLOWLIST_PATH = Path(__file__).resolve().parent / "pod_driver_allowlist.json"
 CSV_PATH = REPO_ROOT / "outputs" / "launch_probe.csv"
-CSV_COLUMNS = ("ts", "stage", "driver", "cuda", "gpu", "host", "datacenter", "image", "verdict", "note")
+CSV_COLUMNS = ("ts", "stage", "driver", "cuda", "gpu", "host", "datacenter", "image", "verdict", "tier", "note")
 RUNPOD_API = "https://rest.runpod.io/v1/pods"
 EXIT_REJECT = 2
 
@@ -51,24 +51,31 @@ def _version_tuple(text: str) -> tuple[int, ...]:
     return tuple(int(p) for p in parts[:3]) if parts else ()
 
 
-def driver_allowed(driver: str, allowlist: dict) -> tuple[bool, str]:
-    """``(allowed, reason)`` for an exact driver version string such as ``595.58.03``."""
+TIER_A = "A"
+TIER_B = "B"
+TIER_REJECT = "REJECT"
+
+
+def classify_driver(driver: str, allowlist: dict) -> tuple[str, str]:
+    """``(tier, reason)``: A accepted, B accepted only if the launch probe passes, REJECT terminate."""
     version = _version_tuple(driver)
     if len(version) < 2:
-        return False, "unparseable driver version"
+        return TIER_REJECT, "unparseable driver version"
     branch = str(version[0])
-    for rule in allowlist.get("rules", []):
-        if str(rule.get("branch")) != branch:
-            continue
-        if "exact_version" in rule:
-            if driver.strip() == rule["exact_version"]:
-                return True, rule.get("why", "exact match")
-            return False, f"595 branch only allows {rule['exact_version']}"
-        if "min_version" in rule:
+    for rule in allowlist.get("tier_a", []):
+        if rule.get("exact_version") and driver.strip() == rule["exact_version"]:
+            return TIER_A, rule.get("why", "exact match")
+        if str(rule.get("branch")) == branch and "min_version" in rule:
             if version >= _version_tuple(rule["min_version"]):
-                return True, rule.get("why", "minimum match")
-            return False, f"580 branch needs >= {rule['min_version']}"
-    return False, f"branch {branch}.x is not allowlisted"
+                return TIER_A, rule.get("why", "minimum match")
+            return TIER_REJECT, f"580 branch below {rule['min_version']}"
+    for rule in allowlist.get("tier_b", []):
+        if branch in [str(b) for b in rule.get("branches", [])]:
+            return TIER_B, rule.get("why", "probe required")
+    below = allowlist.get("reject_below")
+    if below and version < _version_tuple(below):
+        return TIER_REJECT, f"driver below {below}"
+    return TIER_REJECT, f"branch {branch}.x has no evidence of a working run"
 
 
 def parse_cuda_version(nvidia_smi_text: str) -> str:
@@ -99,7 +106,8 @@ def collect_host_info(image: str | None = None) -> HostInfo:
     )
 
 
-def append_probe_row(path: Path, info: HostInfo, *, stage: str, verdict: str, note: str = "") -> None:
+def append_probe_row(path: Path, info: HostInfo, *, stage: str, verdict: str, note: str = "",
+                     tier: str = "") -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     new = not path.is_file()
     with path.open("a", newline="", encoding="utf-8") as fh:
@@ -116,6 +124,7 @@ def append_probe_row(path: Path, info: HostInfo, *, stage: str, verdict: str, no
             "datacenter": info.datacenter,
             "image": info.image,
             "verdict": verdict,
+            "tier": tier,
             "note": note,
         })
 
@@ -139,13 +148,13 @@ def main(argv: list[str] | None = None) -> int:
     require_pod("pod_driver_gate.sh")
     allowlist = json.loads(ALLOWLIST_PATH.read_text(encoding="utf-8"))
     info = collect_host_info()
-    allowed, reason = driver_allowed(info.driver, allowlist)
-    verdict = "ALLOW" if allowed else "REJECT"
-    line = (f"DRIVER GATE: {verdict} driver={info.driver} cuda={info.cuda} gpu={info.gpu} "
+    tier, reason = classify_driver(info.driver, allowlist)
+    verdict = "ALLOW" if tier == TIER_A else ("PROBE_REQUIRED" if tier == TIER_B else "REJECT")
+    line = (f"DRIVER GATE: TIER {tier} ({verdict}) driver={info.driver} cuda={info.cuda} gpu={info.gpu} "
             f"datacenter={info.datacenter} image={info.image} host={info.host} ({reason})")
     print(line)
-    append_probe_row(CSV_PATH, info, stage="gate", verdict=verdict, note=reason)
-    if allowed:
+    append_probe_row(CSV_PATH, info, stage="gate", verdict=verdict, note=f"tier {tier}; {reason}", tier=tier)
+    if tier in (TIER_A, TIER_B):
         return 0
 
     pod_id = os.environ.get("RUNPOD_POD_ID", "")
@@ -153,7 +162,8 @@ def main(argv: list[str] | None = None) -> int:
     if pod_id and api_key:
         ok, detail = terminate_pod(pod_id, api_key)
         print(f"DRIVER GATE: terminating {pod_id} (no data on it yet): {'ok' if ok else 'failed'} ({detail})")
-        append_probe_row(CSV_PATH, info, stage="gate", verdict="TERMINATED" if ok else "TERMINATE_FAILED", note=detail)
+        append_probe_row(CSV_PATH, info, stage="gate",
+                         verdict="TERMINATED" if ok else "TERMINATE_FAILED", note=detail, tier=tier)
     else:
         print("DRIVER GATE: no RUNPOD_POD_ID/RUNPOD_API_KEY; terminate the pod manually")
     return EXIT_REJECT

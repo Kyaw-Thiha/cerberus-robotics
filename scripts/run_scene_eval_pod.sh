@@ -99,7 +99,7 @@ PY
     fi
 
     say "load + stand $scene"
-    if timeout 900 "$LAB" -p scripts/arena_spike_go2.py \
+    if timeout 900 bash "$REPO_ROOT/scripts/kit_retry.sh" -- "$LAB" -p scripts/arena_spike_go2.py \
         --backend plain_usd --scene "grscenes:$scene" --num_envs "$NUM_ENVS" --steps 200 --headless \
         --report "$REPORT_DIR/${scene}_spike.json" > "$REPORT_DIR/${scene}_spike.log" 2>&1; then
         record "${scene}_load" PASS "$REPORT_DIR/${scene}_spike.json"

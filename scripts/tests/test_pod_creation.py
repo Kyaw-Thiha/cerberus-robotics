@@ -49,25 +49,44 @@ def test_create_returns_the_pod_id_and_never_leaks_the_key():
     assert "secret-key" not in json.dumps(payload)
 
 
-def test_fallback_retries_with_cuda_13_2(monkeypatch, capsys):
+def test_retries_filter_free_after_13_0_fails(monkeypatch, capsys, tmp_path):
     transport = Recorder([(400, '{"error": "no capacity"}'), (200, '{"id": "xyz"}')])
     monkeypatch.setenv("RUNPOD_API_KEY", "k")
     monkeypatch.setattr(create_pod, "http_post", transport)
-    rc = create_pod.main(["--fallback"])
+    rc = create_pod.main(["--creations-file", str(tmp_path / "c.json")])
     assert rc == 0
     first, second = transport.calls
     assert first[2]["allowedCudaVersions"] == ["13.0"]
-    # 13.2 is not in the API enum; the legal fallback is to omit the filter and let the gate decide
     assert "allowedCudaVersions" not in second[2]
     assert "created pod xyz" in capsys.readouterr().out
 
 
-def test_no_fallback_means_one_attempt(monkeypatch):
-    transport = Recorder([(400, '{"error": "no capacity"}')])
+def test_a_successful_first_attempt_is_the_only_attempt(monkeypatch, tmp_path):
+    transport = Recorder([(200, '{"id": "abc"}')])
     monkeypatch.setenv("RUNPOD_API_KEY", "k")
     monkeypatch.setattr(create_pod, "http_post", transport)
-    assert create_pod.main([]) == 1
+    assert create_pod.main(["--creations-file", str(tmp_path / "c.json")]) == 0
     assert len(transport.calls) == 1
+
+
+def test_creation_cap_is_four(monkeypatch, tmp_path):
+    f = tmp_path / "c.json"
+    f.write_text(json.dumps([{"pod_id": str(i)} for i in range(4)]))
+    transport = Recorder([])
+    monkeypatch.setenv("RUNPOD_API_KEY", "k")
+    monkeypatch.setattr(create_pod, "http_post", transport)
+    assert create_pod.main(["--creations-file", str(f)]) == 3
+    assert transport.calls == []
+
+
+def test_api_key_is_passed_to_the_pod_but_never_printed(monkeypatch, capsys, tmp_path):
+    transport = Recorder([(200, '{"id": "abc"}')])
+    monkeypatch.setenv("RUNPOD_API_KEY", "secret-key")
+    monkeypatch.setattr(create_pod, "http_post", transport)
+    create_pod.main(["--creations-file", str(tmp_path / "c.json")])
+    payload = transport.calls[0][2]
+    assert payload["env"]["RUNPOD_API_KEY"] == "secret-key"
+    assert "secret-key" not in capsys.readouterr().out
 
 
 def test_cuda_13_2_is_rejected_before_any_request():

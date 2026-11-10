@@ -1,8 +1,9 @@
 """Tests for the shared navigation loop (mock backend; no Isaac, no policy)."""
 
 import numpy as np
+import pytest
 
-from common.cerberus_eval.nav_loop import MockBackend, NavConfig, run_navigation
+from common.cerberus_eval.nav_loop import MockBackend, NavConfig, run_navigation, run_pairs_resumable
 from planning.occupancy import BLOCKED, FREE, OccupancyConfig, OccupancyGrid
 from planning.sampling import StartGoalPair
 
@@ -118,3 +119,27 @@ def test_success_through_geometry_is_flagged_suspect():
     assert records[0]["outcome"] == "success"
     assert records[0]["trace_collision_free"] is False
     assert records[0]["suspect_success"] is True
+
+
+def test_resumable_pairs_skip_finished_work_after_a_crash(tmp_path):
+    grid = make_grid(np.ones((40, 40), dtype=bool))
+    pairs = [pair(grid, (3, 5 + 4 * i), (3, 20 + i)) for i in range(5)]
+    calls = []
+    crashed = {"done": False}
+
+    def run_one(index, _pair):
+        calls.append(index)
+        if index == 3 and not crashed["done"]:
+            crashed["done"] = True
+            raise RuntimeError("simulated crash")
+        return {"outcome": "success", "spl": 1.0}
+
+    with pytest.raises(RuntimeError):
+        run_pairs_resumable(tmp_path, "toy", pairs, run_one)
+    assert calls == [0, 1, 2, 3]
+
+    calls.clear()
+    records = run_pairs_resumable(tmp_path, "toy", pairs, run_one)
+    assert calls == [3, 4]              # 0-2 came from disk; the pair in flight is the only one redone
+    assert [r["pair_index"] for r in records] == [0, 1, 2, 3, 4]
+    assert len(list((tmp_path / "pairs").glob("pair_*.json"))) == 5

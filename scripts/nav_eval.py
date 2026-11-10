@@ -33,7 +33,7 @@ from common.cerberus_eval.nav_metrics import (  # noqa: E402
     write_aggregate_csv,
     write_run_json,
 )
-from common.cerberus_eval.nav_loop import MockBackend, NavConfig, run_navigation  # noqa: E402
+from common.cerberus_eval.nav_loop import MockBackend, NavConfig, run_navigation, run_pairs_resumable  # noqa: E402
 from common.cerberus_eval.video_clips import (  # noqa: E402
     ClipRecorder,
     clip_filename,
@@ -204,7 +204,12 @@ def run(args) -> int:
                              min_distance_m=args.min_distance, max_distance_m=args.max_distance)
         print(f"[nav_eval] {scene_id}: {len(stats.pairs)} pairs from {stats.attempts} attempts "
               f"(unreachable {stats.rejected_unreachable}, distance {stats.rejected_distance})", flush=True)
-        records = run_navigation(backend, grid, stats.pairs, seed=args.seed, config=config, pursuit=pursuit)
+        # one pair at a time, persisted before the next: a crash loses at most the pair in flight
+        records = run_pairs_resumable(
+            out / scene_id.split(":", 1)[-1], scene_id, stats.pairs,
+            lambda i, pair, grid=grid: run_navigation(backend, grid, [pair], seed=args.seed, config=config,
+                                                      pursuit=pursuit)[0],
+        )
         for record in records:
             record.setdefault("scene", scene_id)
         all_records.extend(records)
@@ -220,11 +225,23 @@ def run(args) -> int:
             "suspect_successes": sum(1 for r in records if r.get("suspect_success")),
         }
         save_plan_png(grid, out / f"{scene_id.split(':', 1)[-1]}_nav_paths.png", title=f"{scene_id}: {len(records)} episodes")
+        # partial results reach R2 scene by scene, so a crash or a balance stop keeps the finished work
+        try:
+            import subprocess
+            subprocess.run([sys.executable, str(_REPO_ROOT / "scripts" / "sync_to_r2.py"), "sync-run",
+                            "--module", "migration", "--run-dir", str(out)],
+                           cwd=str(_REPO_ROOT), check=False, timeout=900)
+        except Exception as e:  # noqa: BLE001 - a failed sync must not kill the eval
+            print(f"[nav_eval] WARNING: partial sync failed: {type(e).__name__}: {e}", file=sys.stderr)
 
         if args.video and not args.mock and records:
             outcomes = [r["outcome"] for r in records]
             for k in plan_clips(outcomes, max_clips=args.video_count):
                 name = clip_filename(scene_id, args.seed, outcomes[k])
+                clip_path = out / "clips" / name
+                if clip_path.is_file():
+                    per_scene[scene_id].setdefault("clips", []).append(str(clip_path))
+                    continue
                 clip_path = replay_clip(backend, grid, stats.pairs, records[k]["pair_index"], out / "clips",
                                         name=name, video_steps=args.video_steps, downscale=args.video_downscale,
                                         config=config, pursuit=pursuit)

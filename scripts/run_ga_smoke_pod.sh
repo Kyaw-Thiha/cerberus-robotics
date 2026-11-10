@@ -104,7 +104,7 @@ say "report dir: $REPORT_DIR   isaaclab: $LAB   python: ${PYTHON:-<none>}   dry-
 
 # ---- 1. train smoke ------------------------------------------------------------------------------------------
 if skipped train; then record train SKIP "-"; else
-    run_isaac train "$TRAIN_TIMEOUT" "$ATTEMPTS" -- "$LAB" -p policy/locomotion/train.py --config smoke_test --headless
+    run_isaac train "$TRAIN_TIMEOUT" "$ATTEMPTS" -- bash "$REPO_ROOT/scripts/kit_retry.sh" -- "$LAB" -p policy/locomotion/train.py --config smoke_test --headless
     rc=$?
     if [[ $DRY -eq 1 ]]; then record train DRYRUN "-"; else
         ckpts="$(newer_files policy/locomotion/checkpoints 'model_*.pt')"
@@ -117,7 +117,7 @@ fi
 if skipped play; then record play SKIP "-"; else
     export CERBERUS_ALLOW_BAD_DRIVER_RENDER=1   # the 595 guard blocks --video; rendering itself was fine on GA
     run_isaac play "$PLAY_TIMEOUT" "$ATTEMPTS" -- \
-        "$LAB" -p policy/locomotion/play.py --headless --video --video_length 100 --num_envs 8
+        bash "$REPO_ROOT/scripts/kit_retry.sh" -- "$LAB" -p policy/locomotion/play.py --headless --video --video_length 100 --num_envs 8
     rc=$?
     if [[ $DRY -eq 1 ]]; then record play DRYRUN "-"; else
         vids="$(newer_files policy/locomotion/checkpoints '*.mp4')"          # <run>/videos/play/
@@ -134,7 +134,7 @@ fi
 if skipped spike; then record spike SKIP "-"; else
     SPIKE_JSON="$REPORT_DIR/arena_spike_go2.json"
     # shellcheck disable=SC2086  # SPIKE_ARGS is intentionally word-split into separate flags
-    run_isaac spike "$SPIKE_TIMEOUT" "$ATTEMPTS" -- "$LAB" -p scripts/arena_spike_go2.py $SPIKE_ARGS --num_envs 16 --steps 100 --headless --report "$SPIKE_JSON"
+    run_isaac spike "$SPIKE_TIMEOUT" "$ATTEMPTS" -- bash "$REPO_ROOT/scripts/kit_retry.sh" -- "$LAB" -p scripts/arena_spike_go2.py $SPIKE_ARGS --num_envs 16 --steps 100 --headless --report "$SPIKE_JSON"
     rc=$?
     if [[ $DRY -eq 1 ]]; then record spike DRYRUN "-"; else
         if [[ -z "$PYTHON" ]]; then record spike FAIL "no python interpreter to read $SPIKE_JSON"

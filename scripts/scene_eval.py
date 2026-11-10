@@ -49,6 +49,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-video", dest="video", action="store_false")
     parser.add_argument("--video-steps", type=int, default=300)
     parser.add_argument("--video-downscale", type=int, default=2)
+    parser.add_argument("--no-resume", dest="resume", action="store_false", default=True,
+                        help="rerun the stand test even if assertions.json already passed")
     parser.add_argument("--dry-run", action="store_true", help="resolve paths and print the plan; no Isaac")
     return parser
 
@@ -100,6 +102,29 @@ def run(args) -> int:
     task = args.task or se.LOCO_TASK
     out_dir = Path(args.out_dir) if args.out_dir else default_out_dir()
     out_dir.mkdir(parents=True, exist_ok=True)
+    if args.resume:
+        prior = out_dir / "assertions.json"
+        clip_ok = (not args.scripted) or any((out_dir / "clips").glob("*_scripted.mp4"))
+        if prior.is_file() and clip_ok:
+            try:
+                done = json.loads(prior.read_text(encoding="utf-8"))
+            except ValueError:
+                done = {}
+            if done.get("passed"):
+                print(f"[scene_eval] resume: {out_dir} already complete and passed; nothing to do")
+                return 0
+
+    if args.resume:
+        prior = out_dir / "assertions.json"
+        clip_ok = (not args.scripted) or any((out_dir / "clips").glob("*_scripted.mp4"))
+        if prior.is_file() and clip_ok:
+            try:
+                done = json.loads(prior.read_text(encoding="utf-8"))
+            except ValueError:
+                done = {}
+            if done.get("passed"):
+                print(f"[scene_eval] resume: {out_dir} already complete and passed; nothing to do")
+                return 0
 
     spawns = spawn_poses_for(args.scene, args.num_envs)
     scene = se.resolve_scene(args.scene)
@@ -129,7 +154,6 @@ def run(args) -> int:
     scan = obs_row[scan_start:scan_stop] if obs_dim == 235 else None
     scan_report = height_scan_report(scan, base_height_m=base_height) if scan else None
 
-    # --- the 200-step zero-command stand -------------------------------------------------------------------
     zero = torch.zeros((n, 3), device=device)
     rows: list[list[float]] = []
     fell = torch.zeros(n, dtype=torch.bool, device=device)

@@ -85,7 +85,7 @@ say "candidate: $CANDIDATE  cap: ${CAP_H}h  envs=$NUM_ENVS iterations=$ITERATION
 ZERO_ARGS=()
 [[ -n "$STANDARD_SUCCESS" ]] && ZERO_ARGS+=(--standard_success "$STANDARD_SUCCESS")
 [[ -n "$STANDARD_FALL" ]] && ZERO_ARGS+=(--standard_fall_rate "$STANDARD_FALL")
-run_isaac zero_attack 1200 3 -- "$LAB" -p "$GATE" \
+run_isaac zero_attack 1200 3 -- bash "$REPO_ROOT/scripts/kit_retry.sh" -- "$LAB" -p "$GATE" \
     --task "$TASK" --checkpoint "$CANDIDATE" --zero_attack_only --headless --trials "$TRIALS" \
     "${ZERO_ARGS[@]}" --out_dir "$REPORT_DIR/zero_attack"
 rc=$?
@@ -96,7 +96,7 @@ else
     record zero_attack FAIL "exit=$rc (see zero_attack.log)"
 fi
 
-run_isaac dry_run 1200 3 -- "$LAB" -p "$ADV" \
+run_isaac dry_run 1200 3 -- bash "$REPO_ROOT/scripts/kit_retry.sh" -- "$LAB" -p "$ADV" \
     --task "$TASK" --checkpoint "$CANDIDATE" --num_envs 64 --iterations 1 --dry_run --headless
 rc=$?
 if [[ $rc -eq 0 ]] && grep -q "dry run PASS" "$REPORT_DIR/dry_run.log"; then
@@ -114,7 +114,7 @@ if grep -q '^zero_attack FAIL' "$SUMMARY" 2>/dev/null; then
     record gate SKIP "blocked by zero_attack FAIL"
 else
     ADV_DIR="policy/locomotion/checkpoints/adversary_$STAMP"
-    run_isaac train "$CAP_S" 2 -- "$LAB" -p "$ADV" \
+    run_isaac train "$CAP_S" 2 -- bash "$REPO_ROOT/scripts/kit_retry.sh" -- "$LAB" -p "$ADV" \
         --task "$TASK" --checkpoint "$CANDIDATE" \
         --num_envs "$NUM_ENVS" --iterations "$ITERATIONS" --out_dir "$ADV_DIR" --headless
     rc=$?
@@ -130,7 +130,7 @@ else
     fi
 
     if [[ -n "$ADV_MODEL" ]]; then
-        run_isaac gate 5400 2 -- "$LAB" -p "$GATE" \
+        run_isaac gate 5400 2 -- bash "$REPO_ROOT/scripts/kit_retry.sh" -- "$LAB" -p "$GATE" \
             --task "$TASK" --checkpoint "$CANDIDATE" --adversary_dir "$ADV_DIR" \
             --modalities combined,force_only,command_only --headless --trials "$TRIALS" \
             --zero_attack_check --out_dir "$REPORT_DIR/gate"

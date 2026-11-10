@@ -73,7 +73,7 @@ if [[ -e "$OUT_STEM.pt" ]]; then
 fi
 
 say "fine-tuning from $CANDIDATE with adversarial rollouts"
-run_isaac finetune 5400 2 -- "$LAB" -p policy/locomotion/train.py \
+run_isaac finetune 5400 2 -- bash "$REPO_ROOT/scripts/kit_retry.sh" -- "$LAB" -p policy/locomotion/train.py \
     --platform go2 --terrain rough --headless --logger tensorboard \
     --resume --checkpoint "$CANDIDATE" \
     --num_envs 4096 --max_iterations "$ITERATIONS" \
@@ -89,7 +89,7 @@ else
 fi
 
 if [[ -n "$RUN_DIR" ]]; then
-    run_isaac finalize 1800 2 -- "$LAB" -p scripts/finalize_ga_checkpoint.py \
+    run_isaac finalize 1800 2 -- bash "$REPO_ROOT/scripts/kit_retry.sh" -- "$LAB" -p scripts/finalize_ga_checkpoint.py \
         --run-dir "$RUN_DIR" --name "$NAME" --physics isaacsim_physx \
         --git-hash "${CERBERUS_SYNC_COMMIT:-$(cat "$REPO_ROOT/.sync_commit" 2>/dev/null || echo unknown)}"
     if [[ -f "$OUT_STEM.pt" && -f "$OUT_STEM.meta.json" ]]; then

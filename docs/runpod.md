@@ -34,58 +34,58 @@ available — structured, no auth-string parsing.
   if you don't constrain the datacenter differently — relevant if you're
   re-rolling specifically to escape a bad host (see driver section below).
 
-## Pod hosts and the driver gate
+## Pod hosts, the tiered driver gate and the launch retry
 
-Isaac Sim 6.x segfaults at startup (`libcarb.tasking`, exit 139) on some NVIDIA 595.x host drivers. The evidence:
-595.71.05, 595.79 and 595.84 are reported bad; **595.58.03 is the validated 595 build**, and the **580 branch from
-580.95.05** is validated by the Isaac Lab 3.0 docs. The host driver decides this, not the container image, so no image
-tag can fix it. The allowlist lives in `scripts/pod_driver_allowlist.json` with this reasoning beside it; the gate
-(`scripts/pod_driver_gate.sh`) runs first in every pod driver, records every observed (CUDA shown, driver) pair in
-`outputs/launch_probe.csv`, and exits 2 on any other build. A pod that fails the gate holds no data, so the gate may
-terminate it through the provider API immediately (the one approved exception to "never terminate a pod").
+Isaac Sim 6.x can segfault at startup (`libcarb.tasking`, exit 139) on some 595.x host drivers, but **the driver is not
+a simple pass/fail**: on 595.91.07 the 2026-11-07/08 GA training (~4009 s), the adversarial gate and the eval runs all
+completed, while startup crashes hit roughly one launch in two and occur within the first minutes. So the gate is
+tiered and a retry wrapper absorbs the flaky launches:
 
-| date | driver | CUDA shown | GPU | datacenter | image | Kit launches OK/fail | verdict |
-|---|---|---|---|---|---|---|---|
-| 2026-10-06 | 580.159.04 | unknown | RTX A5000 | unknown | v6-rel / v6-rel2 | all OK | renders and steps |
-| 2026-10-25 | 595.91.07 | unknown | RTX A5000 | unknown | v6-ga | all OK | render OK only with `CERBERUS_ALLOW_BAD_DRIVER_RENDER=1` |
-| 2026-11-07..08 | 595.91.07 (assumed; env report absent) | unknown | unknown | unknown | v6-ga | **many OK**: GA training (~4009 s), adversarial gate, eval | successful runs exist on 595.91.07 |
-| 2026-11-08 | 595.91.07 | unknown | RTX A5000 | unknown | v6-ga | roughly one launch in two OK | crash is probabilistic on this driver |
-| 2026-11-09 | 595.91.07 | unknown | NVIDIA A40 | unknown | v6-ga | 0/1 (SEGFAULT) | rejected by the gate now |
-| 2026-11-10 | 595.91.07 | unknown | NVIDIA A40 | unknown | v6-ga | 0/1 (SEGFAULT) | rejected by the gate now |
-| 2026-11-10 | unknown (crash signature matches 595.x) | unknown | RTX 4090 | unknown | v6-ga | 1 run alive 18 min, 2 SEGFAULT | treat as failing |
-| 2026-11-10 | unknown | unknown | RTX 4090 | unknown | v6-ga | n/a (port 22 never published) | provisioning failure |
+| tier | drivers | action |
+| --- | --- | --- |
+| **A** | 580.x from 580.95.05; exactly 595.58.03 | accept, no probe requirement beyond the normal one |
+| **B** | any other 595.x or 590.x | accept **only if** the 3-launch probe passes |
+| **reject** | below 580.65.06, or any branch with no working-run evidence, or three consecutive probe failures | terminate the pod (it holds no data at this point) |
 
-"unknown" means the value was not recorded in that session; the gate and probe record it automatically from now on.
-Back-filled from `docs/arena_integration_log.md`, `docs/reports/scene_eval_phase0.md` and the H4 session logs; no
-`env_report.json` under `migration/` on R2 carried a pod driver version.
+The allowlist and the evidence are in `scripts/pod_driver_allowlist.json`; the gate (`scripts/pod_driver_gate.sh`)
+records the tier and the observed (CUDA shown, driver) pair in `outputs/launch_probe.csv`.
 
-**595.91.07 is not deterministic.** Training runs, the adversarial gate and eval runs all completed on it; the startup
-crash hits some launches and not others. That is why the response is an allowlist plus a five-minute probe rather than
-"this driver is broken": a host that passes the probe is usable, and one that fails it is abandoned before it costs
-anything.
+**Kit retry.** `scripts/kit_retry.sh` wraps every Isaac/Kit entrypoint in the pod drivers. It re-runs a command when it
+exits **139 within 180 s** of starting, at most **three launches**, and passes any other exit code or late crash
+through unchanged. Every attempt lands in the same CSV. This is what turns "one launch in two crashes" into a usable
+host instead of a rejected one.
+
+| date | driver | CUDA shown | GPU | tier | Kit launches OK/fail | verdict |
+| --- | --- | --- | --- | --- | --- | --- |
+| 2026-10-06 | 580.159.04 | unknown | RTX A5000 | A | all OK | renders and steps |
+| 2026-10-25 | 595.91.07 | unknown | RTX A5000 | B | all OK | renders with `CERBERUS_ALLOW_BAD_DRIVER_RENDER=1` |
+| 2026-11-07..08 | 595.91.07 | unknown | unknown | B | **many OK**: GA training, gate, eval | usable behind the retry |
+| 2026-11-08 | 595.91.07 | unknown | RTX A5000 | B | ~1 in 2 OK | flaky launch, retry absorbs it |
+| 2026-11-09/10 | 595.91.07 | 13.0 | A40, RTX 4090 | B | 0/3 in the H4 attempt | probe/retry decides per host |
+| 2026-11-10 | unknown | unknown | RTX 4090 | — | n/a | provisioning only: port 22 never published |
+
+"unknown" means the value was not recorded in that session; the gate records it automatically. Back-filled from
+`docs/arena_integration_log.md`, `docs/reports/scene_eval_phase0.md` and the H4 session logs.
 
 ### Creating a pod
 
-`scripts/create_pod.py` creates the pod through the Runpod REST API with `allowedCudaVersions: ["13.0"]` first, an
-ordered `gpuTypeIds` list (`--gpu-type`, default A40 then RTX 4090), the `v6-ga` image, the disk sizes, and
-`CERBERUS_ON_POD=1` in its environment. `--fallback` retries once with `["13.2"]`; that path is only safe because the
-driver gate then enforces exactly 595.58.03. The API key is read from `RUNPOD_API_KEY` and never printed.
+`scripts/create_pod.py` posts to the REST API with `allowedCudaVersions: ["13.0"]` **once** (it fails fast when there is
+no such stock), then creates **filter-free** and lets the gate decide. Secure cloud only; GPU priority list defaults to
+A40, RTX 4090, A5000, L40S, A6000. At most **4 pod creations per session** (counted in `outputs/pod_creations.json`),
+and every gate-rejected pod is terminated because it holds no data. The API has no `13.2` value (the enum is 13.0,
+12.9 ... 11.8). The key comes from `RUNPOD_API_KEY`; it is passed to the pod (for the gate, probe and dead-man) and
+never printed.
 
 ```bash
 RUNPOD_API_KEY=... python3 scripts/create_pod.py --dry-run     # show the request body
-RUNPOD_API_KEY=... python3 scripts/create_pod.py --fallback    # A40 first, 4090 next
+RUNPOD_API_KEY=... python3 scripts/create_pod.py              # create
 ```
-
-It prints the pod id and terminates nothing. `runpodctl pod create` (2.14.0) cannot be used for this: it exposes only
-`--min-cuda-version` (a floor, not an allowlist) and has no time limit.
 
 ### Dead-man switch
 
 After the gate and probe pass, every pod driver arms `scripts/pod_deadman.sh`. It stops the pod (**not** deletes it)
 after `CERBERUS_POD_MAX_HOURS` (default 3), prints the exact UTC stop time at startup, and calls
-`POST /v1/pods/{id}/stop` from a backgrounded timer in the pod's own process tree. It is the safety net for a hung job,
-a lost shell or an exhausted balance. A stale pod from an earlier session once billed for 7 hours because nothing
-armed this.
+`POST /v1/pods/{id}/stop` from a backgrounded timer in the pod's own process tree.
 
 ## Building and pushing the image
 

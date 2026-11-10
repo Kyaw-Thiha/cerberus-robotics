@@ -1,0 +1,20 @@
+{
+  "_evidence": "Isaac Sim 6.x crashes at startup with SIGSEGV in libcarb.tasking (exit 139) on NVIDIA 595.71.05, 595.79 and 595.84. 595.58.03 is the validated 595 build, and the 580 branch from 580.95.05 is validated by the Isaac Lab 3.0 docs. The HOST driver decides this, not the container image, so an image tag cannot fix it. Observed here: 595.91.07 segfaulted on 2026-11-08, 2026-11-09 and 2026-11-10 (RTX A5000, A40 and RTX 4090 hosts).",
+  "rules": [
+    {
+      "branch": "580",
+      "min_version": "580.95.05",
+      "why": "580.95.05 and newer on the 580 branch are validated by the Isaac Lab 3.0 docs"
+    },
+    {
+      "branch": "595",
+      "exact_version": "595.58.03",
+      "why": "the only validated 595 build; every other 595.x is reported bad"
+    }
+  ],
+  "rejected_examples": [
+    "590.* (not validated)",
+    "595.71.05 / 595.79 / 595.84 / 595.91.07 (reported bad)",
+    "580.x below 580.95.05"
+  ]
+}

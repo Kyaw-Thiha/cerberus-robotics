@@ -34,6 +34,8 @@ OWNED_SCRIPTS=(
     scripts/run_robustify_pod.sh
     scripts/pull_pod_artifacts.sh
     scripts/preflight_local.sh
+    scripts/pod_driver_gate.sh
+    scripts/pod_launch_probe.sh
 )
 
 FAILS=0

@@ -34,6 +34,37 @@ available — structured, no auth-string parsing.
   if you don't constrain the datacenter differently — relevant if you're
   re-rolling specifically to escape a bad host (see driver section below).
 
+## Pod hosts and the driver gate
+
+Isaac Sim 6.x segfaults at startup (`libcarb.tasking`, exit 139) on some NVIDIA 595.x host drivers. The evidence:
+595.71.05, 595.79 and 595.84 are reported bad; **595.58.03 is the validated 595 build**, and the **580 branch from
+580.95.05** is validated by the Isaac Lab 3.0 docs. The host driver decides this, not the container image, so no image
+tag can fix it. The allowlist lives in `scripts/pod_driver_allowlist.json` with this reasoning beside it; the gate
+(`scripts/pod_driver_gate.sh`) runs first in every pod driver, records every observed (CUDA shown, driver) pair in
+`outputs/launch_probe.csv`, and exits 2 on any other build. A pod that fails the gate holds no data, so the gate may
+terminate it through the provider API immediately (the one approved exception to "never terminate a pod").
+
+| date | driver | CUDA shown | GPU | datacenter | image | verdict |
+|---|---|---|---|---|---|---|
+| 2026-10-06 | 580.159.04 | unknown | RTX A5000 | unknown | v6-rel / v6-rel2 | OK: renders and steps |
+| 2026-10-25 | 595.91.07 | unknown | RTX A5000 | unknown | v6-ga | render OK only with `CERBERUS_ALLOW_BAD_DRIVER_RENDER=1` |
+| 2026-11-08 | 595.91.07 | unknown | RTX A5000 | unknown | v6-ga | Kit launch crashed roughly one run in two |
+| 2026-11-09 | 595.91.07 | unknown | NVIDIA A40 | unknown | v6-ga | **SEGFAULT** at app start (exit 139) |
+| 2026-11-10 | 595.91.07 | unknown | NVIDIA A40 | unknown | v6-ga | **SEGFAULT** at app start (exit 139) |
+| 2026-11-10 | unknown (crash signature matches 595.x) | unknown | RTX 4090 | unknown | v6-ga | **SEGFAULT** at app start (exit 139) |
+| 2026-11-10 | unknown | unknown | RTX 4090 | unknown | v6-ga | provisioning only: port 22 never published |
+
+"unknown" means the value was not recorded in that session; the gate now records it automatically. Back-filled from
+`docs/arena_integration_log.md`, `docs/reports/scene_eval_phase0.md` and the H4 session logs; no `env_report.json`
+under `migration/` on R2 carried a pod driver version.
+
+**Provisioning.** Runpod's CUDA filter is the only way to steer the host branch, and the mapping is an unverified
+hypothesis until the gate's log confirms it. Through the API pass `"allowedCudaVersions": ["13.0"]` first (expected to
+select the 580 branch); fall back to `["13.2"]` **only** with the gate enforcing exactly 595.58.03. In the console set
+the **CUDA Versions** filter to the same value. `runpodctl pod create` (2.14.0) exposes only `--min-cuda-version`, a
+floor rather than an allowlist, so it cannot express this choice; it also has no `--terminate-after`, hence the gate's
+self-termination and the session clock.
+
 ## Building and pushing the image
 
 `docker/` is organized as one nested directory per image, not a flat list of

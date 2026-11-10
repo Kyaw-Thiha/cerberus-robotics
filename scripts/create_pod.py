@@ -24,10 +24,14 @@ from dataclasses import dataclass, field
 from typing import Callable
 
 API_URL = "https://rest.runpod.io/v1/pods"
+USER_AGENT = "cerberus-pod-tools/1.0"
 DEFAULT_IMAGE = "kevinkyawthiha/cerberus-remote-v6:v6-ga"
 DEFAULT_GPU_TYPES = ("NVIDIA A40", "NVIDIA GeForce RTX 4090")
 CUDA_FIRST = "13.0"
-CUDA_FALLBACK = "13.2"
+#: The API's own enum. "13.2" does not exist: the fallback below drops the filter and lets the driver gate enforce
+#: exactly 595.58.03, which is the only legal way to express "fall back to the other branch".
+VALID_CUDA_VERSIONS = ("13.0", "12.9", "12.8", "12.7", "12.6", "12.5", "12.4", "12.3", "12.2", "12.1", "12.0", "11.8")
+CUDA_FALLBACK: tuple[str, ...] = ()
 DEFAULT_CONTAINER_DISK_GB = 100
 
 Transport = Callable[[str, dict[str, str], bytes], tuple[int, str]]
@@ -61,7 +65,7 @@ def build_payload(spec: PodSpec) -> dict:
         "imageName": spec.image,
         "gpuTypeIds": list(spec.gpu_types),
         "gpuCount": int(spec.gpu_count),
-        "allowedCudaVersions": list(spec.cuda_versions),
+        **({"allowedCudaVersions": list(spec.cuda_versions)} if spec.cuda_versions else {}),
         "containerDiskInGb": int(spec.container_disk_gb),
         "volumeInGb": int(spec.volume_gb),
         "volumeMountPath": spec.volume_mount,
@@ -88,13 +92,23 @@ def http_post(url: str, headers: dict[str, str], body: bytes) -> tuple[int, str]
 def create_pod(spec: PodSpec, api_key: str, transport: Transport | None = None) -> tuple[int, dict]:
     """POST the pod; returns ``(status, parsed_body)``."""
     payload = build_payload(spec)
-    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}
+    headers = {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json",
+               "User-Agent": USER_AGENT}
     status, text = (transport or http_post)(API_URL, headers, json.dumps(payload).encode("utf-8"))
     try:
         parsed = json.loads(text) if text else {}
     except ValueError:
         parsed = {"raw": text[:2000]}
     return status, parsed
+
+
+def validate_cuda_versions(versions) -> None:
+    for version in versions or ():
+        if version not in VALID_CUDA_VERSIONS:
+            raise SystemExit(
+                f"allowedCudaVersions {version!r} is not accepted by the API; valid values: "
+                + ", ".join(VALID_CUDA_VERSIONS) + " (omit the filter and let the driver gate decide instead)"
+            )
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -109,7 +123,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--env", action="append", default=[], metavar="KEY=VALUE",
                         help="extra env var for the pod; CERBERUS_ON_POD=1 is always set")
     parser.add_argument("--fallback", action="store_true",
-                        help=f"retry once with allowedCudaVersions [{CUDA_FALLBACK}] (gate then requires 595.58.03)")
+                        help="retry once WITHOUT the CUDA filter; the driver gate then requires exactly 595.58.03 "
+                             "(the API has no 13.2 enum value)")
     parser.add_argument("--dry-run", action="store_true", help="print the request body and exit; needs no API key")
     return parser
 
@@ -142,10 +157,12 @@ def main(argv: list[str] | None = None) -> int:
         print("create_pod: RUNPOD_API_KEY is not set; export it and retry", flush=True)
         return 2
 
+    validate_cuda_versions(spec.cuda_versions)
     status, body = create_pod(spec, api_key)
     if status >= 400 and args.fallback and spec.cuda_versions == (CUDA_FIRST,):
-        print(f"create_pod: CUDA {CUDA_FIRST} attempt failed (HTTP {status}); retrying with {CUDA_FALLBACK}", flush=True)
-        spec = PodSpec(**{**spec.__dict__, "cuda_versions": (CUDA_FALLBACK,)})
+        print(f"create_pod: CUDA {CUDA_FIRST} attempt failed (HTTP {status}); retrying without the CUDA filter "
+              "(the gate must see 595.58.03)", flush=True)
+        spec = PodSpec(**{**spec.__dict__, "cuda_versions": CUDA_FALLBACK})
         status, body = create_pod(spec, api_key)
 
     if status >= 400:

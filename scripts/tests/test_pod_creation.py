@@ -55,7 +55,10 @@ def test_fallback_retries_with_cuda_13_2(monkeypatch, capsys):
     monkeypatch.setattr(create_pod, "http_post", transport)
     rc = create_pod.main(["--fallback"])
     assert rc == 0
-    assert [call[2]["allowedCudaVersions"] for call in transport.calls] == [["13.0"], ["13.2"]]
+    first, second = transport.calls
+    assert first[2]["allowedCudaVersions"] == ["13.0"]
+    # 13.2 is not in the API enum; the legal fallback is to omit the filter and let the gate decide
+    assert "allowedCudaVersions" not in second[2]
     assert "created pod xyz" in capsys.readouterr().out
 
 
@@ -65,6 +68,13 @@ def test_no_fallback_means_one_attempt(monkeypatch):
     monkeypatch.setattr(create_pod, "http_post", transport)
     assert create_pod.main([]) == 1
     assert len(transport.calls) == 1
+
+
+def test_cuda_13_2_is_rejected_before_any_request():
+    with pytest.raises(SystemExit, match="not accepted by the API"):
+        create_pod.validate_cuda_versions(("13.2",))
+    payload = build_payload(PodSpec(cuda_versions=()))
+    assert "allowedCudaVersions" not in payload
 
 
 def test_missing_key_is_an_error_not_a_crash(monkeypatch):

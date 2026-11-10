@@ -14,6 +14,7 @@ import urllib.request
 from typing import Callable
 
 STOP_URL = "https://rest.runpod.io/v1/pods/{pod_id}/stop"
+USER_AGENT = "cerberus-pod-tools/1.0"
 
 Transport = Callable[[str, dict[str, str], bytes], tuple[int, str]]
 

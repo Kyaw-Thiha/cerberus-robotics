@@ -23,12 +23,18 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 CSV_PATH = REPO_ROOT / "outputs" / "launch_probe.csv"
 SIGSEGV = 139
+#: ``isaaclab.sh -p`` turns the child's SIGSEGV into exit 1, so the crash has to be recognised from its own log line.
+CRASH_MARKERS = ("exit code 139", "terminating this process with exit code 139")
 DEFAULT_WINDOW_S = 180.0
 DEFAULT_MAX_LAUNCHES = 3
 
 
-def should_retry(returncode: int, elapsed_s: float, window_s: float) -> bool:
-    return returncode == SIGSEGV and elapsed_s < window_s
+def looks_like_crash(returncode: int, output: str) -> bool:
+    return returncode == SIGSEGV or any(marker in output for marker in CRASH_MARKERS)
+
+
+def should_retry(returncode: int, elapsed_s: float, window_s: float, output: str = "") -> bool:
+    return looks_like_crash(returncode, output) and elapsed_s < window_s
 
 
 def run(
@@ -41,7 +47,21 @@ def run(
     log=None,
 ) -> int:
     """Run ``command`` with the retry rule; returns the final exit code."""
-    runner = runner or (lambda cmd: subprocess.run(cmd).returncode)
+    def default_runner(command):
+        import tempfile
+
+        with tempfile.NamedTemporaryFile("w", suffix=".kit_retry.log", delete=False) as fh:
+            path = fh.name
+        with open(path, "w", encoding="utf-8") as log:
+            rc = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT).returncode
+        text = Path(path).read_text(encoding="utf-8", errors="replace")
+        try:
+            Path(path).unlink()
+        except OSError:
+            pass
+        return rc, text
+
+    runner = runner or default_runner
     info = log_info = None
     try:
         from pod_driver_gate import append_probe_row, collect_host_info
@@ -59,9 +79,12 @@ def run(
     returncode = 1
     for attempt in range(1, max_launches + 1):
         started = clock()
-        returncode = int(runner(command))
+        result = runner(command)
+        returncode, output = (result if isinstance(result, tuple) else (int(result), ""))
         elapsed = clock() - started
-        final = not should_retry(returncode, elapsed, window_s) or attempt == max_launches
+        if output:
+            print("\n".join(output.strip().splitlines()[-6:]), flush=True)
+        final = not should_retry(returncode, elapsed, window_s, output) or attempt == max_launches
         log(attempt, elapsed, returncode, final)
         print(f"[kit_retry] attempt {attempt}/{max_launches} exit={returncode} elapsed={elapsed:.1f}s"
               f"{' (final)' if final else ' -> retrying'}", flush=True)

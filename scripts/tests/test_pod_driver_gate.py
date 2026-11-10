@@ -74,9 +74,10 @@ def make_runner(sequence, clock):
     seq = list(sequence)
 
     def runner(cmd):
-        rc, elapsed = seq.pop(0)
+        item = seq.pop(0)
+        rc, elapsed = item[0], item[1]
         clock.t += elapsed
-        return rc
+        return (rc, item[2]) if len(item) > 2 else (rc, "")
 
     return runner
 
@@ -108,10 +109,18 @@ def test_a_late_crash_is_not_retried():
     assert rc == 139
 
 
+def test_a_wrapped_139_exit_1_is_retried():
+    clock = FakeClock()
+    crashed = (1, 5, "terminating this process with exit code 139.")
+    rc = kit_retry.run(["cmd"], runner=make_runner([crashed, (0, 6)], clock), clock=clock, log=lambda *a: None)
+    assert rc == 0
+
+
 def test_should_retry_boundary():
     assert kit_retry.should_retry(139, 179.9, 180.0)
     assert not kit_retry.should_retry(139, 180.0, 180.0)
     assert not kit_retry.should_retry(1, 10.0, 180.0)
+    assert kit_retry.should_retry(1, 10.0, 180.0, "terminating this process with exit code 139.")
 
 
 # --- probe -------------------------------------------------------------------------------------

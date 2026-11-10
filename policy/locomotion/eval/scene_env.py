@@ -28,6 +28,8 @@ spawns must be far apart (:func:`common.cerberus_eval.scene_assertions.check_spa
 
 from __future__ import annotations
 
+import json
+import time
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -122,6 +124,22 @@ def apply_deterministic_commands(env_cfg: Any) -> None:
     env_cfg.events.reset_robot_joints.params["position_range"] = (1.0, 1.0)
 
 
+def write_timings(path: str | Path | None, timings: dict[str, float]) -> None:
+    """Write (or update) the build-stage timings JSON; no behaviour change, diagnostics only."""
+    if path is None:
+        return
+    path = Path(path)
+    path.parent.mkdir(parents=True, exist_ok=True)
+    existing: dict[str, Any] = {}
+    if path.is_file():
+        try:
+            existing = json.loads(path.read_text(encoding="utf-8"))
+        except ValueError:
+            existing = {}
+    existing.update({k: round(float(v), 3) for k, v in timings.items()})
+    path.write_text(json.dumps(existing, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+
+
 def build_loco_env(
     scene_id: str,
     spawn_poses: Sequence[Sequence[float]],
@@ -132,6 +150,7 @@ def build_loco_env(
     seed: int = 0,
     env_spacing: float = DEFAULT_ENV_SPACING_M,
     scan_proxy: str | Path | None = None,
+    timings_path: str | Path | None = None,
 ) -> tuple[Any, dict[str, Any]]:
     """``gym.make`` the Play task in the scene and teleport every env to its ``(x, y, yaw[, floor_z])`` spawn.
 
@@ -154,19 +173,40 @@ def build_loco_env(
     if problems:
         raise ValueError("spawn poses are too close for a shared scene: " + "; ".join(problems))
 
+    t0 = time.perf_counter()
     scene = resolve_scene(scene_id)
+    t_scene = time.perf_counter()
     env_cfg = load_env_cfg(task)
+    t_cfg = time.perf_counter()
     env_cfg.scene.num_envs = n
     env_cfg.scene.env_spacing = float(env_spacing)
     env_cfg.episode_length_s = float(episode_length_s)
     env_cfg.seed = int(seed)
     apply_loco_scene(env_cfg, scene, scan_proxy=scan_proxy)
     apply_deterministic_commands(env_cfg)
+    t_apply = time.perf_counter()
 
+    # gym.make is where the scene USD stage loads, the scan-proxy mesh is built and the articulation is
+    # initialised. They are one call in Isaac Lab, so they are timed together and named for what they cover.
     raw_env = gym.make(task, cfg=env_cfg)
+    t_make = time.perf_counter()
     env = RslRlVecEnvWrapper(raw_env, clip_actions=None)
     env.reset()  # initialises the managers/buffers; the teleport below is what actually places the robots
+    t_reset = time.perf_counter()
     reset_envs_to(env, spawn_poses)
+    t_teleport = time.perf_counter()
+
+    timings = {
+        "scene_resolve_s": t_scene - t0,
+        "cfg_load_s": t_cfg - t_scene,
+        "scene_apply_s": t_apply - t_cfg,
+        "gym_make_s__stage_load_mesh_build_articulation_init": t_make - t_apply,
+        "wrapper_and_reset_s": t_reset - t_make,
+        "teleport_s": t_teleport - t_reset,
+        "build_total_s": t_teleport - t0,
+    }
+    write_timings(timings_path, timings)
+    print("[scene_env] build timings: " + json.dumps({k: round(v, 2) for k, v in timings.items()}), flush=True)
     return env, scene
 
 

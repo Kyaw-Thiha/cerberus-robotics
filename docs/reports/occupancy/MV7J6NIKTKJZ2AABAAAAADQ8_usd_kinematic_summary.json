@@ -1,0 +1,56 @@
+{
+  "grid": "data/scenes/grscenes/home/scenes/MV7J6NIKTKJZ2AABAAAAADQ8_usd/occupancy.npz",
+  "scene": "grscenes:MV7J6NIKTKJZ2AABAAAAADQ8_usd",
+  "seed": 0,
+  "sampling": {
+    "requested": 20,
+    "attempts": 41,
+    "rejected_unreachable": 2,
+    "rejected_distance": 17,
+    "rejected_too_close": 2,
+    "pairs": 20
+  },
+  "aggregate": {
+    "episodes": 20,
+    "success": 20,
+    "success_rate": 1.0,
+    "spl_mean": 1.0,
+    "fall": 0,
+    "fall_rate": 0.0,
+    "timeout": 0,
+    "timeout_rate": 0.0,
+    "nan": 0,
+    "collision": 0,
+    "collision_rate": 0.0,
+    "planner_failure": 0,
+    "planner_failure_rate": 0.0,
+    "fell_after_success": 0,
+    "mean_time_s": 8.971,
+    "mean_path_length_m": 5.990976058645833,
+    "mean_spl_success_only": 1.0,
+    "total_static_contacts": 0,
+    "episodes_with_contacts": 0
+  },
+  "config": {
+    "kinematic": {
+      "dt": 0.02,
+      "max_time_s": 120.0,
+      "max_collision_steps": 10,
+      "goal_tolerance_m": 0.5
+    },
+    "pursuit": {
+      "lookahead_m": 0.6,
+      "min_lookahead_m": 0.35,
+      "max_lookahead_m": 1.2,
+      "lookahead_gain_s": 0.8,
+      "goal_tolerance_m": 0.5,
+      "slow_radius_m": 1.2,
+      "max_vx": 0.8,
+      "max_wz": 0.9,
+      "turn_slowdown_rad": 1.2,
+      "min_speed_factor": 0.25,
+      "dt": 0.02
+    }
+  },
+  "out": "outputs/kinematic_MV7J6NIKTKJZ2AABAAAAADQ8_usd"
+}

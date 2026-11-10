@@ -78,3 +78,12 @@ at the deciding step so trailing steps cannot inflate path length or contacts.
 | scan proxy build | synthetic USD test (`pxr`) | built once per scene from the real house |
 | env composition, hook, teleport, video | `--dry-run` only | R1 stand + R2 scripted smoke |
 | scene frames, collision filtering, scan convention | not verifiable | R1 `assertions.json` |
+
+## Proposal (not implemented): a collision-only lite scene USD
+
+The real-house build is the session bottleneck: 745 s for 4 envs on `MV7J…ADQ8_usd`, and 12+ minutes observed on the
+pod. Most of that is spawning the 20.7M-triangle render meshes per env; the scan proxy is a separate 13 s pass and the
+articulation init is small. A lite USD that keeps only collision proxies (and drops render-only meshes) should cut the
+build and the GPU memory, with clips rendered from the full USD in a separate visual pass. It is a proposal only: it
+must first be shown that the collision geometry and the height-scan proxy behave identically (same contacts, same
+187-cell scan on flat ground), otherwise the physics numbers stop being comparable. Not attempted in this session.

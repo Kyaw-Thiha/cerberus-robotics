@@ -180,7 +180,8 @@ def run(args) -> int:
             raise SystemExit(f"{scenes[0]}: no reachable start-goal pairs")
         spawns = [(p.start[0], p.start[1], 0.0, first_grid.floor_z) for p in stats0.pairs]
         env, _scene = se.build_loco_env(scenes[0], spawns, task=task, seed=args.seed,
-                                        episode_length_s=max(120.0, args.max_time + 30.0))
+                                        episode_length_s=max(120.0, args.max_time + 30.0),
+                                        timings_path=out / "build_timings.json")
         hook = se.VelocityCommandHook(env)
         policy = se.load_policy(env, task=task, checkpoint=args.checkpoint)
         backend = IsaacBackend(env, hook, policy)

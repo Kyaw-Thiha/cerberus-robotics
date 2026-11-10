@@ -107,7 +107,7 @@ def run(args) -> int:
 
     env, scene = se.build_loco_env(
         args.scene, spawns, task=task, episode_length_s=max(120.0, args.steps * 0.02 + 30.0),
-        seed=args.seed, scan_proxy=proxy,
+        seed=args.seed, scan_proxy=proxy, timings_path=out_dir / "build_timings.json",
     )
     hook = se.VelocityCommandHook(env)
     policy = se.load_policy(env, task=task, checkpoint=args.checkpoint)
@@ -133,14 +133,20 @@ def run(args) -> int:
     zero = torch.zeros((n, 3), device=device)
     rows: list[list[float]] = []
     fell = torch.zeros(n, dtype=torch.bool, device=device)
-    for _ in range(args.steps):
+    first_step_s = None
+    for step_index in range(args.steps):
         hook.apply(zero)
         obs = env.get_observations()
         rows.append(obs[0].detach().cpu().tolist())
+        t_step = time.perf_counter()
         obs, _, _, _ = env.step(policy(obs))
+        if step_index == 0:
+            first_step_s = time.perf_counter() - t_step
         fell |= se.read_fall_flags(env)
         if bool(fell.any()):
             break
+    if first_step_s is not None:
+        se.write_timings(out_dir / "build_timings.json", {"first_step_s": first_step_s})
     final_stand = se.stand_metrics(env)
     min_base_minus_foot = None
     if final_stand is not None:

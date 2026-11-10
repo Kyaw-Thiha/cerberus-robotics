@@ -135,8 +135,13 @@ scenes exposed:
 | `MV7J…ADY8_usd` | — | — | — | — | — | — |
 
 Scene 1's preview shows rooms, walls, doorways and furniture, with unknown only outside the footprint. Gate G
-passed on that scene (previews on R2). Scene 2's grid was built and uploaded but its preview was not inspected
-before the session ended.
+passed on that scene.
+
+**Scene 2 fails Gate G.** Its preview (`docs/reports/occupancy/MV7J…ADY8_usd_occupancy.png`) shows several rooms as
+solid blocked rectangles, and the sampler rejected **36 of 79 attempts as unreachable (46%)** against 2 of 41 on
+scene 1. The navigable space is real but fragmented; the likely cause is a large up-facing surface inside the
+0.12–0.45 m band (a raised floor or platform) being marked blocked. Do not run physics on this scene until a per-cell
+reason dump explains it — this is a diagnosis, not a tuning change.
 
 ### Kinematic upper bound on the real grids
 

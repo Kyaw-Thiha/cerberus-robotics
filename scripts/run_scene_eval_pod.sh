@@ -27,6 +27,7 @@ cd "$REPO_ROOT" || exit 1
 export CERBERUS_ON_POD=1
 bash "$REPO_ROOT/scripts/pod_driver_gate.sh" || { echo "[pod] driver gate rejected this host; stopping" >&2; exit 2; }
 bash "$REPO_ROOT/scripts/pod_launch_probe.sh" || { echo "[pod] launch probe failed on this host; stopping" >&2; exit 3; }
+bash "$REPO_ROOT/scripts/pod_deadman.sh" || echo "[pod] WARNING: dead-man switch not armed" >&2
 if [[ -f /etc/cerberus_env.sh ]]; then source /etc/cerberus_env.sh; fi
 if [[ -f .env ]]; then set -a; source .env; set +a; fi
 export PYTHONPATH="$REPO_ROOT${PYTHONPATH:+:$PYTHONPATH}"

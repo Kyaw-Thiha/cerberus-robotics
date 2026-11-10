@@ -36,6 +36,7 @@ OWNED_SCRIPTS=(
     scripts/preflight_local.sh
     scripts/pod_driver_gate.sh
     scripts/pod_launch_probe.sh
+    scripts/pod_deadman.sh
 )
 
 FAILS=0
@@ -146,6 +147,11 @@ if pixi run python scripts/build_scan_proxy.py --help > /dev/null 2>&1; then
     record "h4-build-scan-proxy-help" PASS
 else
     record "h4-build-scan-proxy-help" FAIL
+fi
+if pixi run python scripts/create_pod.py --dry-run > /dev/null 2>&1 && env -u RUNPOD_API_KEY pixi run python scripts/pod_stop.py --pod-id test --dry-run > /dev/null 2>&1; then
+    record "h4-pod-tools" PASS
+else
+    record "h4-pod-tools" FAIL
 fi
 if pixi run python scripts/nav_eval.py --dry-run > /dev/null 2>&1 && pixi run python scripts/build_occupancy.py --help > /dev/null 2>&1 && pixi run python scripts/kinematic_eval.py --help > /dev/null 2>&1; then
     record "h4-driver-clis" PASS

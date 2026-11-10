@@ -111,6 +111,7 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 export CERBERUS_ON_POD=1
 bash "$REPO_ROOT/scripts/pod_driver_gate.sh" || { echo "[pod] driver gate rejected this host; stopping" >&2; exit 2; }
 bash "$REPO_ROOT/scripts/pod_launch_probe.sh" || { echo "[pod] launch probe failed on this host; stopping" >&2; exit 3; }
+bash "$REPO_ROOT/scripts/pod_deadman.sh" || echo "[pod] WARNING: dead-man switch not armed" >&2
 RUN_TIMESTAMP="$(date -u +%Y-%m-%d_%H-%M-%S)"
 RUN_DIR="$REPO_ROOT/slam/slam/eval/results/$BACKEND/$RUN_TIMESTAMP"
 BAG_PATH="$RUN_DIR/bag"

@@ -86,3 +86,72 @@ def summarise_pairs(pairs: Iterable) -> dict:
         "min_shortest_path_m": min(lengths) if lengths else None,
         "max_shortest_path_m": max(lengths) if lengths else None,
     }
+
+
+REASON_COLOURS = {
+    0: (1.0, 1.0, 1.0),    # free
+    1: (0.65, 0.65, 0.65), # unknown
+    2: (0.85, 0.33, 0.10), # vertical surface in band (walls, legs)
+    3: (0.55, 0.15, 0.65), # horizontal surface in band (step/kerb)
+    4: (0.95, 0.75, 0.10), # slanted surface
+    5: (0.10, 0.55, 0.85), # overhang
+    6: (0.15, 0.55, 0.15), # floor-height step rule
+    7: (0.35, 0.35, 0.35), # thickening of a thin surface
+}
+
+
+def save_reason_png(grid: OccupancyGrid, out: str | Path, *, title: str = "", dpi: int = 110) -> Path:
+    """Colour every cell by WHY it is blocked (``build_grid(collect_diagnostics=True)``)."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+    from matplotlib.patches import Patch
+
+    diag = grid.diagnostics
+    if not diag or "category" not in diag:
+        raise ValueError("grid has no diagnostics; build it with collect_diagnostics=True")
+    category = diag["category"]
+    rgb = np.ones((*category.shape, 3), dtype=float)
+    for reason, colour in REASON_COLOURS.items():
+        rgb[category == reason] = colour
+    fig, ax = plt.subplots(figsize=(7, 7 * category.shape[0] / max(category.shape[1], 1)), dpi=dpi)
+    ax.imshow(rgb, origin="lower", extent=_extent(grid))
+    ax.set_xlabel("x (m)")
+    ax.set_ylabel("y (m)")
+    ax.set_title(title or f"{grid.scene_id}: blocked-cell reasons")
+    handles = [Patch(facecolor=REASON_COLOURS[r], label=f"{r}: {name}") for r, name in
+               zip(sorted(REASON_COLOURS), _reason_names())]
+    ax.legend(handles=handles, loc="upper right", fontsize=5)
+    fig.tight_layout()
+    fig.savefig(out)
+    plt.close(fig)
+    return Path(out)
+
+
+def _reason_names():
+    from planning.occupancy import REASON_NAMES
+
+    return [REASON_NAMES[r] for r in sorted(REASON_COLOURS)]
+
+
+def save_up_histogram_png(diag: dict, out: str | Path, *, title: str = "", dpi: int = 110) -> Path:
+    """Up-facing surface height above the local floor, all cells vs blocked cells."""
+    import matplotlib
+
+    matplotlib.use("Agg")
+    import matplotlib.pyplot as plt
+
+    edges = np.array(diag["hist_bin_edges_m"], dtype=float)
+    centres = 0.5 * (edges[:-1] + edges[1:])
+    fig, ax = plt.subplots(figsize=(7, 3.6), dpi=dpi)
+    ax.plot(centres, diag["hist_blocked"], label="blocked cells", color="tab:red")
+    ax.plot(centres, diag["hist_all"], label="all cells", color="tab:blue", alpha=0.6)
+    ax.set_xlabel("up-facing surface height above the local floor (m)")
+    ax.set_ylabel("cells")
+    ax.set_title(title or "up-facing surfaces above the local floor")
+    ax.legend(fontsize=7)
+    fig.tight_layout()
+    fig.savefig(out)
+    plt.close(fig)
+    return Path(out)

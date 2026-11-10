@@ -28,6 +28,27 @@ FREE = np.int8(0)
 BLOCKED = np.int8(1)
 UNKNOWN = np.int8(-1)
 
+#: Diagnostic labels for why a cell is blocked (``collect_diagnostics``). They describe the EXISTING rule that fired;
+#: no threshold changes and the default pipeline never computes them.
+REASON_FREE = np.int8(0)
+REASON_UNKNOWN = np.int8(1)
+REASON_VERTICAL_BAND = np.int8(2)
+REASON_HORIZONTAL_BAND = np.int8(3)
+REASON_SLANTED_BAND = np.int8(4)
+REASON_OVERHANG_BAND = np.int8(5)
+REASON_STEP_RULE = np.int8(6)
+REASON_THICKENED = np.int8(7)
+REASON_NAMES = {
+    int(REASON_FREE): "free",
+    int(REASON_UNKNOWN): "unknown",
+    int(REASON_VERTICAL_BAND): "blocked: vertical surface in clearance band",
+    int(REASON_HORIZONTAL_BAND): "blocked: horizontal surface in clearance band (step/kerb)",
+    int(REASON_SLANTED_BAND): "blocked: slanted surface in clearance band",
+    int(REASON_OVERHANG_BAND): "blocked: overhang in clearance band",
+    int(REASON_STEP_RULE): "blocked: floor-height step rule",
+    int(REASON_THICKENED): "blocked: one-cell thickening of a thin surface",
+}
+
 DEFAULT_CONFIG_PATH = Path(__file__).resolve().parent / "config" / "occupancy.yaml"
 
 
@@ -74,6 +95,7 @@ class OccupancyGrid:
     config: OccupancyConfig
     scene_id: str = ""
     inflated: np.ndarray | None = None  # bool, blocked-after-inflation (same shape)
+    diagnostics: dict | None = None  # only when build_grid(collect_diagnostics=True)
 
     @property
     def shape(self) -> tuple[int, int]:
@@ -186,6 +208,7 @@ def build_grid(
     scene_id: str = "",
     floor_z: float | None = None,
     chunk_faces: int = 200_000,
+    collect_diagnostics: bool = False,
 ) -> OccupancyGrid:
     """Rasterise world triangles (metres) into a FREE / BLOCKED / UNKNOWN grid, then inflate.
 
@@ -257,11 +280,11 @@ def build_grid(
     free = np.isfinite(local_floor)
     band_lo = local_floor + config.band_low_m
     band_hi = local_floor + config.band_high_m
-    blocked = (vert_min <= band_hi) & (vert_max >= band_lo)          # walls, legs, frames crossing the band
-    blocked |= (up_max > band_lo) & (up_max < band_hi)               # a step/kerb surface inside the band
-    blocked |= (slant_min <= band_hi) & (slant_max >= band_lo)       # slanted surfaces entering the band
-    blocked |= (down_max > band_lo) & (down_min < band_hi)           # an overhang inside the band
-    blocked &= free
+    m_vertical = (vert_min <= band_hi) & (vert_max >= band_lo)       # walls, legs, frames crossing the band
+    m_horizontal = (up_max > band_lo) & (up_max < band_hi)           # a step/kerb surface inside the band
+    m_slanted = (slant_min <= band_hi) & (slant_max >= band_lo)      # slanted surfaces entering the band
+    m_overhang = (down_max > band_lo) & (down_min < band_hi)         # an overhang inside the band
+    blocked = (m_vertical | m_horizontal | m_slanted | m_overhang) & free
     grid[free] = FREE
     grid[blocked] = BLOCKED
 
@@ -269,8 +292,11 @@ def build_grid(
     # A surface thinner than a cell can leave an unblocked cell between its two face rows (a 0.1 m wall at 5 cm
     # cells is exactly that), and a planner would thread a 1-cell tunnel through the wall. One 4-neighbour
     # thickening closes it; it also grows furniture by 5 cm, which the inflation already covers.
-    grid2[_thicken(grid2 == BLOCKED)] = BLOCKED
-    grid2 = _block_steep_neighbours(grid2, local_floor.reshape(ny, nx), config.max_step_m)
+    thick_mask = _thicken(grid2 == BLOCKED) & ~(grid2 == BLOCKED)
+    grid2[thick_mask] = BLOCKED
+    grid2, step_mask = _block_steep_neighbours(
+        grid2, local_floor.reshape(ny, nx), config.max_step_m, return_mask=True
+    )
 
     out = OccupancyGrid(
         grid=grid2,
@@ -281,6 +307,13 @@ def build_grid(
         scene_id=scene_id,
     )
     out.inflated = inflate(out.grid, config.robot_radius_m, config.resolution_m)
+    if collect_diagnostics:
+        out.diagnostics = _collect_reasons(
+            out.grid, local_floor.reshape(ny, nx), up_max.reshape(ny, nx), config,
+            m_vertical=m_vertical.reshape(ny, nx), m_horizontal=m_horizontal.reshape(ny, nx),
+            m_slanted=m_slanted.reshape(ny, nx), m_overhang=m_overhang.reshape(ny, nx),
+            thick_mask=thick_mask.reshape(ny, nx), step_mask=step_mask,
+        )
     return out
 
 
@@ -334,9 +367,12 @@ def _thicken(blocked: np.ndarray, iterations: int = 1) -> np.ndarray:
     return out
 
 
-def _block_steep_neighbours(grid: np.ndarray, local_floor: np.ndarray, max_step_m: float) -> np.ndarray:
+def _block_steep_neighbours(
+    grid: np.ndarray, local_floor: np.ndarray, max_step_m: float, *, return_mask: bool = False
+):
     """Block both cells of any 4-neighbour pair whose floor heights differ by more than ``max_step_m``."""
     out = grid.copy()
+    stepped = np.zeros_like(out, dtype=bool)
     for dy, dx in ((0, 1), (1, 0)):
         a = local_floor[: local_floor.shape[0] - dy, : local_floor.shape[1] - dx]
         b = local_floor[dy:, dx:]
@@ -345,7 +381,53 @@ def _block_steep_neighbours(grid: np.ndarray, local_floor: np.ndarray, max_step_
         tail = out[dy:, dx:]
         head[steep] = BLOCKED
         tail[steep] = BLOCKED
-    return out
+        stepped[: out.shape[0] - dy, : out.shape[1] - dx][steep] = True
+        stepped[dy:, dx:][steep] = True
+    return (out, stepped) if return_mask else out
+
+
+def _collect_reasons(
+    grid: np.ndarray, local_floor: np.ndarray, up_max: np.ndarray, config: OccupancyConfig, *,
+    m_vertical, m_horizontal, m_slanted, m_overhang, thick_mask, step_mask,
+) -> dict:
+    """Per-cell reason labels and the up-facing height histogram -- evidence, not behaviour.
+
+    Precedence is the order in which the existing rules are applied: step rule, then a horizontal surface in the band
+    (a step or kerb, the scene-2 suspect), then a vertical surface, then slanted, then an overhang, then plain
+    thickening. A cell can satisfy several; the label records the first one that would have blocked it.
+    """
+    import numpy as np
+
+    category = np.full(grid.shape, REASON_UNKNOWN, dtype=np.int8)
+    category[grid == FREE] = REASON_FREE
+    blocked_cells = grid == BLOCKED
+    category[blocked_cells] = REASON_THICKENED
+    for mask, reason in (
+        (m_overhang, REASON_OVERHANG_BAND), (m_slanted, REASON_SLANTED_BAND),
+        (m_vertical, REASON_VERTICAL_BAND), (m_horizontal, REASON_HORIZONTAL_BAND),
+        (step_mask, REASON_STEP_RULE),
+    ):
+        category[mask & blocked_cells] = reason
+
+    with np.errstate(invalid="ignore"):
+        up_above = np.where(np.isfinite(up_max) & np.isfinite(local_floor), up_max - local_floor, np.nan)
+    bins = np.arange(0.0, 3.0 + config.resolution_m, 0.05)
+
+    def hist(mask):
+        values = up_above[mask]
+        values = values[np.isfinite(values)]
+        counts, _ = np.histogram(values, bins=bins)
+        return [int(c) for c in counts]
+
+    counts = {REASON_NAMES[int(r)]: int((category == r).sum()) for r in sorted(REASON_NAMES)}
+    return {
+        "category": category,
+        "up_above_floor": up_above.astype(np.float32),
+        "hist_bin_edges_m": [round(float(b), 3) for b in bins],
+        "hist_all": hist(np.ones_like(grid, dtype=bool)),
+        "hist_blocked": hist(blocked_cells),
+        "counts": counts,
+    }
 
 
 def inflate(grid: np.ndarray, radius_m: float, resolution_m: float) -> np.ndarray:
@@ -388,9 +470,10 @@ def scene_triangles_m(usd_path: str | Path, *, budget_s: float = 1800.0) -> tupl
 
 
 def from_usd(usd_path: str | Path, *, scene_id: str = "", config: OccupancyConfig | None = None,
-             floor_z: float | None = None) -> OccupancyGrid:
+             floor_z: float | None = None, collect_diagnostics: bool = False) -> OccupancyGrid:
     points, faces = scene_triangles_m(usd_path)
-    return build_grid(points, faces, config=config, scene_id=scene_id or Path(usd_path).parent.name, floor_z=floor_z)
+    return build_grid(points, faces, config=config, scene_id=scene_id or Path(usd_path).parent.name,
+                      floor_z=floor_z, collect_diagnostics=collect_diagnostics)
 
 
 def save_npz(grid: OccupancyGrid, path: str | Path) -> Path:

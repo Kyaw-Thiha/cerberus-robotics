@@ -143,6 +143,18 @@ scene 1. The navigable space is real but fragmented; the likely cause is a large
 0.12–0.45 m band (a raised floor or platform) being marked blocked. Do not run physics on this scene until a per-cell
 reason dump explains it — this is a diagnosis, not a tuning change.
 
+The diagnostic is built and local: `scripts/build_occupancy.py --diagnose` writes a reason-coloured preview (vertical
+surface in band, horizontal surface in band, slanted, overhang, floor-step rule, thickening), an up-facing height
+histogram above the local floor, and a JSON count summary. It changes no threshold and no default behaviour.
+
+**Scenes cached for substitution.** R2 holds 18 GRScenes homes under
+`cerberus-robotics/worlds/grscenes/home/scenes/`: `MV7J6NIKTKJZ2AABAAAAADQ8_usd`, `…ADY8_usd`, `…AEI8_usd`,
+`MVUCSQAKTKJ5EAABAAAAAAI8_usd`, `…ACI8_usd`, `…ADQ8_usd`, `…ADY8_usd`, `…AEI8_usd`,
+`MVUHLWYKTKJ5EAABAAAAAAI8_usd`, `…ACY8_usd`, `MWAX5JYKTKJZ2AABAAAAAAI8_usd`, `…ABI8_usd`, `…ACA8_usd`,
+`…ADQ8_usd`, `…AEA8_usd`, `MWBGLKQKTKJZ2AABAAAAAAQ8_usd`, `…ABA8_usd`, `…ABY8_usd`. Scene 1 and scene 2 are the
+first and second; `MVUCSQAKTKJ5EAABAAAAAAI8_usd` (already admitted in H2) and
+`MVUHLWYKTKJ5EAABAAAAACY8_usd` (used by the SLAM eval) are the natural substitutes.
+
 ### Kinematic upper bound on the real grids
 
 | scene | pairs | success | mean path | SPL | rejections |

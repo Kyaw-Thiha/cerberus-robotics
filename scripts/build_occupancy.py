@@ -38,6 +38,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--config", default=None, help="occupancy YAML (default: planning/config/occupancy.yaml)")
     parser.add_argument("--out-dir", default="data/reports/occupancy", help="where the PNG preview goes")
     parser.add_argument("--budget_s", type=float, default=1800.0)
+    parser.add_argument("--diagnose", action="store_true",
+                        help="also write a reason-coloured preview, an up-facing height histogram and a JSON summary")
     parser.add_argument("--dry-run", action="store_true", help="resolve paths only; no pxr")
     return parser
 
@@ -68,9 +70,29 @@ def main(argv: list[str] | None = None) -> int:
             **({"resolution_m": args.resolution} if args.resolution else {}),
             **({"robot_radius_m": args.robot_radius} if args.robot_radius else {}),
         })
-    grid = from_usd(usd, scene_id=args.scene, config=config, floor_z=args.floor_z)
+    grid = from_usd(usd, scene_id=args.scene, config=config, floor_z=args.floor_z,
+                    collect_diagnostics=args.diagnose)
     save_npz(grid, npz)
     save_preview_png(grid, png, title=f"{args.scene}: free {grid.free_fraction():.0%}")
+    if args.diagnose and grid.diagnostics:
+        import json as _json
+
+        from planning.viz import save_reason_png, save_up_histogram_png
+
+        stem = f"{usd.parent.name}"
+        reasons_png = Path(args.out_dir) / f"{stem}_blocked_reasons.png"
+        hist_png = Path(args.out_dir) / f"{stem}_up_histogram.png"
+        save_reason_png(grid, reasons_png, title=f"{args.scene}: blocked-cell reasons")
+        save_up_histogram_png(grid.diagnostics, hist_png, title=f"{args.scene}: surfaces above the local floor")
+        diag_json = Path(args.out_dir) / f"{stem}_diagnostics.json"
+        diag_json.write_text(_json.dumps({
+            "scene": args.scene,
+            "counts": grid.diagnostics["counts"],
+            "hist_bin_edges_m": grid.diagnostics["hist_bin_edges_m"],
+            "hist_all": grid.diagnostics["hist_all"],
+            "hist_blocked": grid.diagnostics["hist_blocked"],
+        }, indent=2) + "\n", encoding="utf-8")
+        print(f"[occupancy] diagnostics -> {reasons_png}, {hist_png}, {diag_json}")
     summary = {
         "scene": args.scene,
         "npz": str(npz),

@@ -72,6 +72,14 @@ def test_window_must_span_four_minutes():
     assert not probe.hang_detected(rows)
 
 
+def test_hang_fires_at_a_15s_cadence():
+    # regression: a strict span check never passes with SAMPLE_S spacing
+    cadence = probe.SAMPLE_S
+    rows = [probe.Sample(elapsed_s=i * cadence, log_size=100, cpu_pct=1, gpu_util=0)
+            for i in range(int(300 / cadence) + 1)]
+    assert probe.hang_detected(rows)
+
+
 def test_verdicts():
     ok = probe.decide(exited=True, rc=0, output="PROBE_OK", elapsed_s=60, killed_for_hang=False, samples=[])
     slow = probe.decide(exited=True, rc=0, output="PROBE_OK", elapsed_s=600, killed_for_hang=False, samples=[])

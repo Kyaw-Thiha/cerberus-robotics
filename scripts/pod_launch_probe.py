@@ -111,7 +111,8 @@ def hang_detected(samples: list[Sample], window_s: float = HANG_WINDOW_S) -> boo
         return False
     last = samples[-1]
     window = [s for s in samples if s.elapsed_s >= last.elapsed_s - window_s]
-    if len(window) < 2 or (last.elapsed_s - window[0].elapsed_s) < window_s:
+    # one sampling interval of tolerance: a window filtered by "last - window_s" spans at most window_s - SAMPLE_S
+    if len(window) < 2 or (last.elapsed_s - window[0].elapsed_s) < window_s - SAMPLE_S:
         return False
     grew = last.log_size > window[0].log_size
     busy_cpu = any(s.cpu_pct >= CPU_IDLE_PCT for s in window)

@@ -64,6 +64,17 @@ host instead of a rejected one.
 | 2026-11-09/10 | 595.91.07 | 13.0 | A40, RTX 4090 | B | 0/3 in the H4 attempt | probe/retry decides per host |
 | 2026-11-10 | 595.91.07 | 13.2 | RTX 4090 | B | 0/1 probe: TIMEOUT, no Kit output in 300 s | host d62a57dd355f stopped; second of two non-OK hosts |
 | 2026-11-10 | 595.91.07 | 13.2 | RTX 4090 | B | one launch crashed 139 in 7.1 s (wrapper reports 1), corrected probe then TIMEOUT | host 392a4f398312 stopped; two non-OK verdicts ended the session |
+| 2026-11-13 | 595.91.07 | 13.2 | NVIDIA A40 | B | 2x139 at 1.6 s, a stall at 0.57 s, then **OK 62.2 s**; a warm launch after cache restore HANG | host 68w33sl6ksjr1f stopped |
+| 2026-11-13 | 595.91.07 | 13.2 | RTX 4090 | B | 3x139 in ~5.4 s each, no stage marker | host dm58xqbyd3lyen stopped; second hard host, session ended |
+
+**2026-11-13 evidence.** On the A40 host the Kit log shows the startup reaching `Simulation App Starting` and
+`Simulation App Startup Complete` in the same second (17:03:44, 1.954 s and 2.096 s after the log opened) on the
+launch that worked, while the failing launches died at 1,609 ms and 1,614 ms (16:55:51, 16:55:56) and a third stalled
+at 517-569 ms (log opened 16:55:59, never advanced). **No "ray tracing shaders" line appears in any log**, so the
+cold-shader hypothesis is not supported: the failures are pre-log or immediately post-loader, and they are per-launch
+(2 crash, 1 stall, 1 OK, then a warm stall on the same host). The 4090 host failed three times in ~5.4 s each, last
+line "terminating this process with exit code 139" at 726 ms. The only cache directories that existed after a good
+launch were `~/.cache/ov` and `~/.cache/warp` (8.7 MB bundle).
 
 No host has a cache bundle yet; the first `OK`/`SLOW_OK` run uploads one, and `outputs/launch_probe.csv` records
 `cache=true|false` per probe from then on. "unknown" means the value was not recorded in that session; the gate
@@ -81,7 +92,7 @@ The probe is liveness-based, because a cold first launch compiles ray-tracing sh
 - verdicts: `OK`, `SLOW_OK` (ready after > 5 min, elapsed recorded), `SEGFAULT`, `HANG`,
   `TIMEOUT_WITH_ACTIVITY`, `OTHER`. Only **SEGFAULT and HANG** count toward the two-hosts stop rule.
 
-Kit writes `logs/Kit/Isaac-Sim/<version>/kit_<stamp>.log` under `/isaac-sim/kit/logs` or
+Kit writes `logs/Kit/<product>/<version>/kit_<stamp>.log` under `/isaac-sim/kit/logs` or
 `~/.nvidia-omniverse/logs` depending on the image. The probe searches both, launches with verbose Kit file logging
 and `PYTHONUNBUFFERED=1`, and **always** copies the log plus its own stdout to `outputs/kit_logs/<stamp>_probe/`
 with `launch_timeline.json` (app starting, ray-tracing shader compilation, app ready, startup complete, with

@@ -7,7 +7,6 @@ import pytest
 import kit_cache
 import kit_logs
 import pod_budget
-import pod_launch_probe as probe
 from nav_eval import select_replay_indices
 
 
@@ -44,83 +43,6 @@ def test_copy_kit_log_finds_and_copies_the_newest(tmp_path):
     assert copied and copied[0].read_text() == SAMPLE_LOG
     assert (list(out.glob("*/launch_timeline.json"))[0]).is_file()
     assert timeline["markers"]
-
-
-# --- liveness probe ----------------------------------------------------------------------------
-
-def samples(*rows):
-    return [probe.Sample(elapsed_s=e, log_size=s, cpu_pct=c, gpu_util=g) for e, s, c, g in rows]
-
-
-def test_growth_means_not_hung():
-    rows = samples((0, 100, 1, 0), (60, 200, 1, 0), (120, 300, 1, 0), (180, 400, 1, 0), (240, 500, 1, 0))
-    assert not probe.hang_detected(rows)
-
-
-def test_flat_log_with_idle_cpu_and_gpu_is_hung():
-    rows = samples((0, 100, 1, 0), (60, 100, 1, 0), (120, 100, 1, 0), (180, 100, 1, 0), (240, 100, 1, 0))
-    assert probe.hang_detected(rows)
-
-
-def test_busy_cpu_or_gpu_is_not_hung():
-    assert not probe.hang_detected(samples((0, 100, 80, 0), (240, 100, 80, 0)))
-    assert not probe.hang_detected(samples((0, 100, 1, 90), (240, 100, 1, 90)))
-
-
-def test_window_must_span_four_minutes():
-    rows = samples((0, 100, 1, 0), (60, 100, 1, 0), (120, 100, 1, 0))
-    assert not probe.hang_detected(rows)
-
-
-def test_hang_fires_at_a_15s_cadence():
-    # regression: a strict span check never passes with SAMPLE_S spacing
-    cadence = probe.SAMPLE_S
-    rows = [probe.Sample(elapsed_s=i * cadence, log_size=100, cpu_pct=1, gpu_util=0)
-            for i in range(int(300 / cadence) + 1)]
-    assert probe.hang_detected(rows)
-
-
-def test_verdicts():
-    ok = probe.decide(exited=True, rc=0, output="PROBE_OK", elapsed_s=60, killed_for_hang=False, samples=[])
-    slow = probe.decide(exited=True, rc=0, output="PROBE_OK", elapsed_s=600, killed_for_hang=False, samples=[])
-    assert (ok, slow) == ("OK", "SLOW_OK")
-
-    segv = probe.decide(exited=True, rc=139, output="", elapsed_s=7, killed_for_hang=False, samples=[])
-    wrapped = probe.decide(exited=True, rc=1, output="terminating this process with exit code 139.",
-                           elapsed_s=7, killed_for_hang=False, samples=[])
-    other = probe.decide(exited=True, rc=1, output="boom", elapsed_s=7, killed_for_hang=False, samples=[])
-    assert (segv, wrapped, other) == ("SEGFAULT", "SEGFAULT", "OTHER")
-
-    hung = probe.decide(exited=False, rc=None, output="", elapsed_s=300, killed_for_hang=True, samples=[])
-    assert hung == "HANG"
-
-    busy = samples((0, 100, 50, 0), (120, 200, 50, 0))
-    active = probe.decide(exited=False, rc=None, output="", elapsed_s=1200, killed_for_hang=False, samples=busy)
-    idle = probe.decide(exited=False, rc=None, output="", elapsed_s=1200, killed_for_hang=False,
-                        samples=samples((0, 100, 1, 0), (240, 100, 1, 0)))
-    assert active == "TIMEOUT_WITH_ACTIVITY"
-    assert idle == "HANG"
-
-
-def test_only_segfault_and_hang_count_as_host_failures(tmp_path):
-    path = tmp_path / "launch_probe.csv"
-    rows = [
-        {"ts": "", "stage": "probe", "driver": "1", "cuda": "", "gpu": "", "host": "a", "datacenter": "",
-         "image": "", "verdict": "SLOW_OK", "tier": "", "cache": "", "note": ""},
-        {"ts": "", "stage": "probe", "driver": "1", "cuda": "", "gpu": "", "host": "b", "datacenter": "",
-         "image": "", "verdict": "TIMEOUT_WITH_ACTIVITY", "tier": "", "cache": "", "note": ""},
-        {"ts": "", "stage": "probe", "driver": "1", "cuda": "", "gpu": "", "host": "c", "datacenter": "",
-         "image": "", "verdict": "SEGFAULT", "tier": "", "cache": "", "note": ""},
-        {"ts": "", "stage": "probe", "driver": "1", "cuda": "", "gpu": "", "host": "d", "datacenter": "",
-         "image": "", "verdict": "HANG", "tier": "", "cache": "", "note": ""},
-    ]
-    import csv
-
-    with path.open("w", newline="") as fh:
-        writer = csv.DictWriter(fh, fieldnames=list(rows[0]))
-        writer.writeheader()
-        writer.writerows(rows)
-    assert probe.non_ok_hosts(path) == {"c", "d"}
 
 
 # --- cache bundle ------------------------------------------------------------------------------
@@ -194,7 +116,7 @@ def test_spend_estimate_and_warning():
 
 
 def test_stage_caps_cover_the_documented_stages():
-    for stage in ("provision", "fetch", "grids", "stand", "navigation", "wrap_up"):
+    for stage in ("provision", "launch", "fetch", "grids", "stand", "navigation", "wrap_up"):
         assert stage in pod_budget.STAGE_CAPS_MIN
 
 

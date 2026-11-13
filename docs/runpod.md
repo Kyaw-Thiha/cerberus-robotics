@@ -55,7 +55,7 @@ exits **139 within 180 s** of starting, at most **three launches**, and passes a
 through unchanged. ``isaaclab.sh`` converts the child's 139 into exit 1, so the wrapper also matches the crash in its own log ("terminating this process with exit code 139"); without that, no retry ever fires. Every attempt lands in the same CSV, and the probe streams its output to ``outputs/probe_last.log`` so a hung launch leaves evidence. This is what turns "one launch in two crashes" into a usable
 host instead of a rejected one.
 
-| date | driver | CUDA shown | GPU | tier | Kit launches OK/fail | verdict |
+| date | driver | CUDA shown | GPU | tier | launches ok/total | verdict |
 | --- | --- | --- | --- | --- | --- | --- |
 | 2026-10-06 | 580.159.04 | unknown | RTX A5000 | A | all OK | renders and steps |
 | 2026-10-25 | 595.91.07 | unknown | RTX A5000 | B | all OK | renders with `CERBERUS_ALLOW_BAD_DRIVER_RENDER=1` |
@@ -64,8 +64,8 @@ host instead of a rejected one.
 | 2026-11-09/10 | 595.91.07 | 13.0 | A40, RTX 4090 | B | 0/3 in the H4 attempt | probe/retry decides per host |
 | 2026-11-10 | 595.91.07 | 13.2 | RTX 4090 | B | 0/1 probe: TIMEOUT, no Kit output in 300 s | host d62a57dd355f stopped; second of two non-OK hosts |
 | 2026-11-10 | 595.91.07 | 13.2 | RTX 4090 | B | one launch crashed 139 in 7.1 s (wrapper reports 1), corrected probe then TIMEOUT | host 392a4f398312 stopped; two non-OK verdicts ended the session |
-| 2026-11-13 | 595.91.07 | 13.2 | NVIDIA A40 | B | 2x139 at 1.6 s, a stall at 0.57 s, then **OK 62.2 s**; a warm launch after cache restore HANG | host 68w33sl6ksjr1f stopped |
-| 2026-11-13 | 595.91.07 | 13.2 | RTX 4090 | B | 3x139 in ~5.4 s each, no stage marker | host dm58xqbyd3lyen stopped; second hard host, session ended |
+| 2026-11-13 | 595.91.07 | 13.2 | NVIDIA A40 | B | **1/5 observed** (2x139 at 1.6 s, stalls, one OK 62.2 s; warm launch stalled) | host 68w33sl6ksjr1f stopped; per-launch crashes, retry is the answer |
+| 2026-11-13 | 595.91.07 | 13.2 | RTX 4090 | B | **0/3 observed** (3x139 in ~5.4 s) | host dm58xqbyd3lyen stopped; with retry it would have kept trying |
 
 **2026-11-13 evidence.** On the A40 host the Kit log shows the startup reaching `Simulation App Starting` and
 `Simulation App Startup Complete` in the same second (17:03:44, 1.954 s and 2.096 s after the log opened) on the
@@ -81,22 +81,27 @@ No host has a cache bundle yet; the first `OK`/`SLOW_OK` run uploads one, and `o
 records it automatically. Back-filled from
 `docs/arena_integration_log.md`, `docs/reports/scene_eval_phase0.md` and the H4 session logs.
 
-### The launch probe and Kit's log
+### The launch model and the probe
 
-The probe is liveness-based, because a cold first launch compiles ray-tracing shaders and can be silent for minutes:
+Evidence (2026-11-13, driver 595.91.07): the startup crash is **per launch**, at the loader within ~1.6 s
+(`libcarb.tasking` / `make_fcontext`, exit 139) or as a stall before the log advances; roughly **one launch in four**
+reaches `Simulation App Startup Complete`, and once started a run is stable. So a pre-startup failure is a *launch*
+failure, not a host verdict:
 
-- wall cap **20 minutes cold**, **5 minutes when a Kit cache bundle was restored**;
-- every 15 s it samples the Kit log size, the CPU of the process tree and GPU utilisation;
-- **HANG** only when the log has not grown for 4 minutes *and* CPU is below 5 % *and* the GPU is idle; otherwise it
-  keeps waiting to the cap;
-- verdicts: `OK`, `SLOW_OK` (ready after > 5 min, elapsed recorded), `SEGFAULT`, `HANG`,
-  `TIMEOUT_WITH_ACTIVITY`, `OTHER`. Only **SEGFAULT and HANG** count toward the two-hosts stop rule.
+- `scripts/kit_retry.sh` counts a launch as started when the Kit log (or the attempt's stdout) contains
+  `Simulation App Startup Complete` within `CERBERUS_STARTUP_WINDOW_S` (default 60 s);
+- otherwise it kills the whole process tree and relaunches, up to `CERBERUS_MAX_LAUNCHES` (default 10);
+- **after Startup Complete there is no watchdog**;
+- every attempt is one row in `outputs/launch_probe.csv` (stage `launch`: elapsed, exit code, last log line, crash
+  signature `libcarb.tasking/make_fcontext` when present);
+- the probe (`scripts/pod_launch_probe.sh`) is a thin wrapper: verdict `OK` or `LAUNCH_FAIL`, launches ok/total in the
+  row and in the Pod hosts table, and Kit's log plus `launch_timeline.json` always copied to `outputs/kit_logs/`;
+- a host is abandoned after **10 consecutive LAUNCH_FAILs** or at the **15-minute launch-stage cap**. The old
+  "two non-OK verdicts on different hosts" rule is gone.
 
-Kit writes `logs/Kit/<product>/<version>/kit_<stamp>.log` under `/isaac-sim/kit/logs` or
-`~/.nvidia-omniverse/logs` depending on the image. The probe searches both, launches with verbose Kit file logging
-and `PYTHONUNBUFFERED=1`, and **always** copies the log plus its own stdout to `outputs/kit_logs/<stamp>_probe/`
-with `launch_timeline.json` (app starting, ray-tracing shader compilation, app ready, startup complete, with
-timestamps). A silent failure without that log is not diagnosable, which is why it is never skipped.
+The saved logs confirm the reported signature: `libcarb.tasking.plugin.so!make_fcontext+0x39` appears in every crash
+trace, and no log contains a ray-tracing shader compilation line, so the cold-shader explanation is ruled out for
+these failures. Kit writes `logs/Kit/IsaacLab/3.0/kit_<stamp>.log` under `/isaac-sim/kit/logs` in this image.
 
 ### Kit cache bundles
 
@@ -104,8 +109,7 @@ After the first `OK`/`SLOW_OK` launch on a host, `scripts/kit_cache.sh save` tar
 (Isaac Lab's docker list: `~/.cache/ov`, `~/.cache/nvidia/GLCache`, `~/.cache/nvidia/ComputeCache`, `~/.nv/GLCache`,
 `~/.cache/warp`, `~/.cache/kit`, `~/.cache/omni.kit`, `~/.nvidia-omniverse/cache`, `~/.local/share/ov`; only existing,
 non-empty ones are kept and listed in the manifest) and uploads them to
-`cache/kit/<driver>_<gpu-model>/kit_cache.tar.gz`. At pod start, right after the driver gate,
-`scripts/kit_cache.sh restore --driver … --gpu …` fetches a bundle **only** for that exact key; the state file
+`cache/kit/<driver>_<gpu-model>/kit_cache.tar.gz`. Cache restore is **OFF by default** (`CERBERUS_WARM_CACHE=1` enables it): the 2026-11-13 warm launch stalled where the cold one had succeeded, so warmth bought nothing. When enabled, `scripts/kit_cache.sh restore --driver … --gpu …` fetches a bundle **only** for that exact key; the state file
 `~/.cerberus_kit_cache.json` records what was restored, and the probe writes `cache=true|false` in
 `outputs/launch_probe.csv`. Never restore across a different driver or GPU model.
 

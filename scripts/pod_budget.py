@@ -18,6 +18,7 @@ WARN_AT_USD = 5.0
 MAX_POD_CREATIONS = 3
 STAGE_CAPS_MIN = {
     "provision": 25,
+    "launch": 15,
     "credentials": 5,
     "fetch": 40,
     "grids": 25,

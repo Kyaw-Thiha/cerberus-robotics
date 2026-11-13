@@ -38,7 +38,10 @@ def _expand(path: str) -> Path:
 
 
 def find_kit_log(extra_roots: list[str | Path] | None = None) -> Path | None:
-    """Newest ``kit_*.log`` under the candidate roots, or ``None``."""
+    """Newest ``kit_*.log`` under the candidate roots, or ``None``. ``CERBERUS_KIT_LOG`` overrides (tests)."""
+    override = os.environ.get("CERBERUS_KIT_LOG")
+    if override:
+        return Path(override) if Path(override).exists() else None
     candidates: list[Path] = []
     for root in list(CANDIDATE_LOG_ROOTS) + [str(p) for p in (extra_roots or [])]:
         base = _expand(root)

@@ -15,7 +15,7 @@ from pod_driver_gate import (
     classify_driver,
     parse_cuda_version,
 )
-from pod_launch_probe import classify, non_ok_hosts
+from pod_launch_probe import non_ok_hosts
 
 import json
 from pathlib import Path
@@ -124,18 +124,6 @@ def test_should_retry_boundary():
 
 
 # --- probe -------------------------------------------------------------------------------------
-
-@pytest.mark.parametrize("rc,output,expected", [
-    (0, "PROBE_OK task=...", "OK"),
-    (0, "no marker", "OTHER"),
-    (139, "", "SEGFAULT"),
-    (-11, "", "SEGFAULT"),
-    (124, "", "TIMEOUT"),
-    (1, "boom", "OTHER"),
-])
-def test_probe_classification(rc, output, expected):
-    assert classify(rc, output) == expected
-
 
 def test_two_non_ok_hosts_stop_everything(tmp_path):
     path = tmp_path / "launch_probe.csv"

@@ -38,7 +38,6 @@ from common.cerberus_eval.video_clips import (  # noqa: E402
     ClipRecorder,
     clip_filename,
     metrics_filename,
-    plan_clips,
 )
 from planning.local_planner.core.pure_pursuit import PurePursuitConfig  # noqa: E402
 from planning.occupancy import from_usd, load_npz  # noqa: E402
@@ -67,6 +66,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--video-count", type=int, default=3)
     parser.add_argument("--video-downscale", type=int, default=2)
     parser.add_argument("--video-steps", type=int, default=600, help="frames per clip at 50 Hz = 12 s")
+    parser.add_argument("--replay-only", dest="replay_only", action="store_true",
+                        help="skip metrics; re-run selected pairs WITH cameras and record their clips")
+    parser.add_argument("--replay-pairs", default="", help="comma-separated pair indices to replay")
+    parser.add_argument("--replay-outcomes", default="success,failure",
+                        help="when --replay-pairs is empty, replay the first pair of each of these outcomes")
     parser.add_argument("--mock", action="store_true", help="local unicycle backend; no Isaac, no policy")
     parser.add_argument("--dry-run", action="store_true")
     return parser
@@ -151,9 +155,26 @@ def replay_clip(backend, grid, pairs, pair_index, out_dir: Path, *, name: str, v
                              pursuit=pursuit, on_step=on_step)
     clip.end()
     path = out_dir / name
-    if records:
-        write_run_json(out_dir / metrics_filename(name), records[0])
-    return path if path.is_file() else None
+    record = records[0] if records else {}
+    if record:
+        write_run_json(out_dir / metrics_filename(name), record)
+    return (path if path.is_file() else None), record
+
+
+def select_replay_indices(records: list[dict], pairs_arg: str, outcomes: str) -> list[int]:
+    """Pair indices to replay: an explicit list, else the first pair for each requested outcome."""
+    if pairs_arg.strip():
+        return [int(item) for item in pairs_arg.split(",") if item.strip()]
+    wanted = [item.strip() for item in outcomes.split(",") if item.strip()]
+    chosen: list[int] = []
+    for name in wanted:
+        for index, record in enumerate(records):
+            ok = record.get("outcome") == "success"
+            if (name == "success" and ok) or (name in ("failure", "fail") and not ok):
+                if index not in chosen:
+                    chosen.append(index)
+                break
+    return chosen
 
 
 def run(args) -> int:
@@ -181,7 +202,8 @@ def run(args) -> int:
         spawns = [(p.start[0], p.start[1], 0.0, first_grid.floor_z) for p in stats0.pairs]
         env, _scene = se.build_loco_env(scenes[0], spawns, task=task, seed=args.seed,
                                         episode_length_s=max(120.0, args.max_time + 30.0),
-                                        timings_path=out / "build_timings.json")
+                                        timings_path=out / "build_timings.json",
+                                        with_cameras=args.replay_only)
         hook = se.VelocityCommandHook(env)
         policy = se.load_policy(env, task=task, checkpoint=args.checkpoint)
         backend = IsaacBackend(env, hook, policy)
@@ -200,6 +222,35 @@ def run(args) -> int:
             except (SystemExit, FileNotFoundError, RuntimeError) as e:
                 print(f"[nav_eval] {scene_id}: no grid ({e}); skipping", file=sys.stderr)
                 continue
+        if args.replay_only:
+            import json as _json
+            scene_out = out / scene_id.split(":", 1)[-1]
+            stored = [(_json.loads(p.read_text(encoding="utf-8"))) for p in sorted((scene_out / "pairs").glob("pair_*.json"))]
+            if not stored:
+                print(f"[nav_eval] {scene_id}: no stored pairs to replay", file=sys.stderr)
+                continue
+            # pairs must be regenerated exactly as measured: same seed and bounds
+            pair_list = sample_pairs(grid, n=args.pairs, seed=args.seed,
+                                     min_distance_m=args.min_distance, max_distance_m=args.max_distance).pairs
+            chosen = select_replay_indices(stored, args.replay_pairs, args.replay_outcomes)
+            replays = []
+            for k in chosen:
+                measured = stored[k]
+                name = clip_filename(scene_id, args.seed, measured["outcome"])
+                clip_path, replay_rec = replay_clip(
+                    backend, grid, pair_list, measured["pair_index"], scene_out / "clips", name=name,
+                    video_steps=args.video_steps, downscale=args.video_downscale, config=config, pursuit=pursuit)
+                replays.append({
+                    "pair_index": measured["pair_index"],
+                    "measured_outcome": measured["outcome"],
+                    "replayed_outcome": replay_rec.get("outcome"),
+                    "reproduced": replay_rec.get("outcome") == measured["outcome"],
+                    "clip": str(clip_path) if clip_path else None,
+                })
+            (scene_out / "replay.json").write_text(_json.dumps(replays, indent=2) + "\n", encoding="utf-8")
+            per_scene[scene_id] = {"replay": replays}
+            continue
+
         stats = sample_pairs(grid, n=args.pairs, seed=args.seed,
                              min_distance_m=args.min_distance, max_distance_m=args.max_distance)
         print(f"[nav_eval] {scene_id}: {len(stats.pairs)} pairs from {stats.attempts} attempts "
@@ -234,18 +285,9 @@ def run(args) -> int:
         except Exception as e:  # noqa: BLE001 - a failed sync must not kill the eval
             print(f"[nav_eval] WARNING: partial sync failed: {type(e).__name__}: {e}", file=sys.stderr)
 
-        if args.video and not args.mock and records:
-            outcomes = [r["outcome"] for r in records]
-            for k in plan_clips(outcomes, max_clips=args.video_count):
-                name = clip_filename(scene_id, args.seed, outcomes[k])
-                clip_path = out / "clips" / name
-                if clip_path.is_file():
-                    per_scene[scene_id].setdefault("clips", []).append(str(clip_path))
-                    continue
-                clip_path = replay_clip(backend, grid, stats.pairs, records[k]["pair_index"], out / "clips",
-                                        name=name, video_steps=args.video_steps, downscale=args.video_downscale,
-                                        config=config, pursuit=pursuit)
-                per_scene[scene_id].setdefault("clips", []).append(str(clip_path) if clip_path else f"{name} (missing)")
+        if not args.mock:
+            print(f"[nav_eval] {scene_id}: metrics recorded; clip step is a separate replay run "
+                  f"(--replay-only) so the measured episodes carry no rendering", flush=True)
 
     write_aggregate_csv(out / "nav_aggregate.csv", all_records)
     (out / "runs.jsonl").write_text("".join(json.dumps(r, default=str) + "\n" for r in all_records), encoding="utf-8")
@@ -277,6 +319,8 @@ def main(argv: list[str] | None = None) -> int:
                           "num_envs": args.num_envs, "mock": args.mock,
                           "out": str(Path(args.out_dir) if args.out_dir else default_out_dir())}, indent=2))
         return 0
+    if getattr(args, "replay_only", False):
+        args.enable_cameras = True  # the replay is the only step that needs a capture-capable visualizer
     if args.mock:
         return run(args)
 

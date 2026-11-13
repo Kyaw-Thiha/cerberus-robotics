@@ -65,8 +65,54 @@ host instead of a rejected one.
 | 2026-11-10 | 595.91.07 | 13.2 | RTX 4090 | B | 0/1 probe: TIMEOUT, no Kit output in 300 s | host d62a57dd355f stopped; second of two non-OK hosts |
 | 2026-11-10 | 595.91.07 | 13.2 | RTX 4090 | B | one launch crashed 139 in 7.1 s (wrapper reports 1), corrected probe then TIMEOUT | host 392a4f398312 stopped; two non-OK verdicts ended the session |
 
-"unknown" means the value was not recorded in that session; the gate records it automatically. Back-filled from
+No host has a cache bundle yet; the first `OK`/`SLOW_OK` run uploads one, and `outputs/launch_probe.csv` records
+`cache=true|false` per probe from then on. "unknown" means the value was not recorded in that session; the gate
+records it automatically. Back-filled from
 `docs/arena_integration_log.md`, `docs/reports/scene_eval_phase0.md` and the H4 session logs.
+
+### The launch probe and Kit's log
+
+The probe is liveness-based, because a cold first launch compiles ray-tracing shaders and can be silent for minutes:
+
+- wall cap **20 minutes cold**, **5 minutes when a Kit cache bundle was restored**;
+- every 15 s it samples the Kit log size, the CPU of the process tree and GPU utilisation;
+- **HANG** only when the log has not grown for 4 minutes *and* CPU is below 5 % *and* the GPU is idle; otherwise it
+  keeps waiting to the cap;
+- verdicts: `OK`, `SLOW_OK` (ready after > 5 min, elapsed recorded), `SEGFAULT`, `HANG`,
+  `TIMEOUT_WITH_ACTIVITY`, `OTHER`. Only **SEGFAULT and HANG** count toward the two-hosts stop rule.
+
+Kit writes `logs/Kit/Isaac-Sim/<version>/kit_<stamp>.log` under `/isaac-sim/kit/logs` or
+`~/.nvidia-omniverse/logs` depending on the image. The probe searches both, launches with verbose Kit file logging
+and `PYTHONUNBUFFERED=1`, and **always** copies the log plus its own stdout to `outputs/kit_logs/<stamp>_probe/`
+with `launch_timeline.json` (app starting, ray-tracing shader compilation, app ready, startup complete, with
+timestamps). A silent failure without that log is not diagnosable, which is why it is never skipped.
+
+### Kit cache bundles
+
+After the first `OK`/`SLOW_OK` launch on a host, `scripts/kit_cache.sh save` tars the startup caches it discovered
+(Isaac Lab's docker list: `~/.cache/ov`, `~/.cache/nvidia/GLCache`, `~/.cache/nvidia/ComputeCache`, `~/.nv/GLCache`,
+`~/.cache/warp`, `~/.cache/kit`, `~/.cache/omni.kit`, `~/.nvidia-omniverse/cache`, `~/.local/share/ov`; only existing,
+non-empty ones are kept and listed in the manifest) and uploads them to
+`cache/kit/<driver>_<gpu-model>/kit_cache.tar.gz`. At pod start, right after the driver gate,
+`scripts/kit_cache.sh restore --driver … --gpu …` fetches a bundle **only** for that exact key; the state file
+`~/.cerberus_kit_cache.json` records what was restored, and the probe writes `cache=true|false` in
+`outputs/launch_probe.csv`. Never restore across a different driver or GPU model.
+
+### Cameras are for clips only
+
+Probe, stand test and the navigation metrics run with cameras off. Clips come from a separate replay:
+`nav_eval.py --replay-only --replay-pairs 3,7` (or `--replay-outcomes success,failure`) rebuilds the env with a
+capture-capable visualizer and re-runs only those episodes. `scene_eval.py --record-clip` is the equivalent for the
+scripted smoke. Seeded replay may not reproduce a measured episode exactly (GPU/contact nondeterminism); each replay
+writes `replay.json` with `measured_outcome`, `replayed_outcome` and `reproduced`, and a failure that does not
+reproduce is recorded as such rather than implied.
+
+### Session budget
+
+Cap **6 USD** and at most **3 pod creations** per session. `scripts/pod_budget.py` prints the running estimate
+(`elapsed`, `usd`, `cap`) at each stage from the pod's hourly price; the driver stops the pod when the estimate
+approaches the cap. Per-stage caps (minutes): provision 25, credentials 5, fetch 40, grids 25, gate-G 15, stand 20,
+scripted 15, navigation 90, wrap-up 15.
 
 ### Creating a pod
 

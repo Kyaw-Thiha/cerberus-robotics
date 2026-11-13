@@ -11,6 +11,7 @@ Prints ``PROBE_OK`` on success; any crash is classified by the caller from the p
 from __future__ import annotations
 
 import argparse
+import os
 import sys
 from pathlib import Path
 
@@ -24,11 +25,21 @@ STEPS = 5
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--verbose-kit", action="store_true", help="verbose Kit file logging for the probe timeline")
     from common.cerberus_compat.launcher import add_launcher_args
 
     add_launcher_args(parser)
-    parser.set_defaults(headless=True)
+    parser.set_defaults(headless=True, enable_cameras=False)  # the probe renders nothing
+
     args = parser.parse_args(argv)
+    if args.verbose_kit:
+        options = {opt for action in parser._actions for opt in action.option_strings}
+        if "--kit_args" in options:
+            args.kit_args = ((getattr(args, "kit_args", "") or "")
+                             + " --/log/fileLogLevel=verbose --/log/level=verbose"
+                               " --/log/flushStandardStreamOutput=1").strip()
+        else:
+            os.environ.setdefault("CARB_LOG_LEVEL", "verbose")
 
     from isaaclab.app import AppLauncher
 

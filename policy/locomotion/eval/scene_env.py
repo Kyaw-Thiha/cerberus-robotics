@@ -151,6 +151,7 @@ def build_loco_env(
     env_spacing: float = DEFAULT_ENV_SPACING_M,
     scan_proxy: str | Path | None = None,
     timings_path: str | Path | None = None,
+    with_cameras: bool = False,
 ) -> tuple[Any, dict[str, Any]]:
     """``gym.make`` the Play task in the scene and teleport every env to its ``(x, y, yaw[, floor_z])`` spawn.
 
@@ -184,6 +185,11 @@ def build_loco_env(
     env_cfg.seed = int(seed)
     apply_loco_scene(env_cfg, scene, scan_proxy=scan_proxy)
     apply_deterministic_commands(env_cfg)
+    if with_cameras:
+        # only the clip/replay step needs a capture-capable visualizer; metric runs must not pay for rendering
+        from policy.locomotion.core.script_utils import ensure_capture_visualizer
+
+        ensure_capture_visualizer(env_cfg)
     t_apply = time.perf_counter()
 
     # gym.make is where the scene USD stage loads, the scan-proxy mesh is built and the articulation is

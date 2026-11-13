@@ -34,7 +34,7 @@ CUDA_FIRST = "13.0"
 #: The API's own enum. There is no "13.2": after one filtered attempt this script creates filter-free and lets the
 #: driver gate enforce the tier rule, which is the only legal way to express "fall back to the other branch".
 VALID_CUDA_VERSIONS = ("13.0", "12.9", "12.8", "12.7", "12.6", "12.5", "12.4", "12.3", "12.2", "12.1", "12.0", "11.8")
-MAX_CREATIONS_PER_SESSION = 4
+MAX_CREATIONS_PER_SESSION = int(os.environ.get("CERBERUS_MAX_PODS", "3"))
 CREATIONS_PATH = Path(__file__).resolve().parents[1] / "outputs" / "pod_creations.json"
 DEFAULT_CONTAINER_DISK_GB = 100
 

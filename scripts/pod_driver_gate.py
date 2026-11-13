@@ -31,7 +31,8 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parents[1]
 ALLOWLIST_PATH = Path(__file__).resolve().parent / "pod_driver_allowlist.json"
 CSV_PATH = REPO_ROOT / "outputs" / "launch_probe.csv"
-CSV_COLUMNS = ("ts", "stage", "driver", "cuda", "gpu", "host", "datacenter", "image", "verdict", "tier", "note")
+CSV_COLUMNS = ("ts", "stage", "driver", "cuda", "gpu", "host", "datacenter", "image", "verdict", "tier",
+               "cache", "note")
 RUNPOD_API = "https://rest.runpod.io/v1/pods"
 EXIT_REJECT = 2
 
@@ -107,7 +108,7 @@ def collect_host_info(image: str | None = None) -> HostInfo:
 
 
 def append_probe_row(path: Path, info: HostInfo, *, stage: str, verdict: str, note: str = "",
-                     tier: str = "") -> None:
+                     tier: str = "", cache: str = "") -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     new = not path.is_file()
     with path.open("a", newline="", encoding="utf-8") as fh:
@@ -125,6 +126,7 @@ def append_probe_row(path: Path, info: HostInfo, *, stage: str, verdict: str, no
             "image": info.image,
             "verdict": verdict,
             "tier": tier,
+            "cache": cache,
             "note": note,
         })
 

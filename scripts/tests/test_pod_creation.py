@@ -96,9 +96,9 @@ def test_cuda_13_2_is_rejected_before_any_request():
     assert "allowedCudaVersions" not in payload
 
 
-def test_missing_key_is_an_error_not_a_crash(monkeypatch):
+def test_missing_key_is_an_error_not_a_crash(monkeypatch, tmp_path):
     monkeypatch.delenv("RUNPOD_API_KEY", raising=False)
-    assert create_pod.main([]) == 2
+    assert create_pod.main(["--creations-file", str(tmp_path / "c.json")]) == 2
 
 
 def test_dry_run_prints_the_body_without_a_key(monkeypatch, capsys):

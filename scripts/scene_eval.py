@@ -42,7 +42,9 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--steps", type=int, default=200, help="zero-command stand length (the assertion window)")
     parser.add_argument("--task", default=None, help="Isaac task id (default: the Cerberus rough Play task)")
     parser.add_argument("--checkpoint", default="policy/locomotion/checkpoints/go2_locomotion_ga_v1_candidate.pt")
-    parser.add_argument("--scripted", action="store_true", help="after the stand, walk a seeded scripted path")
+    parser.add_argument("--scripted", action="store_true", help="after the stand, walk a seeded scripted path (metrics only)")
+    parser.add_argument("--record-clip", dest="record_clip", action="store_true",
+                        help="also record the scripted-path clip; this enables cameras for the whole run")
     parser.add_argument("--scripted-waypoints", type=int, default=3)
     parser.add_argument("--out-dir", default=None)
     parser.add_argument("--video", dest="video", action="store_true", default=True)
@@ -205,7 +207,8 @@ def run(args) -> int:
     if args.scripted and report.passed:
         start = (spawns[0][0], spawns[0][1], spawns[0][2])
         path = scripted_path_for_seed(args.seed, start_pose=start, dt=0.02)
-        clip = ClipRecorder(out_dir / "clips", enabled=args.video, downscale=args.video_downscale)
+        clip = ClipRecorder(out_dir / "clips", enabled=args.video and args.record_clip,
+                            downscale=args.video_downscale)
         name = f"{args.scene.split(':', 1)[-1]}_{args.seed}_scripted.mp4"
         clip.begin(name)
         se.reset_envs_to(env, spawns)
@@ -217,7 +220,7 @@ def run(args) -> int:
                 hook.apply(torch.tensor([[cmd["vx"], cmd["vy"], cmd["wz"]]] * n, device=device))
                 obs = env.get_observations()
                 obs, _, _, _ = env.step(policy(obs))
-                if args.video:
+                if args.video and args.record_clip:
                     clip.frame(env.unwrapped, 0)
         clip.end()
         elapsed = time.perf_counter() - t0
@@ -270,6 +273,8 @@ def main(argv: list[str] | None = None) -> int:
         }, indent=2))
         return 0
 
+    if getattr(args, "record_clip", False):
+        args.enable_cameras = True  # the launcher only creates a capture-capable visualizer with this set
     # MDL_SYSTEM_PATH must be set BEFORE the app launches; the registry is pure python, so no Isaac import here.
     from common.cerberus_worlds.registry import get_backend
 

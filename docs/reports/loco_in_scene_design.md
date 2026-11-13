@@ -87,3 +87,14 @@ articulation init is small. A lite USD that keeps only collision proxies (and dr
 build and the GPU memory, with clips rendered from the full USD in a separate visual pass. It is a proposal only: it
 must first be shown that the collision geometry and the height-scan proxy behave identically (same contacts, same
 187-cell scan on flat ground), otherwise the physics numbers stop being comparable. Not attempted in this session.
+
+
+## Replay vs measurement (clips)
+
+Navigation metrics run with cameras off; clips are recorded by a separate `nav_eval --replay-only` pass that rebuilds
+the env with a capture-capable visualizer and re-runs the selected `(scene, pair, seed)` episodes. The seed fixes the
+start-goal pair, the policy weights, the controller and the reset pose, but **the replay is not guaranteed to
+reproduce the measured trajectory**: PhysX contact ordering and GPU scheduling are not bit-stable, and a fall is a
+threshold event that a small divergence can flip. The measured metrics remain authoritative; each replay writes
+`replay.json` with the measured and replayed outcomes and a `reproduced` flag, and a failure clip that does not
+reproduce is reported as unreproduced rather than presented as the measured failure.

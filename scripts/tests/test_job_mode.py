@@ -26,12 +26,16 @@ def test_job_env_requires_the_r2_variables(monkeypatch):
         cvi.job_env("j", "b", 85, "img")
 
 
-def test_payload_onstart_is_the_default_hook():
+def test_payload_entrypoint_is_the_default_hook():
+    import base64
     payload = cvi.build_job_payload({"dph_total": 0.18}, image="img:v1", disk_gb=80, label="l",
                                     env={"A": "1"}, deadline_minutes=85)
-    assert payload["runtype"] == "args" and payload["args"] == []
-    assert "scripts/job_entrypoint.sh" in payload["onstart"] and "rclone copyto" in payload["onstart"]
-    assert payload["env"] == {"A": "1"} and payload["disk"] == 80.0
+    assert payload["runtype"] == "args"
+    assert payload["entrypoint"] == ["/bin/bash"]
+    assert payload["args"] == ["-c", cvi.SHORT_BOOTSTRAP]
+    decoded = base64.b64decode(payload["env"]["CERBERUS_BOOTSTRAP_B64"]).decode()
+    assert "scripts/job_entrypoint.sh" in decoded and "rclone copyto" in decoded
+    assert payload["env"]["A"] == "1" and payload["disk"] == 80.0
 
 
 def test_payload_can_use_the_args_hook():

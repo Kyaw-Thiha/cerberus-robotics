@@ -48,21 +48,33 @@ exec bash scripts/job_entrypoint.sh
 """
 
 
+SHORT_BOOTSTRAP = 'printf %s "$CERBERUS_BOOTSTRAP_B64" | base64 -d | bash'
+
+
 def build_job_payload(chosen: dict, *, image: str, disk_gb: int, label: str, env: dict[str, str],
-                      deadline_minutes: int, hook: str = "onstart") -> dict:
+                      deadline_minutes: int, hook: str = "entrypoint") -> dict:
     """Job launch: the image is untouched; our bootstrap runs from ``onstart`` (default) or ``args``.
 
     ``onstart`` is Vast's documented hook for custom images and runs in the container regardless of the image's
     ENTRYPOINT; ``args`` mode was observed to store ``image_args`` but never execute them on this image.
     """
+    import base64
+
     payload = {"image": image, "disk": float(disk_gb), "runtype": "args", "label": label,
-               "env": env, "price": float(chosen.get("dph_total", 0.0))}
-    if hook == "onstart":
-        payload["onstart"] = job_bootstrap()
+               "onstart": "", "price": float(chosen.get("dph_total", 0.0))}
+    if hook == "entrypoint":
+        # the image ENTRYPOINT is /start.sh, which swallows args; override it with bash and keep the visible command
+        # short by shipping the real bootstrap (base64) in an env var
+        payload["entrypoint"] = ["/bin/bash"]
+        payload["args"] = ["-c", SHORT_BOOTSTRAP]
+        payload["env"] = {**env, "CERBERUS_BOOTSTRAP_B64": base64.b64encode(job_bootstrap().encode()).decode()}
+    elif hook == "onstart":
         payload["args"] = []
+        payload["onstart"] = job_bootstrap()
+        payload["env"] = dict(env)
     else:
-        payload["onstart"] = ""
         payload["args"] = ["bash", "-lc", job_bootstrap()]
+        payload["env"] = dict(env)
     return payload
 
 
@@ -86,7 +98,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--job-id", default=None)
     parser.add_argument("--code-bundle", default=None, help="R2 path of the code bundle (migration/.../code/....bundle)")
     parser.add_argument("--deadline-minutes", type=int, default=85)
-    parser.add_argument("--hook", choices=["onstart", "args"], default="onstart")
+    parser.add_argument("--hook", choices=["entrypoint", "onstart", "args"], default="entrypoint")
     parser.add_argument("--dry-run", action="store_true", help="search and print, create nothing")
     args = parser.parse_args(argv)
     key = os.environ.get("VAST_API_KEY", "")
@@ -120,6 +132,9 @@ def main(argv: list[str] | None = None) -> int:
     env = job_env(job_id, bundle, args.deadline_minutes, args.image)
     payload = build_job_payload(chosen, image=args.image, disk_gb=args.disk_gb, label=args.label,
                                 env=env, deadline_minutes=args.deadline_minutes, hook=args.hook)
+    from redact import masked_json
+
+    print(f"create_vast: payload (masked) {masked_json(payload)[:900]}", flush=True)
     status, body = vp.create_instance(key, chosen["id"], payload=payload)
     if status >= 400 or not body.get("success", True):
         print(f"create_vast: create failed HTTP {status}: {json.dumps(body)[:400]}", file=sys.stderr)

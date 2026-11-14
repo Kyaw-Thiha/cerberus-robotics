@@ -126,6 +126,7 @@ def test_stop_request_targets_the_pod():
     assert url == pod_stop.stop_url("abc")
     assert url.endswith("/pods/abc/stop")
     assert headers["Authorization"] == "Bearer k"
+    assert headers["User-Agent"] == pod_stop.USER_AGENT
     assert body == b""
 
 

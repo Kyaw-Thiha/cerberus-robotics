@@ -40,7 +40,8 @@ def http_request(url: str, headers: dict[str, str], body: bytes) -> tuple[int, s
 
 
 def stop_pod(pod_id: str, api_key: str, transport: Transport | None = None) -> tuple[int, dict]:
-    status, text = (transport or http_request)(stop_url(pod_id), {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"}, b"")
+    status, text = (transport or http_request)(stop_url(pod_id), {"Authorization": f"Bearer {api_key}", "Content-Type": "application/json",
+                                  "User-Agent": USER_AGENT}, b"")
     try:
         return status, (json.loads(text) if text else {})
     except ValueError:

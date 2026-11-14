@@ -31,7 +31,7 @@ def test_payload_entrypoint_is_the_default_hook():
     payload = cvi.build_job_payload({"dph_total": 0.18}, image="img:v1", disk_gb=80, label="l",
                                     env={"A": "1"}, deadline_minutes=85)
     assert payload["runtype"] == "args"
-    assert payload["entrypoint"] == ["/bin/bash"]
+    assert payload["entrypoint"] == "/bin/bash"
     assert payload["args"] == ["-c", cvi.SHORT_BOOTSTRAP]
     decoded = base64.b64decode(payload["env"]["CERBERUS_BOOTSTRAP_B64"]).decode()
     assert "scripts/job_entrypoint.sh" in decoded and "rclone copyto" in decoded

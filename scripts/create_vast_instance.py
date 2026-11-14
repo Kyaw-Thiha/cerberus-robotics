@@ -65,7 +65,7 @@ def build_job_payload(chosen: dict, *, image: str, disk_gb: int, label: str, env
     if hook == "entrypoint":
         # the image ENTRYPOINT is /start.sh, which swallows args; override it with bash and keep the visible command
         # short by shipping the real bootstrap (base64) in an env var
-        payload["entrypoint"] = ["/bin/bash"]
+        payload["entrypoint"] = "/bin/bash"
         payload["args"] = ["-c", SHORT_BOOTSTRAP]
         payload["env"] = {**env, "CERBERUS_BOOTSTRAP_B64": base64.b64encode(job_bootstrap().encode()).decode()}
     elif hook == "onstart":
@@ -136,11 +136,14 @@ def main(argv: list[str] | None = None) -> int:
 
     print(f"create_vast: payload (masked) {masked_json(payload)[:900]}", flush=True)
     status, body = vp.create_instance(key, chosen["id"], payload=payload)
+    from redact import masked_json
+
     if status >= 400 or not body.get("success", True):
-        print(f"create_vast: create failed HTTP {status}: {json.dumps(body)[:400]}", file=sys.stderr)
+        print(f"create_vast: create failed HTTP {status}: {masked_json(body)[:400]}", file=sys.stderr)
         return 1
     instance_id = str(body.get("new_contract") or body.get("id") or "")
     print(f"create_vast: created instance {instance_id}", flush=True)
+    print(f"create_vast: response (masked) {masked_json(body)[:300]}", flush=True)
 
     # live self-test of the stop path's authentication/headers before anything depends on it
     st_status, _ = vp.instance_info(key, instance_id)

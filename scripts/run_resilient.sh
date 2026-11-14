@@ -14,6 +14,9 @@ while [ $# -gt 0 ]; do
 done
 if [ ${#CMD[@]} -eq 0 ]; then echo "run_resilient: no command" >&2; exit 2; fi
 for attempt in $(seq 1 $((MAX + 1))); do
+  if [ "$attempt" -gt 1 ] && [ -x "$REPO_ROOT/scripts/launch_hygiene.sh" ]; then
+    bash "$REPO_ROOT/scripts/launch_hygiene.sh" >/dev/null 2>&1 || true
+  fi
   START=$(date +%s)
   "${CMD[@]}"
   RC=$?

@@ -87,6 +87,13 @@ def main(argv: list[str] | None = None) -> int:
     except OSError as e:
         rc, output = 1, f"{type(e).__name__}: {e}"
 
+    launch_dir = REPO_ROOT / "outputs" / "kit_launches"
+    if launch_dir.is_dir():
+        for log in sorted(launch_dir.glob("attempt_*.log")):
+            try:
+                output += log.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                continue
     verdict = "OK" if rc == 0 and "PROBE_OK" in output else "LAUNCH_FAIL"
     started, total = launch_counts(CSV_PATH, info.host)
     note = f"launches={started}/{total} rc={rc} window={args.window:.0f}s max={args.max_launches}"

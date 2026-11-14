@@ -148,6 +148,11 @@ def run(command: list[str], *, max_launches: int | None = None, window_s: float 
               f"{'STARTED' if result.started else 'LAUNCH_FAIL'} elapsed={result.elapsed_s:.1f}s "
               f"exit={result.rc} sig={result.signature or '-'}", flush=True)
         if result.started:
+            # the entrypoint's stdout is captured per attempt; replay it so callers (the probe) can see markers
+            try:
+                print(attempt_log.read_text(encoding="utf-8", errors="replace"), flush=True)
+            except OSError:
+                pass
             return 0 if result.rc is None else int(result.rc)
     return NO_START_EXIT
 

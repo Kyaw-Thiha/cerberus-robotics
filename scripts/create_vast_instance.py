@@ -15,6 +15,47 @@ import time
 
 import vast_provider as vp
 
+JOB_ENV_KEYS = ("R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET",
+                "CERBERUS_CODE_BUNDLE", "CERBERUS_JOB_ID", "CERBERUS_DEADLINE_MINUTES", "CERBERUS_IMAGE_TAG")
+
+
+def job_env(job_id: str, code_bundle: str, deadline_minutes: int, image: str) -> dict[str, str]:
+    """Only the restricted R2 credentials and the four job variables; never VAST/WANDB/RUNPOD or the whole .env."""
+    env = {key: os.environ.get(key, "") for key in ("R2_ACCOUNT_ID", "R2_ACCESS_KEY_ID", "R2_SECRET_ACCESS_KEY", "R2_BUCKET")}
+    missing = [k for k, v in env.items() if not v]
+    if missing:
+        raise SystemExit(f"missing R2 variables: {', '.join(missing)}")
+    env.update({"CERBERUS_CODE_BUNDLE": code_bundle, "CERBERUS_JOB_ID": job_id,
+                "CERBERUS_DEADLINE_MINUTES": str(deadline_minutes), "CERBERUS_IMAGE_TAG": image})
+    return env
+
+
+def job_bootstrap() -> str:
+    """Tiny in-container bootstrap: rclone config, fetch the bundle, run scripts/job_entrypoint.sh from it."""
+    return """set -e
+export RCLONE_CONFIG_CERBERUS_R2_TYPE=s3
+export RCLONE_CONFIG_CERBERUS_R2_PROVIDER=Cloudflare
+export RCLONE_CONFIG_CERBERUS_R2_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID"
+export RCLONE_CONFIG_CERBERUS_R2_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY"
+export RCLONE_CONFIG_CERBERUS_R2_ENDPOINT="https://$R2_ACCOUNT_ID.r2.cloudflarestorage.com"
+export RCLONE_CONFIG_CERBERUS_R2_ACL=private
+export RCLONE_CONFIG_CERBERUS_R2_NO_CHECK_BUCKET=true
+echo "[bootstrap] env: $(env | grep -cE '^CERBERUS_|^R2_') vars"
+rclone copyto "cerberus_r2:$R2_BUCKET/$CERBERUS_CODE_BUNDLE" /root/code.bundle
+GIT_LFS_SKIP_SMUDGE=1 git clone /root/code.bundle /workspace/cerberus
+cd /workspace/cerberus
+exec bash scripts/job_entrypoint.sh
+"""
+
+
+def build_job_payload(chosen: dict, *, image: str, disk_gb: int, label: str, env: dict[str, str],
+                      deadline_minutes: int) -> dict:
+    """Vast args/entrypoint launch mode: the image is untouched, our bootstrap runs from `args`."""
+    return {"image": image, "disk": float(disk_gb), "runtype": "args", "label": label,
+            "args": ["bash", "-lc", job_bootstrap()],
+            "env": env, "onstart": "",
+            "price": float(chosen.get("dph_total", 0.0))}
+
 
 def summarise(offers: list[dict]) -> dict:
     by_gpu: dict[str, int] = {}
@@ -33,6 +74,9 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--image", default=vp.DEFAULT_IMAGE)
     parser.add_argument("--label", default="cerberus-h4")
     parser.add_argument("--wait", type=float, default=600.0, help="seconds to wait for ssh details")
+    parser.add_argument("--job-id", default=None)
+    parser.add_argument("--code-bundle", default=None, help="R2 path of the code bundle (migration/.../code/....bundle)")
+    parser.add_argument("--deadline-minutes", type=int, default=85)
     parser.add_argument("--dry-run", action="store_true", help="search and print, create nothing")
     args = parser.parse_args(argv)
     key = os.environ.get("VAST_API_KEY", "")
@@ -58,9 +102,15 @@ def main(argv: list[str] | None = None) -> int:
         print(json.dumps({"action": "dry-run", "chosen": chosen}, indent=2)[:3000])
         return 0
 
-    status, body = vp.create_instance(key, chosen["id"], image=args.image, disk_gb=args.disk_gb,
-                                      label=args.label, env={"CERBERUS_ON_POD": "1",
-                                                             "CERBERUS_IMAGE_TAG": args.image})
+    job_id = args.job_id or f"vast-{int(time.time())}"
+    bundle = args.code_bundle or os.environ.get("CERBERUS_CODE_BUNDLE", "")
+    if not bundle:
+        print("create_vast: --code-bundle (or CERBERUS_CODE_BUNDLE) is required in job mode", file=sys.stderr)
+        return 2
+    env = job_env(job_id, bundle, args.deadline_minutes, args.image)
+    payload = build_job_payload(chosen, image=args.image, disk_gb=args.disk_gb, label=args.label,
+                                env=env, deadline_minutes=args.deadline_minutes)
+    status, body = vp.create_instance(key, chosen["id"], payload=payload)
     if status >= 400 or not body.get("success", True):
         print(f"create_vast: create failed HTTP {status}: {json.dumps(body)[:400]}", file=sys.stderr)
         return 1

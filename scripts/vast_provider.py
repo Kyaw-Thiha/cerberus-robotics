@@ -158,10 +158,11 @@ def search_offers(api_key: str, *, transport: Transport | None = None) -> tuple[
 
 def create_instance(api_key: str, ask_id: str | int, *, image: str = DEFAULT_IMAGE,
                     disk_gb: int = DEFAULT_DISK_GB, label: str = "cerberus",
-                    env: dict[str, str] | None = None,
+                    env: dict[str, str] | None = None, payload: dict | None = None,
                     transport: Transport | None = None) -> tuple[int, dict]:
-    body = {"image": image, "disk": float(disk_gb), "runtype": "ssh", "label": label,
-            "onstart": "", "env": dict(env or {})}
+    body = dict(payload) if payload is not None else {
+        "image": image, "disk": float(disk_gb), "runtype": "ssh", "label": label,
+        "onstart": "", "env": dict(env or {})}
     url = f"{API}/asks/{ask_id}/"
     status, text = (transport or http_request)(url, "PUT", headers(api_key), json.dumps(body).encode())
     try:

@@ -49,12 +49,21 @@ exec bash scripts/job_entrypoint.sh
 
 
 def build_job_payload(chosen: dict, *, image: str, disk_gb: int, label: str, env: dict[str, str],
-                      deadline_minutes: int) -> dict:
-    """Vast args/entrypoint launch mode: the image is untouched, our bootstrap runs from `args`."""
-    return {"image": image, "disk": float(disk_gb), "runtype": "args", "label": label,
-            "args": ["bash", "-lc", job_bootstrap()],
-            "env": env, "onstart": "",
-            "price": float(chosen.get("dph_total", 0.0))}
+                      deadline_minutes: int, hook: str = "onstart") -> dict:
+    """Job launch: the image is untouched; our bootstrap runs from ``onstart`` (default) or ``args``.
+
+    ``onstart`` is Vast's documented hook for custom images and runs in the container regardless of the image's
+    ENTRYPOINT; ``args`` mode was observed to store ``image_args`` but never execute them on this image.
+    """
+    payload = {"image": image, "disk": float(disk_gb), "runtype": "args", "label": label,
+               "env": env, "price": float(chosen.get("dph_total", 0.0))}
+    if hook == "onstart":
+        payload["onstart"] = job_bootstrap()
+        payload["args"] = []
+    else:
+        payload["onstart"] = ""
+        payload["args"] = ["bash", "-lc", job_bootstrap()]
+    return payload
 
 
 def summarise(offers: list[dict]) -> dict:
@@ -77,6 +86,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--job-id", default=None)
     parser.add_argument("--code-bundle", default=None, help="R2 path of the code bundle (migration/.../code/....bundle)")
     parser.add_argument("--deadline-minutes", type=int, default=85)
+    parser.add_argument("--hook", choices=["onstart", "args"], default="onstart")
     parser.add_argument("--dry-run", action="store_true", help="search and print, create nothing")
     args = parser.parse_args(argv)
     key = os.environ.get("VAST_API_KEY", "")
@@ -109,7 +119,7 @@ def main(argv: list[str] | None = None) -> int:
         return 2
     env = job_env(job_id, bundle, args.deadline_minutes, args.image)
     payload = build_job_payload(chosen, image=args.image, disk_gb=args.disk_gb, label=args.label,
-                                env=env, deadline_minutes=args.deadline_minutes)
+                                env=env, deadline_minutes=args.deadline_minutes, hook=args.hook)
     status, body = vp.create_instance(key, chosen["id"], payload=payload)
     if status >= 400 or not body.get("success", True):
         print(f"create_vast: create failed HTTP {status}: {json.dumps(body)[:400]}", file=sys.stderr)

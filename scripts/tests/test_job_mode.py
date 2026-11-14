@@ -26,14 +26,18 @@ def test_job_env_requires_the_r2_variables(monkeypatch):
         cvi.job_env("j", "b", 85, "img")
 
 
-def test_payload_uses_args_mode_and_runs_the_entrypoint():
+def test_payload_onstart_is_the_default_hook():
     payload = cvi.build_job_payload({"dph_total": 0.18}, image="img:v1", disk_gb=80, label="l",
                                     env={"A": "1"}, deadline_minutes=85)
-    assert payload["runtype"] == "args"
-    assert payload["args"][0] == "bash" and payload["args"][1] == "-lc"
-    script = payload["args"][2]
-    assert "scripts/job_entrypoint.sh" in script and "rclone copyto" in script
+    assert payload["runtype"] == "args" and payload["args"] == []
+    assert "scripts/job_entrypoint.sh" in payload["onstart"] and "rclone copyto" in payload["onstart"]
     assert payload["env"] == {"A": "1"} and payload["disk"] == 80.0
+
+
+def test_payload_can_use_the_args_hook():
+    payload = cvi.build_job_payload({"dph_total": 0.18}, image="img:v1", disk_gb=80, label="l",
+                                    env={"A": "1"}, deadline_minutes=85, hook="args")
+    assert payload["args"][0] == "bash" and payload["onstart"] == ""
 
 
 def test_bootstrap_does_not_embed_secrets():
@@ -54,6 +58,14 @@ def test_decide_stop_failed_beats_a_fresh_heartbeat():
     now = 1000.0
     assert watch_job.decide({"stage": "finishing", "detail": "STOP_FAILED"}, now=now,
                             last_ok=now, started=now - 10) == "stop"
+
+
+def test_missing_status_file_is_not_a_heartbeat():
+    # rclone returns 0 for an absent source; the monitor must not treat that as a heartbeat
+    now = 1000.0
+    # but an instance still booting gets the startup grace before the staleness rule applies
+    assert watch_job.decide(None, now=now, last_ok=None, started=now - 10) == "wait"
+    assert watch_job.decide(None, now=now, last_ok=None, started=now - 901) == "stop"
 
 
 def test_manifest_diff():

@@ -23,11 +23,17 @@ TICK_S = 30
 
 
 def decide(status: dict | None, *, now: float, last_ok: float | None, started: float,
-           wall_s: float = 90 * 60, stale_s: float = STALE_S) -> str:
-    """``"done" | "stop" | "wait"`` from the latest heartbeat."""
+           wall_s: float = 90 * 60, stale_s: float = STALE_S, startup_grace_s: float = 900) -> str:
+    """``"done" | "stop" | "wait"`` from the latest heartbeat.
+
+    Before the first heartbeat the instance may still be pulling the image, so the staleness rule applies only after
+    ``startup_grace_s`` (15 min); afterwards a missing heartbeat for ``stale_s`` (5 min) is a stop.
+    """
     if status and str(status.get("detail", "")).startswith("STOP_FAILED"):
         return "stop"
-    if last_ok is None or now - last_ok > stale_s:
+    if last_ok is None:
+        return "wait" if now - started < startup_grace_s else "stop"
+    if now - last_ok > stale_s:
         return "stop"
     if now - started >= wall_s:
         return "stop"
@@ -52,6 +58,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--deadline-minutes", type=float, default=90)
     parser.add_argument("--out", default=None)
     parser.add_argument("--tick", type=float, default=TICK_S)
+    parser.add_argument("--startup-grace", type=float, default=900.0)
     args = parser.parse_args(argv)
 
     from scripts.sync_to_r2 import REMOTE, _rclone_env, _require_env
@@ -68,14 +75,14 @@ def main(argv: list[str] | None = None) -> int:
     while True:
         now = time.time()
         got = _rclone(env, ["copyto", f"{base}/status.json", str(out / "status.json"), "--no-check-dest"])
-        if got.returncode == 0:
+        if got.returncode == 0 and (out / "status.json").is_file():
             last_ok = now
             try:
                 status = json.loads((out / "status.json").read_text())
             except ValueError:
                 status = None
         action = decide(status, now=now, last_ok=last_ok, started=started,
-                        wall_s=args.deadline_minutes * 60)
+                        wall_s=args.deadline_minutes * 60, startup_grace_s=args.startup_grace)
         elapsed = now - started
         spend = elapsed / 3600 * args.rate
         print(f"[watch] t={elapsed:5.0f}s spend=${spend:.2f} stage={(status or {}).get('stage')} "

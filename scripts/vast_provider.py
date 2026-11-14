@@ -183,6 +183,11 @@ def instance_info(api_key: str, instance_id: str, *, transport: Transport | None
     return status, inst if isinstance(inst, dict) else {}
 
 
+def start_instance(api_key: str, instance_id: str, *, transport: Transport | None = None) -> tuple[int, str]:
+    return (transport or http_request)(f"{API}/instances/{instance_id}/", "PUT", headers(api_key),
+                                       json.dumps({"state": "running"}).encode())
+
+
 def stop_instance(api_key: str, instance_id: str, *, transport: Transport | None = None) -> tuple[int, str]:
     """Stop (not destroy): ``PUT /instances/{id}/ {"state": "stopped"}`` with the shared headers."""
     return (transport or http_request)(f"{API}/instances/{instance_id}/", "PUT", headers(api_key),

@@ -72,14 +72,14 @@ def main() -> int:
                 friction_combine_mode="multiply", restitution_combine_mode="multiply",
                 static_friction=1.0, dynamic_friction=1.0),
             debug_vis=False)
-        report["clip"]["terrain"] = "plane"
+        report.setdefault("clip", {})["terrain"] = "plane"
     if args.camera:
         from isaaclab.visualizers import VisualizerCfg
 
         eye = tuple(float(v) for v in args.camera.split(",")[:3])
         lookat = tuple(float(v) for v in args.camera.split(",")[3:6])
         cfg.sim.default_visualizer_cfg = VisualizerCfg(eye=eye, lookat=lookat)
-        report["clip"]["camera"] = {"eye": eye, "lookat": lookat}
+        report.setdefault("clip", {})["camera"] = {"eye": eye, "lookat": lookat}
     cfg.video_recorders = [VideoRecorderCfg(source="visualizer:newton_gl",
                                             output_dir=str(out / "videos"),
                                             video_length=args.clip_steps, video_interval=0)]

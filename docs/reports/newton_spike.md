@@ -35,6 +35,8 @@ unchanged; where a change to an existing file would be needed it is described be
 | 3 | Cerberus task parity on Newton | **yes, MDP-identical** | 235-D obs, term order equal to the contract, joint order equal to the contract by name, decimation 4 @ dt 0.005, action dim 12, command ranges ±1, no NaN, 500/500 steps standing |
 | 4 | policy transfer | **no**, and the two explanations on the table are closed | 100 % fall rate at levels 0–5 in four runs; ordering none/contract → medians 74/77 steps; actuators on/off → medians 76/71 steps; rest pose identical across actuator paths (≤0.05 deg) |
 | 5 | scene load | **not reached**, cause measured | home mirror 24.9 GB (models geometry 20.2 GB, Materials textures 4.7 GB, per-scene USD 3.2 MB) against a 20 GB `/workspace` volume; a geometry-only fetch of the shared model library (20.2 GB) still does not fit |
+| 7 | how "fall" is measured | **the flag fires on upright robots** | `base_contact` (torso touching terrain), not height or orientation: all 5 logged envs flagged at gravity z = −1.000, bases at 0.14–0.72 m; "100 % fall rate" = 100 % torso-contact terminations |
+| 8 | retrain cost at 4096 envs | **0.8–0.9 h, $0.21–0.79** | 50 iterations measured: 2.14 s/iteration wall (1.90 s steady state), 28.5 s env build, 622 MiB torch peak |
 | 6 | height-scan convention | **verified, and the self-hit contamination is fixed** | formula from the installed source: `pos_w_z - ray_hits_z - 0.5`; contaminated scan 94.8 % of cells within 1 cm (11 outliers under the torso and feet); with the stock `global_world_only=True`, **187/187 within 1 cm** and hits all at z = 0 |
 
 ## Host and environment
@@ -398,6 +400,107 @@ warm-up). Scaling linearly in env count to 4096 (32x):
 
 No retrain was run, and nothing was tuned.
 
+## Stage 10 — what the failing rollout looks like, and what "fall" means (phase 4)
+
+A 10 s Newton GL clip (`--viz newton_gl`, no display) of the forward-command rollout with the PhysX-trained
+policy, 5 envs, plus base height and projected-gravity z logged for those envs at every step. The clip is
+`clip_0000.mp4` and the stills are `docs/reports/figures/newton_clip_{frame0,first_fall,last}.png`. A second,
+close-up attempt (1 env, plane, camera at 1.6 m) failed on a bug of mine in the clip script
+(`KeyError: 'clip'`, a report-dict key read before it was created), which aborted the stage 30 s in; the pod
+could not be re-created afterwards (the session's two creations were spent), so the fix is committed but the
+close-up is unrecorded. **The clip below is the wide default camera and the robots are a few pixels tall at
+the horizon — it documents that recording works and what the terrain looks like, not the robot's posture.**
+The posture evidence is the per-step log, which is unambiguous.
+
+![first frame](figures/newton_clip_frame0.png)
+
+![frame at the first fall (step 59)](figures/newton_clip_first_fall.png)
+
+![last frame (step 499)](figures/newton_clip_last.png)
+
+*Captions for what the frames actually show: the same wide world view before, at and after the first
+termination. The robot column is ~10 px tall at the horizon in all three, so the stills confirm the recorder
+and the terrain, not the posture; the numbers below are the evidence.*
+
+**How `transfer_eval` defines a fall:** it is the `base_contact` termination term — the torso (body name
+`base`) touching terrain. It is **not** a base-height threshold and **not** an orientation threshold. The
+consequence, measured on 5 envs over 500 steps:
+
+| env | first flag step | base z at flag | gravity z at flag | upright? |
+|---|---|---|---|---|
+| 1 | 59 | 0.142 m | −1.000 | **yes** |
+| 3 | 73 | 0.460 m | −1.000 | **yes** |
+| 2 | 116 | 0.431 m | −1.000 | **yes** |
+| 0 | 136 | 0.704 m | −1.000 | **yes** |
+| 4 | 137 | 0.715 m | −1.000 | **yes** |
+
+* **The flag can fire with the robot upright, and in this clip it always did** (`gz = −1.000` is a perfectly
+  level base). So "100 % fall rate" means "100 % torso-contact terminations", not "100 % toppled".
+* Two distinct behaviours are inside that number: at **0.14 m** the base is well below the 0.30 m standing
+  height and level — the robot has **collapsed vertically** (legs folded under it), and its torso reaches the
+  ground. At **0.43–0.72 m** the base is *above* standing height and level — the torso touched a raised
+  terrain feature (a stair/step) **while upright**, i.e. it walked into a step and the body scraped it.
+* The minimum base height over the clip is **−0.239 m**, i.e. at some point the base was below the terrain's
+  nominal surface — a pit in the inverted-stair terrain and/or penetration. The clip does not resolve which.
+* In plain words, from the log: the robot does not "step normally then fall over". It spawns, sinks into its
+  own legs within ~1–3 s while staying level, and either drags its torso on the ground or (on stepped cells)
+  presses its body into the step in front of it. It never tracks the 0.8 m/s command — the mean absolute x
+  velocity error is **0.82 m/s**, i.e. it effectively does not move.
+
+**Zero-command stand with the policy in the loop** (300 steps, 8 envs, no command at all): base height
+0.4627 m → **0.2261 m** (min 0.197), gravity z **−0.999 → +0.331**. A gravity-z of +0.33 means the base's up
+axis points along gravity: the robots **end up inverted**. 25 env-steps had torso contact. So the closed loop
+fails even when the only task is to stand still — this is not a gait or velocity-tracking problem.
+
+**Term-by-term observation diff** (the 235-D vector split into its contract terms, read at reset and after
+the 300-step stand; "scale" is the observation term's own scale, `None` = unscaled everywhere):
+
+| term | dim | scale | value at reset | reference | largest diff |
+|---|---|---|---|---|---|
+| base_lin_vel | 3 | None | mean 0.046, max 0.60 | 0 at rest | 0.60 (spawn transient) |
+| base_ang_vel | 3 | None | mean −0.032, max 0.45 | 0 at rest | 0.45 |
+| projected_gravity | 3 | None | **[0, 0, −1]** | level base at spawn | **0.0** |
+| velocity_commands | 3 | None | [0, 0, 0] | zero-command stand | **0.0** |
+| joint_pos | 12 | None | max |0.74| | relative to default | 0.74 (reset randomization) |
+| joint_vel | 12 | None | 0.0 exactly | 0 at rest | **0.0** |
+| actions | 12 | None | 0.0 exactly | before any action | **0.0** |
+| height_scan | 187 | None | mean −0.093, range −0.185…+0.021 | `base_z − 0.5` per env | 0.148 (rough terrain, per-env base z) |
+
+`default_joint_pos` matches the contract's twelve default angles **exactly (max diff 0.0 rad)**, the gravity
+vector is exact, commands and the action buffer are exact, and joint velocities start at zero. After 300
+steps the same terms show gravity z up to **+0.997** (inverted), joint velocities to **45.9 rad/s** and raw
+actions to **11.8** (≈2.95 rad of target offset at scale 0.25): the loop is diverging dynamically.
+
+So the observation **contract** is exact at the moment the policy is fed; nothing is mis-scaled or in the
+wrong frame. The failure is in the closed loop, not in the observation plumbing.
+
+## Stage 11 — retrain cost, measured at 4096 envs (phase 4)
+
+50 iterations of the Cerberus Go2 rough task at **4096 envs**, same cfg and stock rsl_rl PPO preset the real
+retrain uses (`spikes/newton/retrain_probe.py`):
+
+| measurement | value |
+|---|---|
+| environment build | **28.5 s** |
+| 50 iterations, wall | 107.0 s → **2.14 s/iteration** |
+| iteration time as the runner logs it | **1.90 s** (steady state) |
+| peak *torch* VRAM | 622 MiB (excludes Warp/Newton's own allocations; the GPU has 24 GB) |
+
+**One retrain (1500 iterations): 0.79 h at 1.90 s/iteration, 0.89 h at 2.14 s/iteration** — call it **≈ 0.8–0.9 h**.
+Cost on the cheapest suitable host seen in this spike (RTX A5000, $0.27/h): **$0.21–0.24**; at $0.59/h
+(A5000-class or a cheaper 4090 host): $0.47–0.53; at $0.89/h (RTX 4090): $0.71–0.79. The earlier 5.1–5.5 h
+extrapolation from 128-env timings was **wrong by ~6x** — the small-env measurement was overhead-dominated.
+This also means the retrain is cheap enough to run twice (Newton-conditioned and a control), which is the
+decisive next experiment.
+
+**Remaining suspects, now that the stand test and the term diff are in:**
+
+| # | suspect | why it is still open | test |
+|---|---|---|---|
+| 1 | actuator **response** under Newton (gains, saturation, bandwidth) — steady state matches, dynamics do not | rest pose matches PhysX-style and backend-native paths, but a policy is a closed loop and the robot inverts while standing | one retrain, or a step-response test with fixed targets |
+| 2 | contact model (`ke 160 000`, `kd 1100`, `num_substeps 2`) | the torso drags and the base reaches −0.24 m; contact stiffness is the first lever the preset names | rerun the stand test with `num_substeps 4` (5 min) |
+| 3 | the checkpoint simply does not transfer | everything above is closed or unknown, and a retrain is now ~$0.25 and ~1 h | run the retrain (next session) |
+
 ## Decision table
 
 | axis | verdict | evidence |
@@ -407,7 +510,9 @@ No retrain was run, and nothing was tuned.
 | Cerberus task parity | **Go** | 235-D, contract term order, contract joint order (no permutation needed), decimation/dt, action dim, command ranges all identical; height scan on the Newton sensor with 100 % finite hits; 500/500 standing steps |
 | standing / actuator behaviour | **Go, with a caveat** | rest pose settles 8.3° mean / 15.0° max from the commanded defaults and the base sinks 15 cm — gravity, identical (≤0.05°) with and without the backend-native actuator path; no sign of #5806 |
 | height-scan convention | **Go** | formula and offset from the installed source; contaminated scan 94.8 % of cells within 1 cm (11 outliers under the torso and feet), clean scan **187/187 within 1 cm** once the stock `global_world_only` flag is kept |
-| policy transfer | **No-go (as shipped)** | 100 % falls in six runs: ordering 74/77 steps, actuators 76/71, contaminated/clean scan 78/79; all six agree |
+| policy transfer | **No-go (as shipped)** | 100 % torso-contact terminations in six runs: ordering 74/77 steps, actuators 76/71, contaminated/clean scan 78/79; all six agree |
+| closed-loop control on Newton | **No-go (as shipped)** | zero command, policy in the loop, 300 steps: base 0.46 → 0.23 m and gravity z −0.999 → **+0.331** (inverted). It fails when it only has to stand |
+| retrain cost | **cheap** | 4096 envs measured at 1.90–2.14 s/iteration → **0.8–0.9 h** for 1500 iterations, **$0.21–0.79** depending on host |
 | scene loading | **No-go at this volume** | home mirror 24.9 GB vs a 20 GB `/workspace`; per-scene USD 3.2 MB, shared model geometry 20.2 GB; a lite geometry USD is proposed, not built |
 
 Overall: **Conditional go** for a Newton *training and evaluation* lane on procedural terrain — install, video,
@@ -430,13 +535,14 @@ env-steps/s at 64 envs and ~3 300 at 384 (4090), ~70 min for a 4096-env retrain 
 | physics plug-in: `common/cerberus_physics/registry.py` (`PHYSICS_BACKEND`, lazy factories, `physx` + `newton_mjwarp`, no silent default — the `cerberus_worlds.registry` pattern), with `pin_physx` becoming the `physx` adapter | 2 days |
 | Newton adapter: physics preset, actuator path, height-scan sensor swap, ordering presets, recorded in saved params | 2 days |
 | certify Go2 flat/rough × train/play + the push-recovery eval on Newton (same MDP, the existing contract check plus a zero-command standing check in front of each run) | 2–3 days |
-| settle the transfer question: term-by-term observation diff against PhysX, a standing-with-policy run, then one Newton retrain and its sweep (the ray-attribution and scan-convention parts are done) | 1–2 days + 1–2 GPU sessions (1.1–5.5 h each, see stage 9) |
+| settle the transfer question: **the observation diff and the stand test are done** (stage 10) and point at the closed loop, so what is left is one Newton retrain plus its sweep, and one substepping run | 1 day + 2 GPU sessions (~1.5 h of GPU, <$2) |
 | PP/PN/NN/NP evaluation columns and report tooling (the sweep axes stay) | 1–2 days |
 | kit-less CI lane + a ~3 GB image with the `uv` environment baked in (44–820 s of install per boot is the only recurring cost) | 2 days |
 
 **≈ 2 weeks (9–11 person-days)** for a minimal, certified second backend on procedural terrain, including
 one Newton retrain. That is the lane I would fund: it needs no scene, no camera work and no new task code.
-Budget the retrain at **$1.4–4.9 and 1.1–5.5 h** until a 50-iteration probe at 4096 envs pins the rate.
+The retrain is now measured: **0.8–0.9 h and $0.21–0.79** at 4096 envs (stage 11), so a Newton retrain plus
+a sweep fits in one cheap session — run it rather than estimating further.
 
 ### Scene lane (separate, gated)
 
@@ -486,6 +592,10 @@ height-scan question has to be answered before a Newton retrain is even meaningf
 * **Phase 2 used both of its pod creations**, and the second pod could not be restarted
   (`start pod: There are not enough free GPUs on the host machine`); the phase-3 session retried the flat scan
   as a separate pod instead of a restart, and got it.
+* **The clip is not visually informative.** The Newton GL default camera is world-fixed and far, so the five
+  robots are a few pixels tall at the horizon; the close-up re-record failed on a bug and the session's pod
+  budget was spent. The stills are attached for completeness, and the posture claims rest on the per-step log
+  (base height and gravity z at the termination step), not on the video.
 * **The scan fix changes nothing about the transfer result.** It is a real bug fix (5 % of the observation was
   wrong on flat ground, more on rough) but it is not the cause of the collapse, and the report does not claim
   otherwise.
@@ -525,6 +635,11 @@ Recorded because they are the kind of thing that eats a two-hour budget:
     crashed both attribution runs at the first `env.reset()` (the stock curriculum indexes
     `terrain_generator.size`, which a plane does not have). One pod boot lost (~$0.12); fixed and re-run as a
     second pod rather than a restart, per the session rule.
+
+11. **Phase 4, clip framing:** the first clip used the Newton GL default world-fixed camera, so the robots are
+    a few pixels tall; the close-up re-run then died on a `KeyError: 'clip'` in my own script (a report key read
+    before it was created) and there was no pod budget left to retry. Both are fixed in the branch
+    (`rollout_clip --clip_only --plane --camera`, guarded report keys).
 
 **Hygiene:** a stop/patch response body echoes the pod's full `env` map, including the base64 bootstrap and
 `RUNPOD_API_KEY`. Phase 1 printed one such body (truncated by the client); phase 2 never prints or stores a

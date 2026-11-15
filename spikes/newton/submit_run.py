@@ -180,7 +180,7 @@ def main(argv: list[str] | None = None) -> int:
                if not os.environ.get(k)]
     if missing:
         raise SystemExit(f"submit_run: missing R2 variables {missing}")
-    if creations() >= MAX_CREATIONS:
+    if creations() >= MAX_CREATIONS and not args.resume_pod:  # resuming an existing pod is not a creation
         raise SystemExit(f"submit_run: {creations()} pods already created this session (cap {MAX_CREATIONS})")
     rclone_env()
 

@@ -62,11 +62,16 @@ def compact(points, faces, keep_mask):
     return points[used], remap[faces]
 
 
-def triangle_areas(points, faces):
+def triangle_areas(points, faces, chunk: int = 500_000):
+    """Per-triangle area, chunked: materialising 21M triangles at once needs ~4.5 GB and OOMed the CPU pods."""
     import numpy as np
 
-    tri = points[faces]
-    return 0.5 * np.linalg.norm(np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0]), axis=1)
+    out = np.empty(len(faces), dtype=np.float64)
+    for start in range(0, len(faces), chunk):
+        tri = points[faces[start:start + chunk]]
+        out[start:start + chunk] = 0.5 * np.linalg.norm(
+            np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0]), axis=1)
+    return out
 
 
 def build(scene_usd: Path, out_dir: Path, scene_id: str, budget_s: float = 1800.0,

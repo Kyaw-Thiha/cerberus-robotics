@@ -158,8 +158,11 @@ finish() {
     local rc=$1
     stage "finishing"
     sync_outputs
+    sleep 1   # let the tee drain so the uploaded tail includes the last lines
     CERBERUS_STATUS_EXTRA="rc=$rc" status_json > /workspace/job_status.json
     rclone copyto /workspace/job_status.json "$REMOTE/jobs/$JOB_ID/status.json" >/dev/null 2>&1
+    tail -c 8000 "$LOG_FILE" > /workspace/job_log_tail.txt 2>/dev/null
+    rclone copyto /workspace/job_log_tail.txt "$REMOTE/jobs/$JOB_ID/log_tail.txt" >/dev/null 2>&1
     self_stop || true
     exit "$rc"
 }
@@ -186,6 +189,17 @@ done
 echo "[job] env ok (rclone remote $REMOTE)"
 self_test
 
+# A streaming image can start the entrypoint before its lower layers are materialized; physics must wait.
+stage "wait-image"
+LAB_PATH="${ISAACLAB_PATH:-/workspace/isaaclab}"
+for i in $(seq 1 60); do
+    [ -f "$LAB_PATH/isaaclab.sh" ] && [ -d /isaac-sim ] && break
+    [ $((i % 6)) -eq 0 ] && echo "[job] waiting for the image layers ($i/60): $LAB_PATH/isaaclab.sh"
+    sleep 5
+done
+[ -f "$LAB_PATH/isaaclab.sh" ] || { echo "[job] isaaclab.sh still missing at $LAB_PATH after 5 min" >&2; ls -la /workspace 2>&1 | head; finish 9; }
+echo "[job] lab present at $LAB_PATH (isaac-sim: $( [ -d /isaac-sim ] && echo yes || echo no ))"
+
 heartbeat & HEARTBEAT_PID=$!
 
 if [ ! -d "$REPO/.git" ]; then
@@ -199,7 +213,7 @@ cd "$REPO" || finish 4
 export PYTHONPATH="$REPO${PYTHONPATH:+:$PYTHONPATH}"
 echo "[job] code at $(git log --oneline -1)"
 
-LAB=/workspace/isaaclab/isaaclab.sh
+LAB="${ISAACLAB_PATH:-/workspace/isaaclab}/isaaclab.sh"
 S=MV7J6NIKTKJZ2AABAAAAADQ8_usd
 CKPT=policy/locomotion/checkpoints/go2_locomotion_ga_v1_candidate.pt
 ROOT="data/reports/h4_nav/job_$(date -u +%Y%m%dT%H%MZ)"

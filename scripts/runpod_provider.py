@@ -66,6 +66,14 @@ def stop_pod(api_key: str, pod_id: str, transport=None) -> tuple[int, str]:
     return (transport or _request)("POST", f"{API_URL}/{pod_id}/stop", api_key, b"{}")
 
 
+def update_pod(api_key: str, pod_id: str, patch: dict, transport=None) -> tuple[int, str]:
+    return (transport or _request)("PATCH", f"{API_URL}/{pod_id}", api_key, json.dumps(patch).encode())
+
+
+def start_pod(api_key: str, pod_id: str, transport=None) -> tuple[int, str]:
+    return (transport or _request)("POST", f"{API_URL}/{pod_id}/start", api_key, b"{}")
+
+
 def get_pod(api_key: str, pod_id: str, transport=None) -> tuple[int, dict]:
     status, text = (transport or _request)("GET", f"{API_URL}/{pod_id}", api_key)
     try:

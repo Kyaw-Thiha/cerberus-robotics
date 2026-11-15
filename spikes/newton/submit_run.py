@@ -212,22 +212,25 @@ def main(argv: list[str] | None = None) -> int:
                       "cost_per_hr": body.get("costPerHr"), "created": creations()}, indent=2))
 
     if args.start_watch:
+        # session_guard.py --provider runpod still reads VAST_API_KEY and passes it to the RunPod stop, so
+        # the RunPod guard here is this spike's wrapper around the same decision function.
         guard = subprocess.run(
-            [sys.executable, str(SCRIPTS / "session_guard.py"), "--provider", "runpod", "--detach",
+            [sys.executable, str(REPO / "spikes/newton/pod_guard.py"), "--detach",
              "--id", pod_id, "--rate", str(rate), "--started", str(int(time.time())),
              "--wall", "7200", "--hard-wall", "9000", "--usd", "2.5"],
             capture_output=True, text=True)
         print(f"[guard] {guard.stdout.strip() or guard.stderr.strip()}")
         watch_log = stage_dir / "watch.log"
-        with watch_log.open("a") as log:
-            env = os.environ.copy()
         # watch_job.py mixes `scripts.x` and bare imports, so both the repo root and scripts/ go on the path
-        env["PYTHONPATH"] = os.pathsep.join([str(REPO), str(SCRIPTS), env.get("PYTHONPATH", "")]).rstrip(os.pathsep)
-        subprocess.Popen([sys.executable, str(SCRIPTS / "watch_job.py"), "--job-id", job_id,
-                          "--pod-id", pod_id, "--provider", "runpod", "--rate", str(rate),
-                          "--deadline-minutes", str(args.deadline_minutes),
-                          "--out", str(stage_dir / "artifacts")],
-                         stdout=log, stderr=subprocess.STDOUT, start_new_session=True, env=env, cwd=str(REPO))
+        watch_env = os.environ.copy()
+        watch_env["PYTHONPATH"] = os.pathsep.join([str(REPO), str(SCRIPTS)]).rstrip(os.pathsep)
+        with watch_log.open("a") as log:
+            subprocess.Popen([sys.executable, "-m", "scripts.watch_job", "--job-id", job_id,
+                              "--pod-id", pod_id, "--provider", "runpod", "--rate", str(rate),
+                              "--deadline-minutes", str(args.deadline_minutes),
+                              "--out", str(stage_dir / "artifacts")],
+                             stdout=log, stderr=subprocess.STDOUT, start_new_session=True,
+                             env=watch_env, cwd=str(REPO))
         print(f"[watch] started; tail -f {watch_log}")
     return 0
 

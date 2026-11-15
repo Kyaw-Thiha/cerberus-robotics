@@ -70,8 +70,8 @@ def test_missing_status_file_is_not_a_heartbeat():
     now = 1000.0
     # but an instance still booting gets the startup grace before the staleness rule applies
     assert watch_job.decide(None, now=now, last_ok=None, started=now - 10) == "wait"
-    assert watch_job.decide(None, now=now, last_ok=None, started=now - 1401) == "wait"
-    assert watch_job.decide(None, now=now, last_ok=None, started=now - 1501) == "stop"
+    assert watch_job.decide(None, now=now, last_ok=None, started=now - 801) == "wait"
+    assert watch_job.decide(None, now=now, last_ok=None, started=now - 901) == "stop"
 
 
 def test_manifest_diff():

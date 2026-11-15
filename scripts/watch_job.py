@@ -29,7 +29,7 @@ TICK_S = 30
 
 
 def decide(status: dict | None, *, now: float, last_ok: float | None, started: float,
-           wall_s: float = 90 * 60, stale_s: float = STALE_S, startup_grace_s: float = 1500,
+           wall_s: float = 90 * 60, stale_s: float = STALE_S, startup_grace_s: float = 900,
            rate: float = 0.0, usd_cap: float = 3.0) -> str:
     """``"done" | "stop" | "wait"`` from the latest heartbeat.
 
@@ -72,7 +72,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--deadline-minutes", type=float, default=90)
     parser.add_argument("--out", default=None)
     parser.add_argument("--tick", type=float, default=TICK_S)
-    parser.add_argument("--startup-grace", type=float, default=1500.0)
+    parser.add_argument("--startup-grace", type=float, default=900.0)
     args = parser.parse_args(argv)
     instance_id = args.pod_id or args.instance_id
     if not instance_id:
@@ -111,8 +111,13 @@ def main(argv: list[str] | None = None) -> int:
             continue
         if action == "stop":
             if args.provider == "runpod":
-                from runpod_provider import stop_pod
-                st, text = stop_pod(os.environ["RUNPOD_API_KEY"], instance_id)
+                import runpod_provider
+                _, pod = runpod_provider.get_pod(os.environ["RUNPOD_API_KEY"], instance_id)
+                if not pod.get("runtime"):
+                    st, text = runpod_provider.delete_pod(os.environ["RUNPOD_API_KEY"], instance_id)
+                    print("[watch] runtime still null: deleted the pod instead of stopping it")
+                else:
+                    st, text = runpod_provider.stop_pod(os.environ["RUNPOD_API_KEY"], instance_id)
             else:
                 from scripts.vast_provider import stop_instance
                 st, text = stop_instance(os.environ["VAST_API_KEY"], instance_id)

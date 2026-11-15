@@ -23,8 +23,9 @@ from redact import mask_text  # noqa: E402
 
 REPO = Path(__file__).resolve().parents[1]
 DEFAULT_IMAGE = "kevinkyawthiha/cerberus-remote-v6:v6-ga"
-DEFAULT_GPUS = ["NVIDIA A40", "NVIDIA GeForce RTX 4090", "NVIDIA RTX A5000", "NVIDIA L40S", "NVIDIA RTX A6000"]
-MAX_CREATIONS = 3
+DEFAULT_GPUS = ["NVIDIA RTX A5000", "NVIDIA RTX A6000", "NVIDIA GeForce RTX 3090",
+                "NVIDIA L4", "NVIDIA RTX A4000"]
+MAX_CREATIONS = 6
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -38,6 +39,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--disk-gb", type=int, default=100)
     parser.add_argument("--gpu-type", action="append", default=None)
     parser.add_argument("--no-cuda-filter", action="store_true", help="skip the one filtered attempt")
+    parser.add_argument("--cpu", action="store_true", help="create a CPU pod (rehearsal / lite scene)")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
 
@@ -59,14 +61,15 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     status, body = rp.create_job_pod(
-        api_key, image=args.image, gpu_types=args.gpu_type or DEFAULT_GPUS, env=env,
+        api_key, image=args.image, gpu_types=None if args.cpu else (args.gpu_type or DEFAULT_GPUS), env=env,
         bootstrap_b64=bootstrap, name=args.job_id, disk_gb=args.disk_gb,
-        cuda_first=None if args.no_cuda_filter else "13.0")
+        cuda_first=None if (args.no_cuda_filter or args.cpu) else "13.0",
+        compute_type="CPU" if args.cpu else "GPU")
     if status >= 400:
         print(f"create_runpod_job: failed HTTP {status}: {mask_text(json.dumps(body))[:500]}", file=sys.stderr)
         return 1
     pod_id = body.get("id") or body.get("podId") or "unknown"
-    rp.record_creation(pod_id, args.image, [] if args.no_cuda_filter else ["13.0"])
+    rp.record_creation(pod_id, args.image, [] if (args.no_cuda_filter or args.cpu) else ["13.0"])
     print(json.dumps({"pod_id": pod_id, "name": body.get("name"), "cost_per_hr": body.get("costPerHr"),
                       "image": args.image, "created": len(rp.creations())}, indent=2))
     return 0

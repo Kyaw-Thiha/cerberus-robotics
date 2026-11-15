@@ -26,10 +26,10 @@ def test_tier_a(driver):
     assert classify_driver(driver, ALLOWLIST)[0] == TIER_A
 
 
-@pytest.mark.parametrize("driver", ["595.91.07", "595.71.05", "595.79", "590.10.01"])
-def test_tier_b_needs_the_probe(driver):
+@pytest.mark.parametrize("driver", ["595.91.07", "595.71.05", "595.79", "590.10.01", "580.95.04"])
+def test_everything_else_is_rejected(driver):
     tier, reason = classify_driver(driver, ALLOWLIST)
-    assert tier == TIER_B and reason
+    assert tier == TIER_REJECT and reason
 
 
 @pytest.mark.parametrize("driver", ["580.65.05", "570.195.03", "615.78.08", "", "unknown"])
@@ -37,9 +37,9 @@ def test_rejected_drivers(driver):
     assert classify_driver(driver, ALLOWLIST)[0] == TIER_REJECT
 
 
-def test_the_recorded_595_91_07_is_tier_b_not_rejected():
+def test_the_recorded_595_91_07_is_now_rejected():
     tier, reason = classify_driver("595.91.07", ALLOWLIST)
-    assert tier == TIER_B and "flaky" in reason
+    assert tier == TIER_REJECT and reason
 
 
 def test_cuda_version_is_read_from_the_header():
@@ -50,11 +50,11 @@ def test_cuda_version_is_read_from_the_header():
 
 def test_probe_rows_carry_the_tier_and_cache(tmp_path):
     path = tmp_path / "launch_probe.csv"
-    info = HostInfo("595.91.07", "13.2", "NVIDIA A40", "pod-1", "US-GA-1", "v6-ga")
-    append_probe_row(path, info, stage="gate", verdict="PROBE_REQUIRED", note="tier B", tier=TIER_B, cache="false")
+    info = HostInfo("580.95.05", "13.0", "NVIDIA RTX A5000", "pod-1", "US-GA-1", "v6-ga")
+    append_probe_row(path, info, stage="gate", verdict="ALLOW", note="tier A", tier=TIER_A, cache="false")
     row = next(iter(csv.DictReader(path.open())))
     assert set(row) == set(CSV_COLUMNS)
-    assert row["tier"] == TIER_B and row["cache"] == "false"
+    assert row["tier"] == TIER_A and row["cache"] == "false"
 
 
 def test_launch_counts_per_host(tmp_path):

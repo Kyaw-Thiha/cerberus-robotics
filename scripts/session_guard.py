@@ -26,6 +26,7 @@ for _path in (str(REPO_ROOT), str(REPO_ROOT / "scripts")):
 from redact import mask_text  # noqa: E402
 
 STATE = REPO_ROOT / "outputs" / "session_guard.json"
+TICK_PATH = REPO_ROOT / "outputs" / "guard_tick.json"
 LOG = REPO_ROOT / "outputs" / "session_guard.log"
 TICK_S = 30
 
@@ -45,6 +46,13 @@ def stop_target(provider: str, key: str, instance_id: str) -> tuple[int, str]:
     from vast_provider import stop_instance
 
     return stop_instance(key, instance_id)
+
+
+def write_tick(status: str, targets: list[str]) -> None:
+    """A 30 s liveness tick; guard_health.py stops the pod when this goes stale."""
+    TICK_PATH.parent.mkdir(parents=True, exist_ok=True)
+    TICK_PATH.write_text(json.dumps({"epoch": time.time(), "utc": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                                     "pid": os.getpid(), "status": status, "targets": targets}) + "\n")
 
 
 def write_state(**data) -> None:
@@ -104,6 +112,7 @@ def main(argv: list[str] | None = None) -> int:
         decision = guard_decision(started_epoch=args.started, now_epoch=now, rate_per_hour=blended_rate,
                                   wall_s=args.wall, usd_cap=args.usd)
         hard_left = args.started + args.hard_wall - now
+        write_tick("stopping" if stopping else "waiting", [i for i, _ in targets])
         write_state(status="stopping" if stopping else "waiting", targets=[i for i, _ in targets],
                     remaining_s=round(decision.remaining_s), spend_usd=decision.spend_usd,
                     hard_wall_remaining_s=round(hard_left), reason=decision.reason)

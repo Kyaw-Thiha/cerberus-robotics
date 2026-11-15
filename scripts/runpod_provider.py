@@ -33,15 +33,17 @@ def _request(method: str, url: str, api_key: str, body: bytes | None = None) -> 
         return 0, f"{type(e).__name__}: {e}"
 
 
-def create_job_pod(api_key: str, *, image: str, gpu_types: list[str], env: dict[str, str],
+def create_job_pod(api_key: str, *, image: str, gpu_types: list[str] | None, env: dict[str, str],
                    bootstrap_b64: str, name: str = "cerberus-job", disk_gb: int = 100,
-                   cuda_first: str | None = "13.0", transport=None) -> tuple[int, dict]:
+                   cuda_first: str | None = "13.0", compute_type: str = "GPU",
+                   cpu_flavors: list[str] | None = None, transport=None) -> tuple[int, dict]:
     """POST a job pod; retries filter-free once when the CUDA-filtered attempt fails."""
     payload = {
         "name": name,
         "imageName": image,
-        "gpuTypeIds": list(gpu_types),
-        "gpuCount": 1,
+        "computeType": compute_type,
+        **({"gpuTypeIds": list(gpu_types), "gpuCount": 1} if compute_type == "GPU"
+           else {"cpuFlavorIds": cpu_flavors or ["cpu3c", "cpu5c"]}),
         "containerDiskInGb": int(disk_gb),
         # RunPod defaults an omitted volume to 20 GB mounted at /workspace, which shadows the image's
         # /workspace (where the image installs Isaac Lab). Zero disables the mount.
@@ -52,7 +54,8 @@ def create_job_pod(api_key: str, *, image: str, gpu_types: list[str], env: dict[
         "dockerStartCmd": [SHORT_BOOTSTRAP],
         "env": {**env, "CERBERUS_BOOTSTRAP_B64": bootstrap_b64},
     }
-    attempts = ([payload | {"allowedCudaVersions": [cuda_first]}] if cuda_first else []) + [payload]
+    attempts = (([payload | {"allowedCudaVersions": [cuda_first]}] if cuda_first else []) if compute_type == "GPU"
+                else []) + [payload]
     status, text = 0, ""
     for attempt in attempts:
         status, text = (transport or _request)("POST", API_URL, api_key, json.dumps(attempt).encode())
@@ -75,6 +78,10 @@ def update_pod(api_key: str, pod_id: str, patch: dict, transport=None) -> tuple[
 
 def start_pod(api_key: str, pod_id: str, transport=None) -> tuple[int, str]:
     return (transport or _request)("POST", f"{API_URL}/{pod_id}/start", api_key, b"{}")
+
+
+def delete_pod(api_key: str, pod_id: str, transport=None) -> tuple[int, str]:
+    return (transport or _request)("DELETE", f"{API_URL}/{pod_id}", api_key)
 
 
 def get_pod(api_key: str, pod_id: str, transport=None) -> tuple[int, dict]:

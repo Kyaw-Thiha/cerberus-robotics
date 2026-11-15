@@ -21,6 +21,17 @@ export CERBERUS_ON_POD=1
 export PYTHONUNBUFFERED=1
 
 mkdir -p /workspace /root
+# Small images (the CPU rehearsal pod) lack the tools; the GPU image already has them.
+if ! command -v git >/dev/null 2>&1 || ! command -v curl >/dev/null 2>&1 || ! command -v unzip >/dev/null 2>&1; then
+    apt-get update -qq >/dev/null 2>&1
+    apt-get install -y -qq git curl unzip ca-certificates >/dev/null 2>&1
+fi
+if ! command -v rclone >/dev/null 2>&1; then
+    curl -fsSL https://downloads.rclone.org/rclone-current-linux-amd64.zip -o /tmp/rclone.zip \
+      && unzip -q /tmp/rclone.zip -d /tmp/rclone \
+      && install -m 0755 /tmp/rclone/rclone-*-linux-amd64/rclone /usr/local/bin/rclone
+fi
+command -v rclone >/dev/null 2>&1 || { echo "[job] rclone unavailable" >&2; exit 3; }
 echo "bootstrap" > "$STAGE_FILE"
 : > "$LOG_FILE"
 exec > >(tee -a "$LOG_FILE") 2>&1
@@ -193,6 +204,9 @@ self_test
 # A missing Lab means the pod was created with a volume mount (or the wrong image); do not reinstall, just stop.
 stage "check-lab"
 LAB_PATH="${ISAACLAB_PATH:-/workspace/isaaclab}"
+if [ "${CERBERUS_REHEARSAL:-0}" = "1" ]; then
+    echo "[job] rehearsal: image check stubbed (see scripts/rehearsal/run_rehearsal.sh)"
+else
 for i in $(seq 1 12); do
     [ -f "$LAB_PATH/isaaclab.sh" ] && break
     sleep 5
@@ -206,6 +220,7 @@ if [ ! -f "$LAB_PATH/isaaclab.sh" ]; then
     finish 9
 fi
 echo "[job] lab present at $LAB_PATH"
+fi
 
 if [ ! -d "$REPO/.git" ]; then
     stage "fetch-code"
@@ -224,6 +239,16 @@ CKPT=policy/locomotion/checkpoints/go2_locomotion_ga_v1_candidate.pt
 ROOT="data/reports/h4_nav/job_$(date -u +%Y%m%dT%H%MZ)"
 echo "$ROOT" > /workspace/job_root
 mkdir -p "$ROOT"
+if [ "${CERBERUS_REHEARSAL:-0}" = "1" ]; then
+    stage "rehearsal"
+    bash scripts/rehearsal/run_rehearsal.sh "$ROOT" || { echo "[job] rehearsal failed" >&2; finish 20; }
+    if [ "${CERBERUS_LITE:-0}" = "1" ]; then
+        stage "lite-scene"
+        bash scripts/rehearsal/run_lite.sh "$ROOT" || { echo "[job] lite scene failed" >&2; finish 21; }
+    fi
+    stage "done"
+    finish 0
+fi
 if [ ! -f "$CKPT" ]; then
     BASE="${CERBERUS_CODE_BUNDLE%/code/*}"
     stage "fetch-inputs"

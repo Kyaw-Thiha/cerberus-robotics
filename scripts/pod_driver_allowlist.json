@@ -1,15 +1,28 @@
 {
   "_evidence": {
     "tier_A": "580.x from 580.95.05 is validated by the Isaac Lab 3.0 docs; 595.58.03 is the only validated 595 build (595.71.05 / 595.79 / 595.84 are reported bad).",
-    "tier_B": "Any other 595.x or 590.x is accepted only if the launch probe passes. 595.91.07 carried the 2026-11-07/08 GA training (~4009 s), the adversarial gate and the eval runs to completion; startup SIGSEGVs (libcarb.tasking, exit 139) hit roughly one launch in two and occur within the first minutes. That is a flaky launch, not a dead driver, so a 3-launch probe answers it better than a blanket ban.",
-    "reject": "Below 580.65.06 there is no evidence of a working run; terminate the pod (it holds no data at this point). Three consecutive probe failures on a host reject that host too."
+    "tier_B": "Removed on 2026-11-15: the owner's rule is accept ONLY 580.x >= 580.95.05 or exactly 595.58.03. Every other branch, including 595.91.07, is rejected and the pod is terminated before any download.",
+    "reject": "Below 580.65.06 there is no evidence of a working run; terminate the pod (it holds no data at this point). Three consecutive probe failures on a host reject that host too.",
+    "gpu_policy": "Prefer A5000, then A6000, RTX 3090, L4, A4000 (>= 16 GB VRAM). The gate runs first after boot and a rejection terminates the pod immediately."
   },
   "tier_a": [
-    {"branch": "580", "min_version": "580.95.05", "why": "validated 580 branch"},
-    {"exact_version": "595.58.03", "why": "validated 595 build"}
+    {
+      "branch": "580",
+      "min_version": "580.95.05",
+      "why": "validated 580 branch"
+    },
+    {
+      "exact_version": "595.58.03",
+      "why": "validated 595 build"
+    }
   ],
-  "tier_b": [
-    {"branches": ["595", "590"], "why": "flaky launch; requires a passing 3-launch probe"}
-  ],
-  "reject_below": "580.65.06"
+  "tier_b": [],
+  "reject_below": "580.65.06",
+  "gpu_preference": [
+    "NVIDIA RTX A5000",
+    "NVIDIA RTX A6000",
+    "NVIDIA GeForce RTX 3090",
+    "NVIDIA L4",
+    "NVIDIA RTX A4000"
+  ]
 }

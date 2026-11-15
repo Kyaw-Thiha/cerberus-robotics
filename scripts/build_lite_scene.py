@@ -39,7 +39,6 @@ def grid_iou(a, b) -> float:
 
 
 def add_collision(usd_path: Path, mesh_path: str) -> None:
-    from pxr import PhysicsSchemaTools  # noqa: F401  (import check: usd-core ships UsdPhysics)
     from pxr import Usd, UsdPhysics
 
     stage = Usd.Stage.Open(str(usd_path))

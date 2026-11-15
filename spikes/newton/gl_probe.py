@@ -30,6 +30,9 @@ def probe() -> dict:
         import pyglet
 
         report["pyglet_version"] = pyglet.version
+        # pyglet 2.x exposes `canvas` only as a submodule; import it explicitly
+        import pyglet.canvas
+
         os.environ.pop("DISPLAY", None)  # force the headless EGL path
         display = pyglet.canvas.get_display()
         report["pyglet_display_class"] = type(display).__name__

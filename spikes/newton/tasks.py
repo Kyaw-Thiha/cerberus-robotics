@@ -46,7 +46,7 @@ def _select_newton_physics(cfg, use_newton_actuators: bool = True) -> dict:
             "use_newton_actuators": used_newton_actuators}
 
 
-def _newton_height_scanner(cfg) -> dict:
+def _newton_height_scanner(cfg, global_world_only: bool = True) -> dict:
     """Swap the height scanner for the Newton BVH ray-cast sensor, keeping its pattern and offset."""
     old = cfg.scene.height_scanner
     if old is None:
@@ -62,6 +62,9 @@ def _newton_height_scanner(cfg) -> dict:
         update_period=old.update_period,
         debug_vis=False,
         mesh_prim_paths=[],
+        # preserved from the stock velocity cfg: with Newton the sensor queries the live scene BVH and
+        # would otherwise see dynamic bodies -- including the robot carrying it -- as hit targets
+        global_world_only=bool(global_world_only),
     )
     cells = getattr(pattern, "resolution", None)
     return {
@@ -70,6 +73,7 @@ def _newton_height_scanner(cfg) -> dict:
         "pattern": type(pattern).__name__,
         "pattern_resolution": cells,
         "pattern_size": list(getattr(pattern, "size", []) or []),
+        "global_world_only": bool(global_world_only),
     }
 
 
@@ -99,7 +103,8 @@ def apply_joint_ordering(cfg, joint_ordering: str) -> dict:
 
 def build_cfg(*, num_envs: int = 64, joint_ordering: str = "none", episode_length_s: float | None = None,
               forward_command: float | None = None, seed: int | None = None,
-              use_newton_actuators: bool = True) -> tuple[object, dict]:
+              use_newton_actuators: bool = True,
+              global_world_only: bool = True) -> tuple[object, dict]:
     """The Cerberus rough Play cfg on Newton, with the transfer flags applied.
 
     Returns ``(cfg, info)`` where ``info`` records every deviation from the PhysX config.
@@ -109,7 +114,7 @@ def build_cfg(*, num_envs: int = 64, joint_ordering: str = "none", episode_lengt
     cfg = UnitreeGo2RoughCerberusEnvCfg_PLAY()
     info = {"base_cfg": type(cfg).__name__, "num_envs": int(num_envs)}
     info.update(_select_newton_physics(cfg, use_newton_actuators))
-    info.update(_newton_height_scanner(cfg))
+    info.update(_newton_height_scanner(cfg, global_world_only))
     info.update(apply_joint_ordering(cfg, joint_ordering))
 
     cfg.scene.num_envs = int(num_envs)

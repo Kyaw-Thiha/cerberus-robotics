@@ -234,7 +234,8 @@ fi
 [ -f "$CKPT" ] || { echo "[job] checkpoint missing" >&2; finish 5; }
 
 # Scene data goes on the container disk (volumeInGb is 0, so /workspace is the 100 GB disk, not a mount).
-SCENE_DIR="data/scenes/grscenes/home/scenes/${S}_usd"
+SID="${S%_usd}"
+SCENE_DIR="data/scenes/grscenes/home/scenes/${SID}_usd"
 if [ ! -d "$SCENE_DIR" ]; then
     stage "fetch-scenes"
     df -h /workspace | tail -1

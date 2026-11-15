@@ -70,9 +70,29 @@ def test_missing_status_file_is_not_a_heartbeat():
     now = 1000.0
     # but an instance still booting gets the startup grace before the staleness rule applies
     assert watch_job.decide(None, now=now, last_ok=None, started=now - 10) == "wait"
-    assert watch_job.decide(None, now=now, last_ok=None, started=now - 901) == "stop"
+    assert watch_job.decide(None, now=now, last_ok=None, started=now - 1401) == "wait"
+    assert watch_job.decide(None, now=now, last_ok=None, started=now - 1501) == "stop"
 
 
 def test_manifest_diff():
     assert watch_job.manifest_diff(["a", "b"], ["a"]) == {"missing": ["b"], "extra": []}
     assert watch_job.manifest_diff(["a"], ["a", "c"]) == {"missing": [], "extra": ["c"]}
+
+
+def test_decide_stops_when_the_job_exited_nonzero_or_few_launches_started():
+    now = 1000.0
+    assert watch_job.decide({"stage": "finishing", "detail": "rc=8"}, now=now, last_ok=now,
+                            started=now - 100) == "stop"
+    assert watch_job.decide({"stage": "launch-experiment", "detail": "LAUNCH_LOW 2/5"}, now=now,
+                            last_ok=now, started=now - 100) == "stop"
+    assert watch_job.decide({"stage": "done", "detail": "rc=0"}, now=now, last_ok=now,
+                            started=now - 100) == "done"
+
+
+def test_decide_enforces_the_usd_cap_in_code():
+    now = 1000.0
+    # 1.0 USD/h for 3 hours is exactly the cap
+    assert watch_job.decide({"stage": "stand"}, now=now, last_ok=now, started=now - 3 * 3600,
+                            rate=1.0, usd_cap=3.0) == "stop"
+    assert watch_job.decide({"stage": "stand"}, now=now, last_ok=now, started=now - 3600,
+                            rate=1.0, usd_cap=3.0) == "wait"

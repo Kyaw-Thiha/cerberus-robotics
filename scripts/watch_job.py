@@ -6,7 +6,7 @@ independent second layer: no heartbeat for 5 minutes, a ``STOP_FAILED`` detail, 
 instance from the laptop and pulls whatever exists. The detached guard (session_guard.py) remains the third layer for
 the USD cap.
 
-    python3 scripts/watch_job.py --job-id vast-... --instance-id 123 --rate 0.18 --deadline-minutes 85
+    python3 scripts/watch_job.py --job-id runpod-... --pod-id abc123 --rate 0.79 --provider runpod
 """
 from __future__ import annotations
 
@@ -23,13 +23,19 @@ TICK_S = 30
 
 
 def decide(status: dict | None, *, now: float, last_ok: float | None, started: float,
-           wall_s: float = 90 * 60, stale_s: float = STALE_S, startup_grace_s: float = 900) -> str:
+           wall_s: float = 90 * 60, stale_s: float = STALE_S, startup_grace_s: float = 1500,
+           rate: float = 0.0, usd_cap: float = 3.0) -> str:
     """``"done" | "stop" | "wait"`` from the latest heartbeat.
 
     Before the first heartbeat the instance may still be pulling the image, so the staleness rule applies only after
     ``startup_grace_s`` (15 min); afterwards a missing heartbeat for ``stale_s`` (5 min) is a stop.
     """
-    if status and str(status.get("detail", "")).startswith("STOP_FAILED"):
+    detail = str((status or {}).get("detail", ""))
+    if detail.startswith(("STOP_FAILED", "LAUNCH_LOW")):
+        return "stop"
+    if rate and (now - started) / 3600 * rate >= usd_cap:
+        return "stop"
+    if detail.startswith("rc=") and detail != "rc=0":
         return "stop"
     if last_ok is None:
         return "wait" if now - started < startup_grace_s else "stop"
@@ -53,13 +59,18 @@ def _rclone(env: dict, args: list[str]) -> subprocess.CompletedProcess:
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--job-id", required=True)
-    parser.add_argument("--instance-id", required=True)
+    parser.add_argument("--instance-id", default=None)
+    parser.add_argument("--pod-id", default=None, help="RunPod pod id (alias of --instance-id)")
+    parser.add_argument("--provider", choices=["runpod", "vast"], default="runpod")
     parser.add_argument("--rate", type=float, default=0.0)
     parser.add_argument("--deadline-minutes", type=float, default=90)
     parser.add_argument("--out", default=None)
     parser.add_argument("--tick", type=float, default=TICK_S)
-    parser.add_argument("--startup-grace", type=float, default=900.0)
+    parser.add_argument("--startup-grace", type=float, default=1500.0)
     args = parser.parse_args(argv)
+    instance_id = args.pod_id or args.instance_id
+    if not instance_id:
+        parser.error("need --pod-id (runpod) or --instance-id (vast)")
 
     from scripts.sync_to_r2 import REMOTE, _rclone_env, _require_env
 
@@ -82,7 +93,8 @@ def main(argv: list[str] | None = None) -> int:
             except ValueError:
                 status = None
         action = decide(status, now=now, last_ok=last_ok, started=started,
-                        wall_s=args.deadline_minutes * 60, startup_grace_s=args.startup_grace)
+                        wall_s=args.deadline_minutes * 60, startup_grace_s=args.startup_grace,
+                        rate=args.rate, usd_cap=3.0)
         elapsed = now - started
         spend = elapsed / 3600 * args.rate
         print(f"[watch] t={elapsed:5.0f}s spend=${spend:.2f} stage={(status or {}).get('stage')} "
@@ -92,8 +104,12 @@ def main(argv: list[str] | None = None) -> int:
             time.sleep(args.tick)
             continue
         if action == "stop":
-            from scripts.vast_provider import stop_instance
-            st, text = stop_instance(os.environ["VAST_API_KEY"], args.instance_id)
+            if args.provider == "runpod":
+                from runpod_provider import stop_pod
+                st, text = stop_pod(os.environ["RUNPOD_API_KEY"], instance_id)
+            else:
+                from scripts.vast_provider import stop_instance
+                st, text = stop_instance(os.environ["VAST_API_KEY"], instance_id)
             print(f"[watch] stop -> HTTP {st} {text[:120]}")
         _rclone(env, ["copy", base, str(out), "--no-check-dest"])
         listing = _rclone(env, ["lsjson", "--recursive", base])

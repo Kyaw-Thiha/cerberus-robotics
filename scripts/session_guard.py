@@ -35,6 +35,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--id", default=None)
     parser.add_argument("--rate", type=float, default=0.0, help="USD per hour")
     parser.add_argument("--targets", default="", help="comma list id:rate for several live instances")
+    parser.add_argument("--provider", choices=["vast", "runpod"], default="vast")
     parser.add_argument("--started", type=float, default=None, help="creation epoch (default: now)")
     parser.add_argument("--wall", type=float, default=90 * 60)
     parser.add_argument("--hard-wall", type=float, default=3 * 3600)
@@ -65,7 +66,7 @@ def main(argv: list[str] | None = None) -> int:
         print(f"session_guard: detached pid {child.pid} (log {LOG})")
         return 0
 
-    from vast_provider import guard_decision, stop_instance
+    from vast_provider import guard_decision
 
     key = os.environ.get("VAST_API_KEY", "")
     if not key:
@@ -89,7 +90,12 @@ def main(argv: list[str] | None = None) -> int:
         if stopping:
             failed = []
             for iid, _rate in targets:
-                status, text = stop_instance(key, iid)
+                if args.provider == "runpod":
+                    from runpod_provider import stop_pod
+                    status, text = stop_pod(key, iid)
+                else:
+                    from vast_provider import stop_instance
+                    status, text = stop_instance(key, iid)
                 write_state(status="stop_attempt", instance=iid, http=status, body=text[:200],
                             spend_usd=decision.spend_usd)
                 print(f"session_guard: stop {iid} -> HTTP {status}", flush=True)

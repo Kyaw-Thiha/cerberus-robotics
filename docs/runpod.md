@@ -34,6 +34,35 @@ available — structured, no auth-string parsing.
   if you don't constrain the datacenter differently — relevant if you're
   re-rolling specifically to escape a bad host (see driver section below).
 
+## Job mode (no SSH) — the current path
+
+The pod runs one job and stops itself; nothing reaches it over SSH.
+
+- **Create**: `python3 scripts/create_runpod_job.py --job-id runpod-... --code-bundle migration/.../code/cerberus-main.bundle`.
+  The request has **no ports**, overrides `dockerEntrypoint` to `["/bin/bash", "-c"]` and `dockerStartCmd` to
+  `echo "$CERBERUS_BOOTSTRAP_B64" | base64 -d | bash`; the long bootstrap is the base64 of `scripts/job_entrypoint.sh`.
+  Pod env is the restricted set: the four R2 variables, `CERBERUS_CODE_BUNDLE`, `CERBERUS_JOB_ID`,
+  `CERBERUS_DEADLINE_MINUTES`, `CERBERUS_IMAGE_TAG`, plus `RUNPOD_API_KEY` for the job's self-stop (`RUNPOD_POD_ID` is
+  injected by RunPod). The first attempt sends `allowedCudaVersions: ["13.0"]`, then filter-free; secure cloud; GPUs
+  A40, 4090, A5000, L40S, A6000; 100 GB container disk.
+- **Job flow** (`scripts/job_entrypoint.sh`): self-test (a read-only authenticated `GET /v1/pods/<id>`, reported as
+  `self_stop_ok`) → fetch the bundle and clone → driver gate → **5 consecutive Kit launches** (`pod_launch_probe.sh
+  --max-launches 1`; 4+ started continues, fewer writes `LAUNCH_LOW ok/total` and stops) → stand test → scripted smoke
+  → navigation (N=10, metrics only) → replay of one success and one failure only when ≥20 min remain → sync → self-stop.
+  A 30 s heartbeat uploads `status.json` and the log tail.
+- **Self-stop**: `runpodctl stop pod "$RUNPOD_POD_ID"` (3 retries) when the binary exists, otherwise
+  `POST https://rest.runpod.io/v1/pods/<id>/stop` with `Authorization: Bearer`, `User-Agent: cerberus-pod-tools/1.0`.
+  A failure writes `STOP_FAILED` so the laptop watcher stops the pod.
+- **Laptop**: `python3 scripts/watch_job.py --job-id ... --pod-id ... --provider runpod --rate <usd/h>` — 25 min to a
+  running container, 4 min to the first heartbeat, 5 min stale, 90 min from the first heartbeat, and the 3 USD cap
+  computed in code. `python3 scripts/session_guard.py --provider runpod --targets <id>:<rate> --usd 3 --wall 5400`
+  is the independent second layer.
+- **Caps**: 3 USD per session across live pods, 90 min of job wall, 3 h absolute, at most 3 pod creations.
+
+Vast job mode is **parked**: the doc-exact args hook (`onstart` = command, `args` = arguments) works, but the 35 GB
+image pull stalls and Vast stops the host mid-pull. The code stays in `scripts/create_vast_instance.py` and
+`scripts/vast_session.py`; it needs a slimmer image.
+
 ## Pod hosts, the tiered driver gate and the launch retry
 
 Isaac Sim 6.x can segfault at startup (`libcarb.tasking`, exit 139) on some 595.x host drivers, but **the driver is not

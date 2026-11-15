@@ -187,6 +187,18 @@ cat "$OUT/host.json"
 # 1-2. ray attribution on flat ground, then with the global-world flag that excludes the robot
 # ---------------------------------------------------------------------------------------------
 stage ray-attribution
+if [ "${CERBERUS_ONLY:-}" = "ray" ]; then
+    for GWO in false true; do
+        timeout --signal=KILL 600 "$VENV/bin/python" -m spikes.newton.ray_attribution \
+            --out "$OUT/ray_$GWO" --num_envs 4 --settle_steps 100 --viz none --device cuda:0 \
+            --global_world_only "$GWO" > "$LOGS/ray_$GWO.log" 2>&1
+        echo "[ray] global_world_only=$GWO rc=$?"
+        tail -26 "$LOGS/ray_$GWO.log"
+        sync_outputs
+    done
+    stage done
+    finish 0
+fi
 for GWO in false true; do
     [ "$(remaining_min)" -ge 8 ] || { echo "[ray] out of time before global_world_only=$GWO"; break; }
     timeout --signal=KILL 600 "$VENV/bin/python" -m spikes.newton.ray_attribution \

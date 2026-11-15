@@ -37,6 +37,10 @@ def main() -> int:
     import isaaclab.sim as sim_utils
     from isaaclab.terrains import TerrainImporterCfg
 
+    # a plane has no terrain_generator, and the stock terrain-level curriculum indexes it unconditionally
+    cfg.curriculum.terrain_levels = None
+    cfg.curriculum.terrain_level_max = None
+    cfg.curriculum.terrain_level_frac_at_max = None
     cfg.scene.terrain = TerrainImporterCfg(
         prim_path="/World/ground", terrain_type="plane",
         physics_material=sim_utils.RigidBodyMaterialCfg(

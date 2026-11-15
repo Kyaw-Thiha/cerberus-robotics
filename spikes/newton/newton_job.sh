@@ -167,6 +167,9 @@ echo "[deps] apt done in $(( $(date +%s) - t0 ))s"
 if ! command -v uv >/dev/null 2>&1; then
     curl -LsSf https://astral.sh/uv/install.sh 2>/dev/null | sh >/dev/null 2>&1 || true
 fi
+if ! command -v uv >/dev/null 2>&1; then
+    python3 -m pip install --break-system-packages -q uv >/dev/null 2>&1 || true
+fi
 export PATH="$HOME/.local/bin:$PATH"
 command -v uv || { echo "[deps] uv missing" >&2; finish 6; }
 if ! command -v rclone >/dev/null 2>&1; then
@@ -211,6 +214,9 @@ if ! timeout --signal=KILL 1500 uv sync --frozen --inexact --extra video --extra
 fi
 INSTALL_S=$(( $(date +%s) - t0 ))
 echo "[lab] uv sync done in ${INSTALL_S}s"
+"$VENV/bin/python" -c "import isaaclab, isaaclab_newton, newton, warp; print('imports ok', isaaclab.__file__)" \
+    > "$LOGS/import_probe.log" 2>&1 || { echo "[lab] the kit-less import probe failed" >&2; tail -20 "$LOGS/import_probe.log" >&2; finish 6; }
+cat "$LOGS/import_probe.log"
 "$VENV/bin/python" - <<PY > "$OUT/versions.json"
 import json, importlib.metadata as md, sys
 out = {"python": sys.version.split()[0]}

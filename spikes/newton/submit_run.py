@@ -20,7 +20,6 @@ import json
 import os
 import subprocess
 import sys
-import tarfile
 import time
 from pathlib import Path
 
@@ -104,37 +103,43 @@ def build_bundle(branch: str, target: Path) -> Path:
 
 
 def build_inputs(target_dir: Path) -> dict:
+    """Nothing to assemble: the checkpoint is uploaded as a file (see :func:`upload`)."""
     target_dir.mkdir(parents=True, exist_ok=True)
     checkpoint = find_checkpoint()
     if not checkpoint.is_file():
         raise SystemExit(f"submit_run: checkpoint missing: {checkpoint}")
-    tar_path = target_dir / "checkpoint.tar.gz"
-    with tarfile.open(tar_path, "w:gz") as tar:
-        tar.add(checkpoint, arcname="checkpoint/model_1499.pt")
-        meta = checkpoint.parent / "go2_locomotion_ga_v1_candidate.meta.json"
-        if meta.is_file():
-            tar.add(meta, arcname="checkpoint/go2_locomotion_ga_v1_candidate.meta.json")
-    return {"checkpoint_tar": tar_path}
+    return {"checkpoint": checkpoint}
 
 
 def upload(remote: str, job_id: str, bundle: Path, inputs: dict) -> dict:
-    base = f"{remote}/jobs/{job_id}"
-    paths = {"bundle": f"spike/{job_id}/code/cerberus-newton.bundle"}
-    steps = [(str(bundle), f"{remote}/{paths['bundle']}")]
-    for name, local in inputs.items():
-        paths[name] = f"spike/{job_id}/inputs/{local.name}"
-        steps.append((str(local), f"{remote}/{paths[name]}"))
+    """Upload the bundle and the inputs; every path inside the bucket starts with ``spike/<job_id>``.
+
+    The remote is addressed as ``cerberus_r2:<bucket>/<path>`` -- the bucket is part of the path, not the
+    remote name (``cerberus_r2:spike/...`` silently writes nowhere useful because the configured keys are
+    scoped to one bucket).
+    """
+    bucket = os.environ["R2_BUCKET"]
+    prefix = f"spike/{job_id}"
+    paths = {"bundle": f"{prefix}/code/cerberus-newton.bundle"}
+    checkpoint = find_checkpoint()
+    steps = [(str(bundle), f"{paths['bundle']}"),
+             (str(checkpoint), f"{prefix}/inputs/checkpoint/{checkpoint.name}")]
     for local, dest in steps:
-        result = rclone(["copyto", local, dest, "--no-check-dest"])
-        print(f"[upload] {local} -> {dest} ({result.returncode})")
+        result = rclone(["copyto", local, f"{remote}:{bucket}/{dest}", "--no-check-dest"])
+        print(f"[upload] {local} -> {remote}:{bucket}/{dest} ({result.returncode})")
         if result.returncode != 0:
             raise SystemExit(f"submit_run: upload failed: {result.stderr[:300]}")
-    # the admission manifest is the source of the spawn pose; it is small and already on R2
-    src = f"{remote}/{os.environ['R2_BUCKET']}/worlds/grscenes/admission.json"
-    dst = f"{remote}/jobs/{job_id}/inputs/admission.json"
+    # the admission manifest carries the validated spawn pose; it is small and already on R2
+    src = f"{remote}:{bucket}/worlds/grscenes/admission.json"
+    dst = f"{remote}:{bucket}/{prefix}/inputs/admission.json"
     result = rclone(["copyto", src, dst, "--no-check-dest"])
     if result.returncode != 0:
         print(f"[upload] admission.json not copied ({result.returncode}); the scene stage falls back to the origin")
+    listing = rclone(["lsf", f"{remote}:{bucket}/{prefix}", "-R"])
+    files = [line.strip() for line in listing.stdout.splitlines() if line.strip()]
+    print(f"[upload] {len(files)} objects under {remote}:{bucket}/{prefix}: {files}")
+    if not any(f.endswith(".bundle") for f in files):
+        raise SystemExit("submit_run: the bundle is not in the bucket; not creating a pod that cannot fetch it")
     return paths
 
 
@@ -215,11 +220,14 @@ def main(argv: list[str] | None = None) -> int:
         print(f"[guard] {guard.stdout.strip() or guard.stderr.strip()}")
         watch_log = stage_dir / "watch.log"
         with watch_log.open("a") as log:
-            subprocess.Popen([sys.executable, str(SCRIPTS / "watch_job.py"), "--job-id", job_id,
-                              "--pod-id", pod_id, "--provider", "runpod", "--rate", str(rate),
-                              "--deadline-minutes", str(args.deadline_minutes),
-                              "--out", str(stage_dir / "artifacts")],
-                             stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+            env = os.environ.copy()
+        # watch_job.py mixes `scripts.x` and bare imports, so both the repo root and scripts/ go on the path
+        env["PYTHONPATH"] = os.pathsep.join([str(REPO), str(SCRIPTS), env.get("PYTHONPATH", "")]).rstrip(os.pathsep)
+        subprocess.Popen([sys.executable, str(SCRIPTS / "watch_job.py"), "--job-id", job_id,
+                          "--pod-id", pod_id, "--provider", "runpod", "--rate", str(rate),
+                          "--deadline-minutes", str(args.deadline_minutes),
+                          "--out", str(stage_dir / "artifacts")],
+                         stdout=log, stderr=subprocess.STDOUT, start_new_session=True, env=env, cwd=str(REPO))
         print(f"[watch] started; tail -f {watch_log}")
     return 0
 

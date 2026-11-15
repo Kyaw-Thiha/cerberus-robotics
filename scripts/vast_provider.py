@@ -22,6 +22,7 @@ DEFAULT_IMAGE = "kevinkyawthiha/cerberus-remote-v6:v6-ga"
 DEFAULT_DISK_GB = 80
 MIN_VRAM_MB = 24000
 MIN_RELIABILITY = 0.95
+MIN_INET_DOWN_MBPS = 700.0
 MAX_PRICE_USD_PER_H = 1.00
 SESSION_WALL_S = 90 * 60
 SESSION_HARD_WALL_S = 3 * 3600
@@ -92,6 +93,11 @@ def offer_ok(offer: dict) -> tuple[bool, str]:
             return False, "disk too small"
     except (TypeError, ValueError):
         return False, "unparseable disk"
+    try:
+        if float(_get(offer, "inet_down", default=0)) < MIN_INET_DOWN_MBPS:
+            return False, "download speed below 700 Mbps"
+    except (TypeError, ValueError):
+        return False, "unparseable inet_down"
     if not open_port(offer):
         return False, "no open port"
     driver = _get(offer, "driver_version", "driver_ver", default="")
@@ -111,6 +117,16 @@ def select_offers(offers: list[dict], max_price: float = MAX_PRICE_USD_PER_H) ->
     """Client-side filter (driver version included) then cheapest first."""
     kept = [o for o in offers if offer_ok(o)[0] and price(o) <= max_price]
     return sorted(kept, key=price)
+
+
+def select_distinct_hosts(offers: list[dict], n: int = 3, max_price: float = MAX_PRICE_USD_PER_H) -> list[dict]:
+    """Cheapest matching offer per distinct host, up to ``n`` hosts, cheapest first."""
+    best: dict[str, dict] = {}
+    for offer in select_offers(offers, max_price):
+        host = str(_get(offer, "host_id", "machine_id", default=offer.get("id")))
+        if host not in best:
+            best[host] = offer
+    return list(best.values())[:n]
 
 
 @dataclass

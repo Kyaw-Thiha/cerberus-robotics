@@ -10,7 +10,7 @@ import vast_provider as vp
 def offer(**kw):
     base = {"id": 1, "verified": True, "rentable": True, "reliability2": 0.99, "num_gpus": 1,
             "gpu_ram": 24576, "disk_space": 200.0, "dph_total": 0.55, "driver_version": "580.159.04",
-            "gpu_name": "RTX A5000", "direct_port_count": 1}
+            "gpu_name": "RTX A5000", "direct_port_count": 1, "inet_down": 1000.0, "host_id": 1}
     base.update(kw)
     return base
 
@@ -35,6 +35,7 @@ def test_good_offer_passes():
     ({"gpu_ram": 16000}, "VRAM"),
     ({"disk_space": 40.0}, "disk"),
     ({"direct_port_count": 0}, "port"),
+    ({"inet_down": 100.0}, "download"),
     ({"driver_version": "595.91.07"}, "driver"),
 ])
 def test_rejections(kw, fragment):
@@ -47,6 +48,14 @@ def test_select_sorts_by_price_and_caps():
     dear = offer(id=3, dph_total=0.9)
     over = offer(id=4, dph_total=1.5)
     assert [o["id"] for o in vp.select_offers([dear, cheap, over])] == [2, 3]
+
+
+def test_distinct_hosts_one_offer_per_host():
+    a = offer(id=1, host_id=10, dph_total=0.5)
+    a_cheaper = offer(id=2, host_id=10, dph_total=0.3)
+    b = offer(id=3, host_id=20, dph_total=0.6)
+    chosen = vp.select_distinct_hosts([a, a_cheaper, b], n=3)
+    assert [o["id"] for o in chosen] == [2, 3]
 
 
 def test_search_parses_offers_and_sends_the_key():

@@ -32,8 +32,9 @@ def write_state(**data) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
-    parser.add_argument("--id", required=True)
-    parser.add_argument("--rate", type=float, required=True, help="USD per hour")
+    parser.add_argument("--id", default=None)
+    parser.add_argument("--rate", type=float, default=0.0, help="USD per hour")
+    parser.add_argument("--targets", default="", help="comma list id:rate for several live instances")
     parser.add_argument("--started", type=float, default=None, help="creation epoch (default: now)")
     parser.add_argument("--wall", type=float, default=90 * 60)
     parser.add_argument("--hard-wall", type=float, default=3 * 3600)
@@ -42,6 +43,17 @@ def main(argv: list[str] | None = None) -> int:
     args = parser.parse_args(argv)
     if args.started is None:
         args.started = time.time()
+    targets = []
+    if args.targets:
+        for item in args.targets.split(","):
+            iid, _, rate = item.partition(":")
+            if iid:
+                targets.append((iid, float(rate or 0)))
+    elif args.id:
+        targets.append((args.id, args.rate))
+    if not targets:
+        print("session_guard: no targets", file=sys.stderr)
+        return 2
     if args.detach:
         LOG.parent.mkdir(parents=True, exist_ok=True)
         raw = sys.argv[1:] if len(sys.argv) > 1 else list(argv or [])
@@ -64,25 +76,30 @@ def main(argv: list[str] | None = None) -> int:
     stopping = False
     while True:
         now = time.time()
-        decision = guard_decision(started_epoch=args.started, now_epoch=now, rate_per_hour=args.rate,
+        blended_rate = sum(rate for _, rate in targets)
+        decision = guard_decision(started_epoch=args.started, now_epoch=now, rate_per_hour=blended_rate,
                                   wall_s=args.wall, usd_cap=args.usd)
         hard_left = args.started + args.hard_wall - now
-        write_state(status="stopping" if stopping else "waiting", instance=args.id,
+        write_state(status="stopping" if stopping else "waiting", targets=[i for i, _ in targets],
                     remaining_s=round(decision.remaining_s), spend_usd=decision.spend_usd,
                     hard_wall_remaining_s=round(hard_left), reason=decision.reason)
         if not stopping and decision.action == "stop":
             stopping = True
             print(f"session_guard: STOP {args.id}: {decision.reason}", flush=True)
         if stopping:
-            status, text = stop_instance(key, args.id)
-            write_state(status="stop_attempt", instance=args.id, http=status, body=text[:200],
-                        spend_usd=decision.spend_usd)
-            print(f"session_guard: stop -> HTTP {status}", flush=True)
-            if status < 400:
-                write_state(status="stopped", instance=args.id, spend_usd=decision.spend_usd)
+            failed = []
+            for iid, _rate in targets:
+                status, text = stop_instance(key, iid)
+                write_state(status="stop_attempt", instance=iid, http=status, body=text[:200],
+                            spend_usd=decision.spend_usd)
+                print(f"session_guard: stop {iid} -> HTTP {status}", flush=True)
+                if status >= 400:
+                    failed.append(iid)
+            if not failed:
+                write_state(status="stopped", targets=[i for i, _ in targets], spend_usd=decision.spend_usd)
                 return 0
             if hard_left <= 0:
-                write_state(status="stop_failed", instance=args.id, http=status)
+                write_state(status="stop_failed", targets=failed)
                 print("session_guard: hard wall reached and the stop keeps failing", file=sys.stderr)
                 return 1
         if hard_left <= 0 and not stopping:

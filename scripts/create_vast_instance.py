@@ -62,7 +62,12 @@ def build_job_payload(chosen: dict, *, image: str, disk_gb: int, label: str, env
 
     payload = {"image": image, "disk": float(disk_gb), "runtype": "args", "label": label,
                "onstart": "", "price": float(chosen.get("dph_total", 0.0))}
-    if hook == "entrypoint":
+    if hook in ("entrypoint", "args-doc"):
+        # Vast's documented args form: the COMMAND is onstart, the ARGUMENTS are args (args last on the CLI).
+        payload["onstart"] = "bash"
+        payload["args"] = ["-c", SHORT_BOOTSTRAP]
+        payload["env"] = {**env, "CERBERUS_BOOTSTRAP_B64": base64.b64encode(job_bootstrap().encode()).decode()}
+    elif hook == "entrypoint":
         # the image ENTRYPOINT is /start.sh, which swallows args; override it with bash and keep the visible command
         # short by shipping the real bootstrap (base64) in an env var
         payload["entrypoint"] = "/bin/bash"
@@ -98,7 +103,7 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--job-id", default=None)
     parser.add_argument("--code-bundle", default=None, help="R2 path of the code bundle (migration/.../code/....bundle)")
     parser.add_argument("--deadline-minutes", type=int, default=85)
-    parser.add_argument("--hook", choices=["entrypoint", "onstart", "args"], default="entrypoint")
+    parser.add_argument("--hook", choices=["args-doc", "onstart", "args"], default="args-doc")
     parser.add_argument("--dry-run", action="store_true", help="search and print, create nothing")
     args = parser.parse_args(argv)
     key = os.environ.get("VAST_API_KEY", "")

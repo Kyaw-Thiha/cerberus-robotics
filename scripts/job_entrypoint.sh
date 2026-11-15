@@ -266,7 +266,8 @@ if [ ! -d "$SCENE_DIR" ]; then
     df -h /workspace | tail -1
     FREE_GB=$(df --output=avail -BG /workspace | tail -1 | tr -dc '0-9')
     echo "[job] free container disk ${FREE_GB}G before the scene fetch"
-    [ "${FREE_GB:-0}" -ge 60 ] || { echo "[job] less than 60 GB free; refusing the scene fetch" >&2; finish 11; }
+    MIN_GB="${CERBERUS_MIN_FREE_GB:-60}"
+    [ "${FREE_GB:-0}" -ge "$MIN_GB" ] || { echo "[job] less than ${MIN_GB} GB free; refusing the scene fetch" >&2; finish 11; }
     # The R2 worlds/grscenes/home prefix is the preprocessed cache (USD + shared models/Materials, ~27 GB),
     # not the raw GRScenes mirror.
     timeout 1800 python3 scripts/fetch_grscenes_from_r2.py --scene-id "$S" || { echo "[job] scene fetch failed" >&2; finish 12; }

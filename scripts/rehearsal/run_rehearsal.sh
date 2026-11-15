@@ -34,7 +34,8 @@ PY
 df -h /workspace | tail -1
 FREE_GB=$(df --output=avail -BG /workspace | tail -1 | tr -dc '0-9')
 stage "free container disk ${FREE_GB}G"
-[ "${FREE_GB:-0}" -ge 60 ] || { echo "[rehearsal] disk below 60 GB" >&2; exit 11; }
+MIN_GB="${CERBERUS_REHEARSAL_MIN_FREE_GB:-10}"
+[ "${FREE_GB:-0}" -ge "$MIN_GB" ] || { echo "[rehearsal] disk below ${MIN_GB} GB" >&2; exit 11; }
 mkdir -p data/scenes/grscenes/home
 rclone copy "$REMOTE/worlds/rehearsal" data/scenes/grscenes/home --no-check-dest >/dev/null
 TINY="data/scenes/grscenes/home/scenes/$(python3 -c 'import sys; sys.path.insert(0,"scripts"); from scene_id import folder_name; print(folder_name("tiny"))')"

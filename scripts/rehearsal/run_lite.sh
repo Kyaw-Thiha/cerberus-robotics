@@ -12,7 +12,8 @@ python3 -m pip install -q --no-input usd-core numpy >/dev/null 2>&1 || { echo "[
 
 df -h /workspace | tail -1
 FREE_GB=$(df --output=avail -BG /workspace | tail -1 | tr -dc '0-9')
-[ "${FREE_GB:-0}" -ge 60 ] || { echo "[lite] disk below 60 GB" >&2; exit 3; }
+MIN_GB="${CERBERUS_LITE_MIN_FREE_GB:-28}"
+[ "${FREE_GB:-0}" -ge "$MIN_GB" ] || { echo "[lite] disk below ${MIN_GB} GB" >&2; exit 3; }
 
 SCENE_USD=$(ls data/scenes/grscenes/home/scenes/"$SID"/start_result_*.usd 2>/dev/null | head -1)
 if [ -z "$SCENE_USD" ]; then

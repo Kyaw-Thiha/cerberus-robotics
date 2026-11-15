@@ -26,10 +26,17 @@ if ! command -v git >/dev/null 2>&1 || ! command -v curl >/dev/null 2>&1 || ! co
     apt-get update -qq >/dev/null 2>&1
     apt-get install -y -qq git curl unzip ca-certificates >/dev/null 2>&1
 fi
-if ! command -v rclone >/dev/null 2>&1; then
+# rclone >= 1.59 is required for the Cloudflare S3 provider the R2 remote uses.
+RCLONE_OK=0
+if command -v rclone >/dev/null 2>&1; then
+    RCLONE_VER=$(rclone version | head -1 | grep -oE '[0-9]+\.[0-9]+' | head -1)
+    case "$RCLONE_VER" in 1.5[0-8]|1.[0-4]*) RCLONE_OK=0 ;; *) RCLONE_OK=1 ;; esac
+fi
+if [ "$RCLONE_OK" -ne 1 ]; then
     curl -fsSL https://downloads.rclone.org/rclone-current-linux-amd64.zip -o /tmp/rclone.zip \
-      && unzip -q /tmp/rclone.zip -d /tmp/rclone \
+      && unzip -qo /tmp/rclone.zip -d /tmp/rclone \
       && install -m 0755 /tmp/rclone/rclone-*-linux-amd64/rclone /usr/local/bin/rclone
+    rclone version | head -1
 fi
 command -v rclone >/dev/null 2>&1 || { echo "[job] rclone unavailable" >&2; exit 3; }
 echo "bootstrap" > "$STAGE_FILE"

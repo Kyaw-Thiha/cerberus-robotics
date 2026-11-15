@@ -108,7 +108,7 @@ def build(scene_usd: Path, out_dir: Path, scene_id: str, budget_s: float = 1800.
         fits = size <= max_mb * 1e6
         print(f"[lite] threshold {threshold:g} m2 -> {size} B, {len(f_keep)} tris, fits={fits}")
         if not fits:
-            attempts.append({"threshold_m2": threshold, "bytes": size, "triangles": int(len(f_keep)),
+            attempts.append({"threshold_m2": threshold, "bytes": size, "triangles": len(f_keep),
                              "iou_blocked": None})
             lite.unlink(missing_ok=True)
             del p_keep, f_keep
@@ -118,7 +118,7 @@ def build(scene_usd: Path, out_dir: Path, scene_id: str, budget_s: float = 1800.
             grid_orig = build_grid(points, faces, config=config, scene_id=sid)
         grid_lite = build_grid(p_keep, f_keep, config=config, scene_id=sid)
         iou = grid_iou(grid_orig, grid_lite)
-        attempts.append({"threshold_m2": threshold, "bytes": size, "triangles": int(len(f_keep)),
+        attempts.append({"threshold_m2": threshold, "bytes": size, "triangles": len(f_keep),
                          "iou_blocked": round(iou, 6)})
         print(f"[lite] threshold {threshold:g} m2 IoU {iou:.6f}")
         if iou >= min_iou:
@@ -137,7 +137,7 @@ def build(scene_usd: Path, out_dir: Path, scene_id: str, budget_s: float = 1800.
     save_npz(grid_lite, out_dir / "occupancy.npz")
 
     report = {"scene_id": sid, "lite_file": final.name, "lite_bytes": final.stat().st_size,
-              "triangles": int(len(f_keep)), "vertices": int(len(p_keep)), "iou_blocked": round(iou, 6),
+              "triangles": len(f_keep), "vertices": len(p_keep), "iou_blocked": round(iou, 6),
               "triangle_area_min_m2": threshold, "attempts": attempts,
               "grid_shape": list(grid_orig.grid.shape), "source_bytes": scene_usd.stat().st_size}
     (out_dir / "lite_report.json").write_text(json.dumps(report, indent=2) + "\n")

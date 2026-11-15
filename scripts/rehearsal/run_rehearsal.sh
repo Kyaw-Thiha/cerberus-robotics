@@ -18,6 +18,7 @@ mkdir -p "$LAB_PATH"
 cp scripts/rehearsal/stub_lab.sh "$LAB_PATH/isaaclab.sh"
 chmod +x "$LAB_PATH/isaaclab.sh"
 LAB="$LAB_PATH/isaaclab.sh"
+export CERBERUS_REHEARSAL_STUB="$REPO_ROOT/scripts/rehearsal/stub_app.py"
 [ -f "$LAB" ] && stage "image check: stub lab present at $LAB"
 
 # 2. Scene-id normalisation across every form, recorded for the report.

@@ -73,7 +73,7 @@ def build(scene_usd: Path, out_dir: Path, scene_id: str, budget_s: float = 1800.
           thresholds=(0.0, 0.0025, 0.005, 0.01, 0.02), max_mb: float = 100.0,
           min_iou: float = 0.98) -> dict:
     from common.cerberus_worlds.scene_geometry import write_triangle_mesh_usd
-    from planning.occupancy import OccupancyConfig, from_usd, save_npz, scene_triangles_m
+    from planning.occupancy import OccupancyConfig, build_grid, save_npz, scene_triangles_m
 
     out_dir.mkdir(parents=True, exist_ok=True)
     sid = folder_name(scene_id)
@@ -85,7 +85,8 @@ def build(scene_usd: Path, out_dir: Path, scene_id: str, budget_s: float = 1800.
         config = OccupancyConfig.from_yaml(cfg_path) if cfg_path.is_file() else OccupancyConfig()
     except ImportError:  # PyYAML is optional on a bare CPU image; the defaults are the same policy
         config = OccupancyConfig()
-    grid_orig = from_usd(scene_usd, scene_id=sid, config=config)
+    # Grids come from the in-memory triangle set; reloading the 21M-triangle stage per threshold OOMed a CPU pod.
+    grid_orig = build_grid(points, faces, config=config, scene_id=sid)
 
     attempts, chosen = [], None
     for threshold in thresholds:
@@ -97,7 +98,7 @@ def build(scene_usd: Path, out_dir: Path, scene_id: str, budget_s: float = 1800.
         write_triangle_mesh_usd(p_keep, f_keep, lite, meters_per_unit=1.0,
                                 root_prim="/World", mesh_prim="/World/CollisionMesh")
         add_collision(lite, "/World/CollisionMesh")
-        grid_lite = from_usd(lite, scene_id=sid, config=config)
+        grid_lite = build_grid(p_keep, f_keep, config=config, scene_id=sid)
         iou = grid_iou(grid_orig, grid_lite)
         size = lite.stat().st_size
         attempts.append({"threshold_m2": threshold, "bytes": size, "triangles": len(f_keep),

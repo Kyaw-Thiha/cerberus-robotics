@@ -129,30 +129,29 @@ def main() -> int:
 
 
 def _height_scan_term(env) -> dict:
-    """The live `height_scan` observation term's parameters (offset, clip, params) as configured."""
+    """The `height_scan` observation term as the env was configured: func, params, offset, clip.
+
+    Read from the env cfg (the term object the manager was built from) rather than from the manager's
+    name list, which holds strings on this build.
+    """
+    cfg = env.unwrapped.cfg
+    groups = getattr(cfg, "observations", None)
+    group_cfg = getattr(groups, "policy", None) if groups is not None else None
+    term_cfg = getattr(group_cfg, "height_scan", None) if group_cfg is not None else None
+    if term_cfg is None:
+        raise RuntimeError("the env cfg has no observations.policy.height_scan term")
+    params = dict(getattr(term_cfg, "params", {}) or {})
+    func = getattr(term_cfg, "func", None)
+    defaults = dict(getattr(func, "__kwdefaults__", {}) or {})
+    merged = {**defaults, **params}
     manager = env.unwrapped.observation_manager
+    live_names = None
     active = getattr(manager, "active_terms", {}) or {}
-    found: dict = {}
-    groups = active.items() if isinstance(active, dict) else [("policy", active)]
-    for group, terms in groups:
-        for term in terms:
-            name = getattr(term, "name", None) or (term[0] if isinstance(term, (list, tuple)) else None)
-            cfg = term[1] if isinstance(term, (list, tuple)) and len(term) > 1 else term
-            if name == "height_scan":
-                params = dict(getattr(cfg, "params", {}) or {})
-                found = {"group": group, "params": params,
-                         "clip": getattr(cfg, "clip", None),
-                         "scale": getattr(cfg, "scale", None)}
-                # the callable's own defaults fill anything the manager left unset
-                func = getattr(cfg, "func", None)
-                if func is not None:
-                    defaults = {k: v for k, v in getattr(func, "__kwdefaults__", {}).items()}
-                    found["func_defaults"] = defaults
-                    params = {**defaults, **params}
-                found["offset"] = params.get("offset", 0.5)
-                found["params"] = params
-                return found
-    raise RuntimeError(f"the environment has no height_scan observation term; groups={list(active)}")
+    if isinstance(active, dict) and "policy" in active:
+        live_names = [str(t) for t in active["policy"]]
+    return {"group": "policy", "params": params, "func_defaults": defaults,
+            "clip": getattr(term_cfg, "clip", None), "scale": getattr(term_cfg, "scale", None),
+            "offset": merged.get("offset", 0.5), "live_term_names": live_names}
 
 
 if __name__ == "__main__":

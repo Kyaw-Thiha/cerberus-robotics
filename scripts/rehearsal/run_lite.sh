@@ -3,6 +3,8 @@
 set -uo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ROOT="${1:?root}"
+REMOTE="${REMOTE:-cerberus_r2:${R2_BUCKET:?}}"
+export REMOTE ROOT
 SID_RAW="${CERBERUS_LITE_SCENE:-MV7J6NIKTKJZ2AABAAAAADQ8_usd}"
 cd "$REPO_ROOT"
 SID=$(python3 -c "import sys; sys.path.insert(0,'scripts'); from scene_id import folder_name; print(folder_name('$SID_RAW'))")

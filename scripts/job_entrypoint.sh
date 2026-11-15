@@ -47,6 +47,7 @@ rclone_env() {
 }
 rclone_env
 REMOTE="cerberus_r2:${R2_BUCKET:?}"
+export REMOTE JOB_ID
 
 stage() { echo "$1" > "$STAGE_FILE"; echo "[stage] $1 $(date -u +%H:%M:%SZ)"; }
 remaining() { echo $(( DEADLINE - $(date +%s) )); }

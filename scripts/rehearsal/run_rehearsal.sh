@@ -4,6 +4,8 @@
 set -uo pipefail
 REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 ROOT="${1:?root dir}"
+REMOTE="${REMOTE:-cerberus_r2:${R2_BUCKET:?}}"
+export REMOTE ROOT
 mkdir -p "$ROOT"
 cd "$REPO_ROOT"
 

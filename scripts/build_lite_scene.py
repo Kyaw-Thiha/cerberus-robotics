@@ -102,7 +102,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--max-mb", type=float, default=100.0)
     parser.add_argument("--min-iou", type=float, default=0.98)
     args = parser.parse_args(argv)
-    report = build(Path(args.scene_usd), Path(args.out_dir), args.scene_id)
+    report = build(Path(args.scene_usd), Path(args.out_dir), args.scene_id,
+                   max_mb=args.max_mb, min_iou=args.min_iou)
     print(json.dumps(report, indent=2))
     ok = report["lite_bytes"] <= args.max_mb * 1e6 and report["iou_blocked"] >= args.min_iou
     print("[lite]", "OK" if ok else "FAILED acceptance")

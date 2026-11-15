@@ -19,7 +19,7 @@ from __future__ import annotations
 import gymnasium as gym
 
 NEWTON_TASK_ID = "Isaac-Velocity-Rough-Unitree-Go2-Cerberus-Newton-v0"
-NEWTON_PLAY_TASK_ID = "Isaac-Velocity-Rough-Unitree-Go2-Cerberus-Newton-Play-v0"
+NEWTON_TASK_PLAY_ID = "Isaac-Velocity-Rough-Unitree-Go2-Cerberus-Newton-Play-v0"
 
 ENTRY_POINT = "spikes.newton.tasks:UnitreeGo2RoughCerberusNewtonEnvCfg"
 PLAY_ENTRY_POINT = "spikes.newton.tasks:UnitreeGo2RoughCerberusNewtonEnvCfg_PLAY"
@@ -145,7 +145,7 @@ def _register(task_id: str, entry_point: str) -> None:
 
 def register() -> None:
     _register(NEWTON_TASK_ID, ENTRY_POINT)
-    _register(NEWTON_PLAY_TASK_ID, PLAY_ENTRY_POINT)
+    _register(NEWTON_TASK_PLAY_ID, PLAY_ENTRY_POINT)
 
 
 def UnitreeGo2RoughCerberusNewtonEnvCfg():  # noqa: N802 - gym entry-point naming

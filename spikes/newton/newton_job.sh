@@ -24,7 +24,7 @@ STAGE_FILE=/workspace/job_stage
 LOG_FILE=/workspace/job.log
 OUT=/workspace/newton_out
 LOGS=/workspace/spike_logs
-STOCK_TASK="Isaac-Velocity-Rough-Unitree-Go2"
+STOCK_TASK="Isaac-Velocity-Rough-UnitreeGo2"
 SCENE_ID="${CERBERUS_SCENE_ID:-MV7J6NIKTKJZ2AABAAAAADQ8_usd}"
 SCENE_DEST="$REPO/data/scenes/grscenes/home"
 CKPT="$REPO/policy/locomotion/checkpoints/unitree_go2_rough/2026-11-07_07-29-40/model_1499.pt"
@@ -35,7 +35,10 @@ echo bootstrap > "$STAGE_FILE"
 : > "$LOG_FILE"
 exec > >(tee -a "$LOG_FILE") 2>&1
 
-stage() { echo "$1" > "$STAGE_FILE"; echo "[stage] $1 $(date -u +%H:%M:%SZ) remaining=$(( (DEADLINE - $(date +%s)) / 60 ))min"; }
+stage() { echo "$1" > "$STAGE_FILE"; cd "$REPO" 2>/dev/null || true; echo "[stage] $1 $(date -u +%H:%M:%SZ) remaining=$(( (DEADLINE - $(date +%s)) / 60 ))min"; }
+# `need <marker file>`: a resumed job keeps its container disk, so a stage whose artifact already exists is
+# skipped unless CERBERUS_FORCE_STAGE=1 asks for it again.
+need() { [ "${CERBERUS_FORCE_STAGE:-0}" = "1" ] && return 0; [ -s "$1" ] && return 1; return 0; }
 remaining() { echo $(( DEADLINE - $(date +%s) )); }
 remaining_min() { echo $(( (DEADLINE - $(date +%s)) / 60 )); }
 
@@ -186,6 +189,14 @@ if [ ! -d "$REPO/.git" ]; then
     rclone copyto "$REMOTE/$CERBERUS_CODE_BUNDLE" /root/code.bundle || { echo "[job] bundle fetch failed" >&2; finish 4; }
     GIT_LFS_SKIP_SMUDGE=1 git clone /root/code.bundle "$REPO" >/dev/null 2>&1 || { echo "[job] clone failed" >&2; finish 4; }
     cd "$REPO" && git checkout newton-spike >/dev/null 2>&1
+else
+    # resumed pod (container disk kept): bring the checkout to the bundle's branch tip
+    rclone copyto "$REMOTE/$CERBERUS_CODE_BUNDLE" /root/code.bundle \
+        || { echo "[job] bundle re-fetch failed" >&2; finish 4; }
+    git -C "$REPO" fetch -f /root/code.bundle newton-spike:refs/remotes/bundle/newton-spike >/dev/null 2>&1 \
+        || { echo "[job] bundle fetch into the checkout failed" >&2; finish 4; }
+    git -C "$REPO" reset --hard bundle/newton-spike >/dev/null 2>&1 \
+        || { echo "[job] reset to the bundle tip failed" >&2; finish 4; }
 fi
 cd "$REPO" || finish 4
 export PYTHONPATH="$REPO${PYTHONPATH:+:$PYTHONPATH}"
@@ -259,6 +270,8 @@ cp "$OUT/host.json" "$LOGS/host.json"
 # Stage 1: stock Go2 rough task on Newton, then 5 consecutive launches
 # ---------------------------------------------------------------------------------------------
 stage stage1-stock
+need "$OUT/stage1/launches.csv" || echo "[stage1] already done (marker exists); set CERBERUS_FORCE_STAGE=1 to redo"
+if need "$OUT/stage1/launches.csv"; then
 "$VENV/bin/python" -m spikes.newton.gl_probe "$OUT/stage2/gl_probe.json" > "$LOGS/gl_probe.log" 2>&1 || true
 t0=$(date +%s)
 timeout --signal=KILL 1200 "$VENV/bin/isaaclab" train --rl_library rsl_rl --task "$STOCK_TASK" \
@@ -310,6 +323,7 @@ for i in 1 2 3 4 5; do
 done
 cat "$OUT/stage1/launches.csv"
 echo "launches=$(awk -F, 'NR>1 && $4==1' "$OUT/stage1/launches.csv" | wc -l)/5" > "$OUT/detail.txt"
+fi
 sync_outputs
 
 # ---------------------------------------------------------------------------------------------
@@ -317,6 +331,7 @@ sync_outputs
 # ---------------------------------------------------------------------------------------------
 stage stage2-video
 t0=$(date +%s)
+if need "$OUT/stage2/video.json"; then
 timeout --signal=KILL 900 "$VENV/bin/isaaclab" train --rl_library rsl_rl --task "$STOCK_TASK" \
     --max_iterations 8 --viz newton_gl --video --video_length 80 --video_interval 0 \
     physics=newton_mjwarp env.scene.num_envs=16 > "$LOGS/stage2_video.log" 2>&1
@@ -351,6 +366,7 @@ for path in sorted(glob.glob(os.path.join(sys.argv[1], "*.mp4"))):
 print(json.dumps(out, indent=2))
 PY
 cat "$OUT/stage2/video.json" 2>/dev/null
+fi
 sync_outputs
 
 # ---------------------------------------------------------------------------------------------

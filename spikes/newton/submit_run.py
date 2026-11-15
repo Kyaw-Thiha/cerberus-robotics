@@ -111,7 +111,7 @@ def build_inputs(target_dir: Path) -> dict:
     return {"checkpoint": checkpoint}
 
 
-def upload(remote: str, job_id: str, bundle: Path, inputs: dict) -> dict:
+def upload(remote: str, job_id: str, bundle: Path, inputs: dict, admission: bool = True) -> dict:
     """Upload the bundle and the inputs; every path inside the bucket starts with ``spike/<job_id>``.
 
     The remote is addressed as ``cerberus_r2:<bucket>/<path>`` -- the bucket is part of the path, not the
@@ -129,6 +129,8 @@ def upload(remote: str, job_id: str, bundle: Path, inputs: dict) -> dict:
         print(f"[upload] {local} -> {remote}:{bucket}/{dest} ({result.returncode})")
         if result.returncode != 0:
             raise SystemExit(f"submit_run: upload failed: {result.stderr[:300]}")
+    if not admission:
+        return paths
     # the admission manifest carries the validated spawn pose; it is small and already on R2
     src = f"{remote}:{bucket}/worlds/grscenes/admission.json"
     dst = f"{remote}:{bucket}/{prefix}/inputs/admission.json"
@@ -165,6 +167,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--gpu-type", action="append", default=None)
     parser.add_argument("--rate", type=float, default=0.79, help="pod USD/hour, for the guard and watcher")
     parser.add_argument("--start-watch", action="store_true", help="start the watcher and the detached guard")
+    parser.add_argument("--resume-pod", default=None,
+                        help="resume an existing (stopped) pod: re-upload the bundle to --job-id's prefix, "
+                             "PATCH the start command + env, then POST /start")
+    parser.add_argument("--job-id", default=None, help="job prefix to reuse with --resume-pod")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
 
@@ -179,7 +185,7 @@ def main(argv: list[str] | None = None) -> int:
     rclone_env()
 
     remote = "cerberus_r2"
-    job_id = f"newton-{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}"
+    job_id = args.job_id or f"newton-{time.strftime('%Y%m%dT%H%M%SZ', time.gmtime())}"
     stage_dir = REPO / "outputs" / "newton_spike" / job_id
     stage_dir.mkdir(parents=True, exist_ok=True)
     bundle = build_bundle(args.branch, stage_dir / "cerberus-newton.bundle")
@@ -192,8 +198,30 @@ def main(argv: list[str] | None = None) -> int:
                           "inputs": {k: str(v) for k, v in inputs.items()}}, indent=2))
         return 0
 
-    paths = upload(remote, job_id, bundle, inputs)
+    paths = upload(remote, job_id, bundle, inputs, admission=(args.resume_pod is None))
     import runpod_provider as rp
+
+    if args.resume_pod:
+        bootstrap = base64.b64encode((REPO / "spikes/newton/newton_job.sh").read_bytes()).decode()
+        env = rp.job_env(paths["bundle"], job_id, args.deadline_minutes, args.image)
+        env["CERBERUS_CREATED_EPOCH"] = str(int(time.time()))
+        env["CERBERUS_LAB_REF"] = "v3.0.0"
+        env["CERBERUS_FORCE_STAGE"] = os.environ.get("CERBERUS_FORCE_STAGE", "1")
+        env["CERBERUS_BOOTSTRAP_B64"] = bootstrap
+        body = json.dumps({"env": env, "dockerEntrypoint": ["/bin/bash", "-c"],
+                           "dockerStartCmd": [rp.SHORT_BOOTSTRAP]})
+        status, text = rp._request("PATCH", f"{rp.API_URL}/{args.resume_pod}", os.environ["RUNPOD_API_KEY"],
+                                   body.encode())
+        print(f"[resume] PATCH {args.resume_pod} -> HTTP {status} {text[:200]}")
+        if status >= 400:
+            return 1
+        status, text = rp._request("POST", f"{rp.API_URL}/{args.resume_pod}/start",
+                                   os.environ["RUNPOD_API_KEY"], b"{}")
+        print(f"[resume] start -> HTTP {status} {text[:200]}")
+        if status >= 400:
+            return 1
+        print(json.dumps({"job_id": job_id, "pod_id": args.resume_pod, "resumed": True}, indent=2))
+        return 0
 
     bootstrap = base64.b64encode((REPO / "spikes/newton/newton_job.sh").read_bytes()).decode()
     env = rp.job_env(paths["bundle"], job_id, args.deadline_minutes, args.image)

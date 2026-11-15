@@ -16,7 +16,9 @@ stack run on Isaac Lab's kit-less Newton backend, next to the PhysX / Isaac Sim 
 | `gl_probe.py` | EGL/OpenGL/pyglet availability in the container (what `--video` through `newton_gl` needs) |
 | `contract.py` | reads `common/cerberus_policies/contracts/heightscan_ppo_v1.yaml` |
 | `newton_job.sh` | the pod-side job: deps → pinned Isaac Lab kit-less install → the five stages → R2 sync → self-stop |
-| `submit_run.py` | laptop side: git bundle + checkpoint → R2, create the job pod, start the watcher and the guard |
+| `submit_run.py` | laptop side: git bundle + checkpoint → R2, create the job pod, start the watcher and the guard; `--resume-pod/--job-id/--set` restart a stopped pod with new code or env |
+| `pod_guard.py` | RunPod-side cost guard: the same decision function as `scripts/session_guard.py`, stopping through `runpod_provider.stop_pod` (that file's runpod branch uses the Vast key) |
+| `collect_results.py` | pull a job's artifacts from R2 and print the numbers the report quotes |
 
 ## End-to-end
 

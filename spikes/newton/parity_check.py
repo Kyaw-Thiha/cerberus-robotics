@@ -161,7 +161,7 @@ def main() -> int:
         common.write_json(out / "timings.json", timer.as_dict())
         env.close()
     print("[parity] done", flush=True)
-    return 0 if report["contract"]["all_passed"] else 0  # the verdict is in the JSON, not the exit code
+    return 0  # the verdict lives in parity.json; a failed check is a result, not a crash
 
 
 def _ranges_match(live: dict, expected: dict) -> bool:

@@ -14,10 +14,16 @@ import argparse
 import json
 import os
 import subprocess
+import sys
 import time
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+for _path in (str(REPO_ROOT), str(REPO_ROOT / "scripts")):
+    if _path not in sys.path:
+        sys.path.insert(0, _path)
+
+from redact import mask_text  # noqa: E402
 STALE_S = 300
 TICK_S = 30
 
@@ -110,7 +116,7 @@ def main(argv: list[str] | None = None) -> int:
             else:
                 from scripts.vast_provider import stop_instance
                 st, text = stop_instance(os.environ["VAST_API_KEY"], instance_id)
-            print(f"[watch] stop -> HTTP {st} {text[:120]}")
+            print(f"[watch] stop -> HTTP {st} {mask_text(text)[:120]}")
         _rclone(env, ["copy", base, str(out), "--no-check-dest"])
         listing = _rclone(env, ["lsjson", "--recursive", base])
         remote = [e["Path"] for e in json.loads(listing.stdout or "[]") if not e.get("IsDir")]

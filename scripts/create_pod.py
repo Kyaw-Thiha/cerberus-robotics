@@ -25,6 +25,8 @@ from datetime import datetime, timezone
 from pathlib import Path
 from typing import Callable
 
+from redact import mask_text
+
 API_URL = "https://rest.runpod.io/v1/pods"
 USER_AGENT = "cerberus-pod-tools/1.0"
 DEFAULT_IMAGE = "kevinkyawthiha/cerberus-remote-v6:v6-ga"
@@ -179,7 +181,7 @@ def main(argv: list[str] | None = None) -> int:
         status, body = create_pod(spec, api_key)
 
     if status >= 400:
-        print(f"create_pod: failed HTTP {status}: {json.dumps(body)[:600]}", flush=True)
+        print(f"create_pod: failed HTTP {status}: {mask_text(json.dumps(body))[:600]}", flush=True)
         return 1
     pod_id = body.get("id") or body.get("podId") or "unknown"
     creations.append({"ts": datetime.now(timezone.utc).isoformat(timespec="seconds"), "pod_id": pod_id,

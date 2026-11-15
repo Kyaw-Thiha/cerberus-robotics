@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Laptop-side detached guard: stop the Vast.ai instance at the wall clock or the USD cap.
+"""Laptop-side detached guard: stop the pod at the wall clock or the USD cap.
 
 This runs on the laptop, in its own session (``--detach`` uses ``setsid`` semantics via ``start_new_session``), so it
 survives a lost shell and does not depend on anything inside the instance. It re-checks every 30 s, and once the stop
@@ -19,9 +19,32 @@ import time
 from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
+for _path in (str(REPO_ROOT), str(REPO_ROOT / "scripts")):
+    if _path not in sys.path:
+        sys.path.insert(0, _path)
+
+from redact import mask_text  # noqa: E402
+
 STATE = REPO_ROOT / "outputs" / "session_guard.json"
 LOG = REPO_ROOT / "outputs" / "session_guard.log"
 TICK_S = 30
+
+
+def select_api_key(provider: str, environ=None) -> tuple[str, str]:
+    """Only the provider's own key is consulted; a RunPod run never looks at VAST_API_KEY."""
+    environ = os.environ if environ is None else environ
+    name = "RUNPOD_API_KEY" if provider == "runpod" else "VAST_API_KEY"
+    return name, environ.get(name, "")
+
+
+def stop_target(provider: str, key: str, instance_id: str) -> tuple[int, str]:
+    if provider == "runpod":
+        from runpod_provider import stop_pod
+
+        return stop_pod(key, instance_id)
+    from vast_provider import stop_instance
+
+    return stop_instance(key, instance_id)
 
 
 def write_state(**data) -> None:
@@ -68,8 +91,7 @@ def main(argv: list[str] | None = None) -> int:
 
     from vast_provider import guard_decision
 
-    key_env = "RUNPOD_API_KEY" if args.provider == "runpod" else "VAST_API_KEY"
-    key = os.environ.get(key_env, "")
+    key_env, key = select_api_key(args.provider)
     if not key:
         print(f"session_guard: {key_env} is not set", file=sys.stderr)
         write_state(status="error", reason=f"no {key_env}")
@@ -87,17 +109,12 @@ def main(argv: list[str] | None = None) -> int:
                     hard_wall_remaining_s=round(hard_left), reason=decision.reason)
         if not stopping and decision.action == "stop":
             stopping = True
-            print(f"session_guard: STOP {args.id}: {decision.reason}", flush=True)
+            print(f"session_guard: STOP {[i for i, _ in targets]}: {decision.reason}", flush=True)
         if stopping:
             failed = []
             for iid, _rate in targets:
-                if args.provider == "runpod":
-                    from runpod_provider import stop_pod
-                    status, text = stop_pod(key, iid)
-                else:
-                    from vast_provider import stop_instance
-                    status, text = stop_instance(key, iid)
-                write_state(status="stop_attempt", instance=iid, http=status, body=text[:200],
+                status, text = stop_target(args.provider, key, iid)
+                write_state(status="stop_attempt", instance=iid, http=status, body=mask_text(text)[:200],
                             spend_usd=decision.spend_usd)
                 print(f"session_guard: stop {iid} -> HTTP {status}", flush=True)
                 if status >= 400:
@@ -110,7 +127,7 @@ def main(argv: list[str] | None = None) -> int:
                 print("session_guard: hard wall reached and the stop keeps failing", file=sys.stderr)
                 return 1
         if hard_left <= 0 and not stopping:
-            write_state(status="hard_wall", instance=args.id, spend_usd=decision.spend_usd)
+            write_state(status="hard_wall", targets=[i for i, _ in targets], spend_usd=decision.spend_usd)
             return 1
         time.sleep(TICK_S)
 

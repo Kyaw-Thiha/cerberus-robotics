@@ -17,6 +17,10 @@ import os
 import sys
 from pathlib import Path
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+
+from redact import mask_text  # noqa: E402
+
 REPO = Path(__file__).resolve().parents[1]
 DEFAULT_IMAGE = "kevinkyawthiha/cerberus-remote-v6:v6-ga"
 DEFAULT_GPUS = ["NVIDIA A40", "NVIDIA GeForce RTX 4090", "NVIDIA RTX A5000", "NVIDIA L40S", "NVIDIA RTX A6000"]
@@ -59,7 +63,7 @@ def main(argv: list[str] | None = None) -> int:
         bootstrap_b64=bootstrap, name=args.job_id, disk_gb=args.disk_gb,
         cuda_first=None if args.no_cuda_filter else "13.0")
     if status >= 400:
-        print(f"create_runpod_job: failed HTTP {status}: {json.dumps(body)[:500]}", file=sys.stderr)
+        print(f"create_runpod_job: failed HTTP {status}: {mask_text(json.dumps(body))[:500]}", file=sys.stderr)
         return 1
     pod_id = body.get("id") or body.get("podId") or "unknown"
     rp.record_creation(pod_id, args.image, [] if args.no_cuda_filter else ["13.0"])

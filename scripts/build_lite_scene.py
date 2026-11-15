@@ -75,10 +75,10 @@ def triangle_areas(points, faces, chunk: int = 500_000):
 
 
 def build(scene_usd: Path, out_dir: Path, scene_id: str, budget_s: float = 1800.0,
-          thresholds=(0.0, 0.0025, 0.005, 0.01, 0.02, 0.05), max_mb: float = 100.0,
+          thresholds=(0.0, 0.00002, 0.00005, 0.0001, 0.0002, 0.0005, 0.001, 0.0025), max_mb: float = 100.0,
           min_iou: float = 0.98) -> dict:
     from common.cerberus_worlds.scene_geometry import write_triangle_mesh_usd
-    from planning.occupancy import OccupancyConfig, from_usd, save_npz, scene_triangles_m
+    from planning.occupancy import OccupancyConfig, build_grid, save_npz, scene_triangles_m
 
     out_dir.mkdir(parents=True, exist_ok=True)
     sid = folder_name(scene_id)
@@ -114,8 +114,9 @@ def build(scene_usd: Path, out_dir: Path, scene_id: str, budget_s: float = 1800.
             del p_keep, f_keep
             continue
         if grid_orig is None:
-            grid_orig = from_usd(scene_usd, scene_id=sid, config=config)
-        grid_lite = from_usd(lite, scene_id=sid, config=config)
+            # In-memory: reloading the 21M-triangle stage while the points are held doubles the peak and OOMed.
+            grid_orig = build_grid(points, faces, config=config, scene_id=sid)
+        grid_lite = build_grid(p_keep, f_keep, config=config, scene_id=sid)
         iou = grid_iou(grid_orig, grid_lite)
         attempts.append({"threshold_m2": threshold, "bytes": size, "triangles": int(len(f_keep)),
                          "iou_blocked": round(iou, 6)})

@@ -9,7 +9,6 @@ import pytest
 from pod_driver_gate import (
     CSV_COLUMNS,
     TIER_A,
-    TIER_B,
     TIER_REJECT,
     HostInfo,
     append_probe_row,

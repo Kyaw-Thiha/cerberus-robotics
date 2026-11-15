@@ -51,34 +51,75 @@ def add_collision(usd_path: Path, mesh_path: str) -> None:
     stage.GetRootLayer().Save()
 
 
-def build(scene_usd: Path, out_dir: Path, scene_id: str, budget_s: float = 1800.0) -> dict:
+def compact(points, faces, keep_mask):
+    """Drop triangles outside ``keep_mask`` and renumber the vertices they used."""
+    import numpy as np
 
+    faces = faces[keep_mask]
+    used = np.unique(faces.reshape(-1))
+    remap = np.full(points.shape[0], -1, dtype=np.int64)
+    remap[used] = np.arange(len(used))
+    return points[used], remap[faces]
+
+
+def triangle_areas(points, faces):
+    import numpy as np
+
+    tri = points[faces]
+    return 0.5 * np.linalg.norm(np.cross(tri[:, 1] - tri[:, 0], tri[:, 2] - tri[:, 0]), axis=1)
+
+
+def build(scene_usd: Path, out_dir: Path, scene_id: str, budget_s: float = 1800.0,
+          thresholds=(0.0, 0.0025, 0.005, 0.01, 0.02), max_mb: float = 100.0,
+          min_iou: float = 0.98) -> dict:
     from common.cerberus_worlds.scene_geometry import write_triangle_mesh_usd
-    from planning.occupancy import from_usd, scene_triangles_m, save_npz
+    from planning.occupancy import OccupancyConfig, from_usd, save_npz, scene_triangles_m
 
     out_dir.mkdir(parents=True, exist_ok=True)
     sid = folder_name(scene_id)
     points, faces = scene_triangles_m(scene_usd, budget_s=budget_s)
-    lite = out_dir / f"{sid}.usd"
-    write_triangle_mesh_usd(points, faces, lite, meters_per_unit=1.0,
-                            root_prim="/World", mesh_prim="/World/CollisionMesh")
-    add_collision(lite, "/World/CollisionMesh")
+    areas = triangle_areas(points, faces)
 
-    # Same grid from both files; the lite file must reproduce the original's blocked cells.
     cfg_path = _REPO / "planning" / "config" / "occupancy.yaml"
-    from planning.occupancy import OccupancyConfig
-
     try:
         config = OccupancyConfig.from_yaml(cfg_path) if cfg_path.is_file() else OccupancyConfig()
     except ImportError:  # PyYAML is optional on a bare CPU image; the defaults are the same policy
         config = OccupancyConfig()
     grid_orig = from_usd(scene_usd, scene_id=sid, config=config)
-    grid_lite = from_usd(lite, scene_id=sid, config=config)
-    iou = grid_iou(grid_orig, grid_lite)
+
+    attempts, chosen = [], None
+    for threshold in thresholds:
+        if threshold > 0:
+            p_keep, f_keep = compact(points, faces, areas >= threshold)
+        else:
+            p_keep, f_keep = points, faces
+        lite = out_dir / f"{sid}_t{threshold:g}.usd"
+        write_triangle_mesh_usd(p_keep, f_keep, lite, meters_per_unit=1.0,
+                                root_prim="/World", mesh_prim="/World/CollisionMesh")
+        add_collision(lite, "/World/CollisionMesh")
+        grid_lite = from_usd(lite, scene_id=sid, config=config)
+        iou = grid_iou(grid_orig, grid_lite)
+        size = lite.stat().st_size
+        attempts.append({"threshold_m2": threshold, "bytes": size, "triangles": len(f_keep),
+                         "iou_blocked": round(iou, 6)})
+        print(f"[lite] threshold {threshold:g} m2 -> {size} B, {len(f_keep)} tris, IoU {iou:.6f}")
+        if size <= max_mb * 1e6 and iou >= min_iou:
+            chosen = (lite, p_keep, f_keep, iou, threshold, grid_lite)
+            break
+        lite.unlink(missing_ok=True)
+    if chosen is None:
+        raise SystemExit("[lite] no threshold met both size and IoU")
+
+    lite, p_keep, f_keep, iou, threshold, grid_lite = chosen
+    final = out_dir / f"{sid}.usd"
+    lite.replace(final)
+    for stale in out_dir.glob(f"{sid}_t*.usd"):
+        stale.unlink(missing_ok=True)
     save_npz(grid_lite, out_dir / "occupancy.npz")
 
-    report = {"scene_id": sid, "lite_file": lite.name, "lite_bytes": lite.stat().st_size,
-              "triangles": len(faces), "vertices": len(points), "iou_blocked": round(iou, 6),
+    report = {"scene_id": sid, "lite_file": final.name, "lite_bytes": final.stat().st_size,
+              "triangles": len(f_keep), "vertices": len(p_keep), "iou_blocked": round(iou, 6),
+              "triangle_area_min_m2": threshold, "attempts": attempts,
               "grid_shape": list(grid_orig.grid.shape), "source_bytes": scene_usd.stat().st_size}
     (out_dir / "lite_report.json").write_text(json.dumps(report, indent=2) + "\n")
     (out_dir / "README.md").write_text(
@@ -86,10 +127,12 @@ def build(scene_usd: Path, out_dir: Path, scene_id: str, budget_s: float = 1800.
         "Built by `scripts/build_lite_scene.py` from the preprocessed GRScenes home. This USD carries **static\n"
         "collision geometry only**: every mesh under the source stage (floors, walls, furniture) was resolved into\n"
         "world-space triangles in metres, merged into a single `Mesh` and given `UsdPhysics` collision with\n"
-        "`approximation = none`.\n\n"
+        "`approximation = none`. Triangles smaller than the chosen area threshold are dropped so the file fits the\n"
+        "size budget; the threshold is the smallest whose occupancy grid still matches.\n\n"
         "Dropped: all materials and textures, shader and look layers, lights, cameras, articulations/joints,\n"
-        "non-mesh prims and the source hierarchy.\n\n"
+        "non-mesh prims, the source hierarchy, and sub-threshold (sub-cell) triangles.\n\n"
         f"Triangles {report['triangles']}, vertices {report['vertices']}, size {report['lite_bytes']} bytes,\n"
+        f"smallest kept triangle {report['triangle_area_min_m2']} m2,\n"
         f"blocked-cell IoU against the original occupancy grid {report['iou_blocked']}.\n")
     return report
 

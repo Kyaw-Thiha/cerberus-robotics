@@ -4,13 +4,14 @@
 # usage: scripts/install_guard_service.sh --targets <id:rate[,id:rate]> [--usd 3] [--wall 5400]
 set -euo pipefail
 REPO="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
-TARGETS=""; USD=3; WALL=5400; HARD=10800
+TARGETS=""; USD=3; WALL=5400; HARD=10800; STARTED=$(date +%s)
 while [ $# -gt 0 ]; do
   case "$1" in
     --targets) TARGETS="$2"; shift 2 ;;
     --usd) USD="$2"; shift 2 ;;
     --wall) WALL="$2"; shift 2 ;;
     --hard-wall) HARD="$2"; shift 2 ;;
+    --started) STARTED="$2"; shift 2 ;;
     *) echo "unknown option $1" >&2; exit 2 ;;
   esac
 done
@@ -28,7 +29,7 @@ WorkingDirectory=$REPO
 EnvironmentFile=$REPO/.env
 ExecStart=/usr/bin/systemd-inhibit --what=sleep:idle --why="Cerberus pod live" \\
   /usr/bin/python3 $REPO/scripts/session_guard.py --provider runpod \\
-  --targets $TARGETS --started %S --wall $WALL --hard-wall $HARD --usd $USD
+  --targets $TARGETS --started $STARTED --wall $WALL --hard-wall $HARD --usd $USD
 Restart=always
 RestartSec=5
 KillMode=process

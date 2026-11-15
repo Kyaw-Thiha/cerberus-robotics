@@ -257,6 +257,11 @@ def main(argv: list[str] | None = None) -> int:
     env = rp.job_env(paths["bundle"], job_id, args.deadline_minutes, args.image)
     env["CERBERUS_CREATED_EPOCH"] = str(int(time.time()))
     env["CERBERUS_LAB_REF"] = "v3.0.0"
+    for item in args.set:
+        key, _, value = item.partition("=")
+        if not key or not _:
+            raise SystemExit(f"--set needs KEY=VALUE, got {item!r}")
+        env[key] = value
     status, body = rp.create_job_pod(
         os.environ["RUNPOD_API_KEY"], image=args.image, gpu_types=args.gpu_type or DEFAULT_GPUS,
         env=env, bootstrap_b64=bootstrap, name=job_id, disk_gb=args.disk_gb)

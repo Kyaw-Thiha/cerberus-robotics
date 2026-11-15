@@ -73,7 +73,8 @@ def main(argv: list[str] | None = None) -> int:
             print(f"pod_guard: STOP {args.id}: {decision.reason}", flush=True)
         if stopping:
             status, text = stop_pod(key, args.id)
-            write_state(status="stop_attempt", instance=args.id, http=status, body=str(text)[:200],
+            # the stop response echoes the pod env, so record the status only, never the body
+            write_state(status="stop_attempt", instance=args.id, http=status,
                         spend_usd=decision.spend_usd, provider="runpod")
             print(f"pod_guard: stop {args.id} -> HTTP {status}", flush=True)
             if 200 <= status < 400:

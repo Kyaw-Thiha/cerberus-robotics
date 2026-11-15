@@ -75,6 +75,25 @@ def load_env() -> dict:
     return loaded
 
 
+def safe_body(text: str) -> str:
+    """A RunPod response body with the pod ``env`` map removed and secrets masked.
+
+    Stop/patch/start responses echo the whole pod spec, including the base64 bootstrap *and*
+    ``RUNPOD_API_KEY``; nothing here may print or store that.
+    """
+    import json as _json
+
+    from redact import mask_text, masked_json
+
+    try:
+        data = _json.loads(text)
+    except ValueError:
+        return mask_text(text)[:200]
+    if isinstance(data, dict):
+        data = {k: v for k, v in data.items() if k not in ("env", "dockerStartCmd", "dockerEntrypoint")}
+    return masked_json(data)[:300]
+
+
 def rclone(args: list[str]) -> subprocess.CompletedProcess:
     return subprocess.run(["rclone", *args], capture_output=True, text=True)
 
@@ -164,8 +183,12 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--image", default=DEFAULT_IMAGE)
     parser.add_argument("--deadline-minutes", type=int, default=105)
     parser.add_argument("--disk-gb", type=int, default=120)
+    parser.add_argument("--bootstrap", default="spikes/newton/newton_job.sh",
+                        help="pod-side script sent base64 in CERBERUS_BOOTSTRAP_B64")
     parser.add_argument("--gpu-type", action="append", default=None)
     parser.add_argument("--rate", type=float, default=0.79, help="pod USD/hour, for the guard and watcher")
+    parser.add_argument("--wall-s", type=float, default=7200.0, help="guard wall clock for this session")
+    parser.add_argument("--usd-cap", type=float, default=2.5, help="guard USD cap for this session")
     parser.add_argument("--start-watch", action="store_true", help="start the watcher and the detached guard")
     parser.add_argument("--resume-pod", default=None,
                         help="resume an existing (stopped) pod: re-upload the bundle to --job-id's prefix, "
@@ -204,7 +227,7 @@ def main(argv: list[str] | None = None) -> int:
     import runpod_provider as rp
 
     if args.resume_pod:
-        bootstrap = base64.b64encode((REPO / "spikes/newton/newton_job.sh").read_bytes()).decode()
+        bootstrap = base64.b64encode((REPO / args.bootstrap).read_bytes()).decode()
         env = rp.job_env(paths["bundle"], job_id, args.deadline_minutes, args.image)
         env["CERBERUS_CREATED_EPOCH"] = str(int(time.time()))
         env["CERBERUS_LAB_REF"] = "v3.0.0"
@@ -219,18 +242,18 @@ def main(argv: list[str] | None = None) -> int:
                            "dockerStartCmd": [rp.SHORT_BOOTSTRAP]})
         status, text = rp._request("PATCH", f"{rp.API_URL}/{args.resume_pod}", os.environ["RUNPOD_API_KEY"],
                                    body.encode())
-        print(f"[resume] PATCH {args.resume_pod} -> HTTP {status} {text[:200]}")
+        print(f"[resume] PATCH {args.resume_pod} -> HTTP {status} {safe_body(text)}")
         if status >= 400:
             return 1
         status, text = rp._request("POST", f"{rp.API_URL}/{args.resume_pod}/start",
                                    os.environ["RUNPOD_API_KEY"], b"{}")
-        print(f"[resume] start -> HTTP {status} {text[:200]}")
+        print(f"[resume] start -> HTTP {status} {safe_body(text)}")
         if status >= 400:
             return 1
         print(json.dumps({"job_id": job_id, "pod_id": args.resume_pod, "resumed": True}, indent=2))
         return 0
 
-    bootstrap = base64.b64encode((REPO / "spikes/newton/newton_job.sh").read_bytes()).decode()
+    bootstrap = base64.b64encode((REPO / args.bootstrap).read_bytes()).decode()
     env = rp.job_env(paths["bundle"], job_id, args.deadline_minutes, args.image)
     env["CERBERUS_CREATED_EPOCH"] = str(int(time.time()))
     env["CERBERUS_LAB_REF"] = "v3.0.0"
@@ -252,7 +275,8 @@ def main(argv: list[str] | None = None) -> int:
         guard = subprocess.run(
             [sys.executable, str(REPO / "spikes/newton/pod_guard.py"), "--detach",
              "--id", pod_id, "--rate", str(rate), "--started", str(int(time.time())),
-             "--wall", "7200", "--hard-wall", "9000", "--usd", "2.5"],
+             "--wall", str(args.wall_s), "--hard-wall", str(args.wall_s * 1.25),
+             "--usd", str(args.usd_cap)],
             capture_output=True, text=True)
         print(f"[guard] {guard.stdout.strip() or guard.stderr.strip()}")
         watch_log = stage_dir / "watch.log"

@@ -651,21 +651,21 @@ masks the rest through the repo's redaction helper, and `pod_guard.py` records o
 
 * Code and this report: branch `newton-spike`, commits `8c08b2b..HEAD` (local; not pushed — SSH auth is
   broken). Pod code travels as a git bundle.
-* Phase 3 R2 prefixes:
-  * `cerberus-robotics/jobs/newton-20261115T175131Z/` — `outputs/{host.json,transfer_gwo_true,transfer_gwo_false}`
-    (the clean-scan transfer and the contaminated comparison), `logs/{ray_false,ray_true,transfer_gwo_true,
-    transfer_gwo_false}.log`. The two `ray_*` runs in this prefix failed on the plane/curriculum bug.
-  * `cerberus-robotics/jobs/newton-20261115T180119Z/` — `outputs/ray_{false,true}/{ray_attribution.json,
-    grid_env0.txt}`, `logs/ray_{false,true}.log`, `host.json` (the attribution measurement).
-* Phase 2: `jobs/newton-20261115T153614Z/` (rest pose, transfer A/B, scene sizes) and
-  `jobs/newton-20261115T160621Z/` (the installed `mdp.height_scan` source). Phase 1:
-  `jobs/newton-20261115T035749Z/` (install, stock-task smoke, video, parity, ordering transfer).
-* Pods `rwmhwno9bflsbf`, `ofcqe4o85uqsjh`, `62f3leopdsfgu1`, `dwf452id9j7f6e`, `5v3r6d7nl7l3xu` are all
-  **stopped** (`EXITED`), not deleted: the owner deletes them. The phase-1 pod's volume still holds its partial
-  scene fetch.
-* Reproduce: `python3 spikes/newton/submit_run.py --dry-run`, then `--start-watch`; phase 3 uses
-  `--bootstrap spikes/newton/newton_job3.sh --set CERBERUS_ONLY=ray` (attribution only) or without `--set`
-  (attribution + transfer); results with `python3 spikes/newton/collect_results.py --job-id <job>`.
-* Phase-3 spend: ≈ **$0.18** of GPU time across two pods (12 min at $0.89/h, 6 min at $0.59/h), inside the
-  1.0 USD / 60 min cap. All pod logs are the containers' own files; no API response body is printed or stored
-  (`submit_run.py:safe_body` strips the pod `env` map and masks through `scripts/redact.py`).
+* Phase 4 R2 prefixes:
+  * `cerberus-robotics/jobs/newton-20261115T205844Z/` — `outputs/{host.json,rollout_clip/{rollout_clip.json,
+    videos/clip_0000.mp4,stills/{frame0,first_fall,last}.png}},outputs/retrain_probe/retrain_probe.json`,
+    `logs/{rollout_clip,clip_stills,retrain_probe}.log`.
+  * `cerberus-robotics/jobs/newton-20261115T211205Z/` — the failed close-up attempt (`logs/clip_plane.log`,
+    `job.log`); no clip came out of it.
+* Earlier phases: `jobs/newton-20261115T{035749,153614,160621,175131,180119}Z/` (install/smoke/video/parity,
+  rest pose/transfer A-B/scene sizes, installed height-scan source, clean-scan transfer, ray attribution).
+* Figures: `docs/reports/figures/newton_clip_{frame0,first_fall,last}.png` (downscaled from the 1920x1080
+  stills).
+* Pods `rwmhwno9bflsbf`, `ofcqe4o85uqsjh`, `62f3leopdsfgu1`, `dwf452id9j7f6e`, `5v3r6d7nl7l3xu`,
+  `hnnyl5i537gk8f`, `30wtkfm41lybhh` are all **stopped** (`EXITED`), not deleted: the owner deletes them.
+* Reproduce: `python3 spikes/newton/submit_run.py --dry-run`, then `--start-watch`; phase 4 uses
+  `--bootstrap spikes/newton/newton_job4.sh` (`--set CERBERUS_ONLY=clip` for the close-up clip only); results
+  with `python3 spikes/newton/collect_results.py --job-id <job>`.
+* Phase-4 spend: ≈ **$0.45** of GPU time across two pods (13 min at $0.89/h, 5 min at $0.89/h), inside the
+  0.8 USD / 45 min cap. No API response body is printed or stored (`submit_run.py:safe_body` strips the pod
+  `env` map and masks through `scripts/redact.py`; `pod_guard.py` records only the HTTP status).

@@ -23,6 +23,7 @@ def test_job_payload_has_no_ssh_and_overrides_start():
     assert first["dockerStartCmd"] == [rp.SHORT_BOOTSTRAP]
     assert first["env"]["CERBERUS_BOOTSTRAP_B64"] == "ZWNobyBoaQ=="
     assert first["env"]["A"] == "1"
+    assert first["volumeInGb"] == 0 and "volumeMountPath" not in first
     assert first["allowedCudaVersions"] == ["13.0"]
     decoded = base64.b64decode(first["env"]["CERBERUS_BOOTSTRAP_B64"]).decode()
     assert decoded == "echo hi"

@@ -46,10 +46,17 @@ The pod runs one job and stops itself; nothing reaches it over SSH.
   injected by RunPod). The first attempt sends `allowedCudaVersions: ["13.0"]`, then filter-free; secure cloud; GPUs
   A40, 4090, A5000, L40S, A6000; 100 GB container disk.
 - **Job flow** (`scripts/job_entrypoint.sh`): self-test (a read-only authenticated `GET /v1/pods/<id>`, reported as
-  `self_stop_ok`) → fetch the bundle and clone → driver gate → **5 consecutive Kit launches** (`pod_launch_probe.sh
-  --max-launches 1`; 4+ started continues, fewer writes `LAUNCH_LOW ok/total` and stops) → stand test → scripted smoke
-  → navigation (N=10, metrics only) → replay of one success and one failure only when ≥20 min remain → sync → self-stop.
-  A 30 s heartbeat uploads `status.json` and the log tail.
+  `self_stop_ok`) → fail-fast image check (isaaclab.sh must be in the image's `/workspace`; if not, `IMAGE_BAD` and
+  stop — **never reinstall Lab**) → fetch the bundle and clone → driver gate → **launch gate** (`scripts/launch_gate.py`:
+  proceed as soon as **one** launch reaches Startup Complete; abandon after 10 consecutive failures or 15 minutes in
+  the launch stage, writing `LAUNCH_ABANDON ok/total`) → stand test → scripted smoke → navigation (N=10, metrics only)
+  → replay of one success and one failure only when ≥20 min remain → sync → self-stop. A 30 s heartbeat uploads
+  `status.json` and the log tail.
+- **Launch window**: a launch is no longer cut off at a fixed 60 s. `kit_retry.py` waits up to **5 minutes** for
+  `Simulation App Startup Complete` and declares the launch hung early only when the Kit log has not grown for
+  **4 minutes** AND the process group's CPU is below **5%** AND the GPU is idle; if a probe cannot answer, the launch is
+  never killed on that evidence. Every attempt row records elapsed seconds, outcome, `window=startup|liveness|5min-cap`,
+  crash signature and the hygiene log path.
 - **Self-stop**: `runpodctl stop pod "$RUNPOD_POD_ID"` (3 retries) when the binary exists, otherwise
   `POST https://rest.runpod.io/v1/pods/<id>/stop` with `Authorization: Bearer`, `User-Agent: cerberus-pod-tools/1.0`.
   A failure writes `STOP_FAILED` so the laptop watcher stops the pod.

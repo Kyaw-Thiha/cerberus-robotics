@@ -189,38 +189,23 @@ done
 echo "[job] env ok (rclone remote $REMOTE)"
 self_test
 
-# A streaming image can start the entrypoint before its lower layers are materialized; physics must wait.
-stage "wait-image"
+# Fail fast on a bad image state: with volumeInGb 0 the image's /workspace is visible, so Lab must be at ISAACLAB_PATH.
+# A missing Lab means the pod was created with a volume mount (or the wrong image); do not reinstall, just stop.
+stage "check-lab"
 LAB_PATH="${ISAACLAB_PATH:-/workspace/isaaclab}"
-for i in $(seq 1 60); do
-    [ -f "$LAB_PATH/isaaclab.sh" ] && [ -d /isaac-sim ] && break
-    [ $((i % 6)) -eq 0 ] && echo "[job] waiting for the image layers ($i/60): $LAB_PATH/isaaclab.sh"
+for i in $(seq 1 12); do
+    [ -f "$LAB_PATH/isaaclab.sh" ] && break
     sleep 5
 done
 if [ ! -f "$LAB_PATH/isaaclab.sh" ]; then
-    # RunPod defaults a 20 GB volume at /workspace, which shadows the image's /workspace (and its Lab).
-    FOUND=$(find / -maxdepth 6 -name isaaclab.sh -not -path '/proc/*' -not -path '/sys/*' 2>/dev/null | head -1)
-    if [ -n "$FOUND" ]; then
-        LAB_PATH=$(dirname "$FOUND"); echo "[job] found Isaac Lab at $LAB_PATH"
-    else
-        echo "[job] Lab missing at $LAB_PATH; installing the pinned ref into the visible /workspace"
-        rm -rf "$LAB_PATH"; mkdir -p "$LAB_PATH"
-        git init "$LAB_PATH" >/dev/null 2>&1
-        git -C "$LAB_PATH" remote add origin https://github.com/isaac-sim/IsaacLab.git
-        git -C "$LAB_PATH" fetch --depth 1 origin e3f7d9ff1f5d7f8280de3ece9000b7117f66bcf4 >/dev/null 2>&1 \
-            && git -C "$LAB_PATH" checkout --detach FETCH_HEAD >/dev/null 2>&1 \
-            || { echo "[job] Lab fetch failed" >&2; finish 10; }
-        ln -sfn /isaac-sim "$LAB_PATH/_isaac_sim"
-        chmod +x "$LAB_PATH/isaaclab.sh"
-        timeout 1500 bash -c "cd '$LAB_PATH' && ./isaaclab.sh --install all" > /workspace/lab_install.log 2>&1 \
-            || { echo "[job] Lab install failed" >&2; tail -20 /workspace/lab_install.log; finish 10; }
-        echo "[job] Lab installed from the pinned ref"
-    fi
-    export ISAACLAB_PATH="$LAB_PATH"
+    echo "[job] IMAGE_BAD: isaaclab.sh missing at $LAB_PATH" >&2
+    ls -la /workspace 2>&1 | head -5
+    echo "[job] volume likely mounted over /workspace; stopping without reinstalling" >&2
+    CERBERUS_STATUS_EXTRA="IMAGE_BAD $LAB_PATH missing" status_json > /workspace/job_status.json
+    rclone copyto /workspace/job_status.json "$REMOTE/jobs/$JOB_ID/status.json" >/dev/null 2>&1
+    finish 9
 fi
-echo "[job] lab present at $LAB_PATH (isaac-sim: $( [ -d /isaac-sim ] && echo yes || echo no ))"
-
-heartbeat & HEARTBEAT_PID=$!
+echo "[job] lab present at $LAB_PATH"
 
 if [ ! -d "$REPO/.git" ]; then
     stage "fetch-code"
@@ -251,17 +236,12 @@ fi
 stage "gate"
 bash scripts/pod_driver_gate.sh || { echo "[job] gate rejected" >&2; finish 6; }
 
-stage "launch-experiment"
-for i in 1 2 3 4 5; do
-    echo "[job] launch attempt $i/5"
-    timeout 240 bash scripts/pod_launch_probe.sh --max-launches 1 || true
-done
-read -r LAUNCH_OK LAUNCH_TOTAL <<< "$(launch_counts)"
-echo "[job] launches started $LAUNCH_OK/$LAUNCH_TOTAL"
-if [ "$LAUNCH_OK" -lt 4 ]; then
-    CERBERUS_STATUS_EXTRA="LAUNCH_LOW $LAUNCH_OK/$LAUNCH_TOTAL" status_json > /workspace/job_status.json
+stage "launch-gate"
+if ! timeout 1000 python3 scripts/launch_gate.py --max-consecutive-failures 10 --cap-minutes 15 -- \
+    "$LAB" -p scripts/pod_launch_probe_env.py --headless --verbose-kit; then
+    CERBERUS_STATUS_EXTRA="LAUNCH_ABANDON $(launch_counts | tr ' ' '/')" status_json > /workspace/job_status.json
     rclone copyto /workspace/job_status.json "$REMOTE/jobs/$JOB_ID/status.json" >/dev/null 2>&1
-    echo "[job] fewer than 4 of 5 launches started; stopping without physics" >&2
+    echo "[job] no launch started within the gate; stopping without physics" >&2
     finish 8
 fi
 

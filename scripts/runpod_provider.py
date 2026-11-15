@@ -46,7 +46,6 @@ def create_job_pod(api_key: str, *, image: str, gpu_types: list[str], env: dict[
         # RunPod defaults an omitted volume to 20 GB mounted at /workspace, which shadows the image's
         # /workspace (where the image installs Isaac Lab). Zero disables the mount.
         "volumeInGb": 0,
-        "volumeMountPath": "",
         "ports": [],
         "cloudType": "SECURE",
         "dockerEntrypoint": ["/bin/bash", "-c"],

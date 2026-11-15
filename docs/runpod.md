@@ -34,6 +34,30 @@ available — structured, no auth-string parsing.
   if you don't constrain the datacenter differently — relevant if you're
   re-rolling specifically to escape a bad host (see driver section below).
 
+## Rehearsal mode and the lite scene (CPU pods, no GPU)
+
+- **`CERBERUS_REHEARSAL=1`** replaces Kit with `scripts/rehearsal/stub_lab.sh` (prints `Simulation App Startup Complete`
+  after two seconds), uses the tiny R2 fixture under `worlds/rehearsal/` (same layout and scene-id forms as a real
+  home) and runs the whole job path: image check (stubbed), scene-id normalisation for every id form, disk check,
+  fetch, stubbed driver gate, launch gate, stand/scripted/navigation stubs with sample outputs and clips, heartbeat,
+  R2 sync, manifest check and self-stop. It is the only way to exercise the pipeline without a GPU.
+- **`CERBERUS_LITE=1`** follows the rehearsal with `scripts/build_lite_scene.py` on the same pod: the preprocessed
+  home (~27 GB, fetched in ~10 minutes on a CPU pod) is flattened to one collision-only mesh, uploaded to
+  `worlds/grscenes_lite/<scene-id>/`, and accepted only when it is under 100 MB and its occupancy grid matches the
+  original's blocked cells with IoU >= 0.98. The raw fetch path stays as the fallback.
+- CPU pods cap the container disk at **30 GB** (`Container Disk must be less than or equal to 30`), so the lite stage
+  needs the 26.7 GB cache plus a few GB of headroom, and its free-disk threshold is `CERBERUS_LITE_MIN_FREE_GB`
+  (default 28) rather than the 60 GB a GPU scene fetch requires.
+
+## Guard under systemd
+
+`scripts/install_guard_service.sh --targets <id:rate> --usd 3` installs a **systemd user service** (not a child of the
+agent shell) whose `ExecStart` is wrapped in `systemd-inhibit --what=sleep:idle`, and restarts it on failure. The guard
+writes `outputs/guard_tick.json` every 30 s; **`scripts/guard_health.py --max-gap 120 --pod-id <id>` runs at every
+agent turn and stops the pod when ticks are stale** (a laptop sleep or a dead service is exactly when a pod runs
+unguarded). Its `--started` value is the install-time epoch, not a systemd specifier. A pod whose `runtime` is still
+null at the 15-minute container grace is **deleted**, not stopped.
+
 ## Job mode (no SSH) — the current path
 
 The pod runs one job and stops itself; nothing reaches it over SSH.

@@ -68,10 +68,11 @@ def main(argv: list[str] | None = None) -> int:
 
     from vast_provider import guard_decision
 
-    key = os.environ.get("VAST_API_KEY", "")
+    key_env = "RUNPOD_API_KEY" if args.provider == "runpod" else "VAST_API_KEY"
+    key = os.environ.get(key_env, "")
     if not key:
-        print("session_guard: VAST_API_KEY is not set", file=sys.stderr)
-        write_state(status="error", reason="no VAST_API_KEY")
+        print(f"session_guard: {key_env} is not set", file=sys.stderr)
+        write_state(status="error", reason=f"no {key_env}")
         return 2
 
     stopping = False

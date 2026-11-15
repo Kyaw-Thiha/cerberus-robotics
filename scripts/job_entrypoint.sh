@@ -233,6 +233,21 @@ if [ ! -f "$CKPT" ]; then
 fi
 [ -f "$CKPT" ] || { echo "[job] checkpoint missing" >&2; finish 5; }
 
+# Scene data goes on the container disk (volumeInGb is 0, so /workspace is the 100 GB disk, not a mount).
+SCENE_DIR="data/scenes/grscenes/home/scenes/${S}_usd"
+if [ ! -d "$SCENE_DIR" ]; then
+    stage "fetch-scenes"
+    df -h /workspace | tail -1
+    FREE_GB=$(df --output=avail -BG /workspace | tail -1 | tr -dc '0-9')
+    echo "[job] free container disk ${FREE_GB}G before the scene fetch"
+    [ "${FREE_GB:-0}" -ge 60 ] || { echo "[job] less than 60 GB free; refusing the scene fetch" >&2; finish 11; }
+    # The R2 worlds/grscenes/home prefix is the preprocessed cache (USD + shared models/Materials, ~27 GB),
+    # not the raw GRScenes mirror.
+    timeout 1800 python3 scripts/fetch_grscenes_from_r2.py --scene-id "$S" || { echo "[job] scene fetch failed" >&2; finish 12; }
+    df -h /workspace | tail -1
+fi
+[ -d "$SCENE_DIR" ] || { echo "[job] scene dir missing after fetch: $SCENE_DIR" >&2; finish 12; }
+
 stage "gate"
 bash scripts/pod_driver_gate.sh || { echo "[job] gate rejected" >&2; finish 6; }
 

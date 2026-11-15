@@ -71,7 +71,8 @@ def mask_logs(iid: str, out_dir: Path) -> Path:
 def create(spec_path: Path, *, code_bundle: str, deadline_minutes: int, max_price: float,
            job_prefix: str) -> int:
     import vast_provider as vp
-    from create_vast_instance import (DEFAULT_IMAGE, build_job_payload, job_bootstrap, job_env)
+    from create_vast_instance import build_job_payload, job_bootstrap, job_env
+    from vast_provider import DEFAULT_IMAGE
 
     key = os.environ["VAST_API_KEY"]
     status, offers, note = vp.search_offers(key)

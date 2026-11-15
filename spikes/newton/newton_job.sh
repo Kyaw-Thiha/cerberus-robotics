@@ -269,6 +269,23 @@ cat "$OUT/host.json"
 cp "$OUT/host.json" "$LOGS/host.json"
 
 # ---------------------------------------------------------------------------------------------
+# Diagnostic-only mode: one extra transfer run and stop. Used when the main stages are already
+# answered and only the actuator-model question is open (`CERBERUS_ONLY_STAGE4B=1`).
+# ---------------------------------------------------------------------------------------------
+if [ "${CERBERUS_ONLY_STAGE4B:-0}" = "1" ]; then
+    stage stage4b-legacy-actuators
+    timeout --signal=KILL 900 "$VENV/bin/python" -m spikes.newton.transfer_eval \
+        --policy "$CKPT" --out "$OUT/stage4b_legacy" --joint_ordering none \
+        --levels 0,1,2,3,4,5 --envs_per_level 64 --steps 1000 --vx 0.8 --viz none --device cuda:0 \
+        --use_newton_actuators false > "$LOGS/stage4b_legacy.log" 2>&1
+    echo "[stage4b] legacy actuators rc=$?"
+    tail -20 "$LOGS/stage4b_legacy.log"
+    sync_outputs
+    stage done
+    finish 0
+fi
+
+# ---------------------------------------------------------------------------------------------
 # Stage 1: stock Go2 rough task on Newton, then 5 consecutive launches
 # ---------------------------------------------------------------------------------------------
 stage stage1-stock

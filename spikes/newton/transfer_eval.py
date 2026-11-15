@@ -32,6 +32,9 @@ def main() -> int:
     parser.add_argument("--levels", default="0,1,2,3,4,5")
     parser.add_argument("--envs_per_level", type=int, default=64)
     parser.add_argument("--vx", type=float, default=0.8)
+    parser.add_argument("--use_newton_actuators", default="true", choices=["true", "false"],
+                        help="backend-native actuator path (stock Go2 Newton cfg: true) or the PhysX-style "
+                             "implicit actuators the shipped checkpoint was trained with")
     args = parser.parse_args(sys.argv[1:])
 
     out = common.out_dir(args.out)
@@ -39,10 +42,13 @@ def main() -> int:
     num_envs = len(levels) * args.envs_per_level
     timer = common.Timer()
     report = {"stage": "transfer", "args": vars(args), "versions": common.software_versions()}
+    if args.use_newton_actuators == "false":
+        report["variant"] = "physx-style implicit actuators on Newton physics"
 
     cfg, info = tasks.build_cfg(num_envs=num_envs, joint_ordering=args.joint_ordering,
                                 forward_command=args.vx, seed=args.seed,
-                                episode_length_s=args.steps * 0.02 + 2.0)
+                                episode_length_s=args.steps * 0.02 + 2.0,
+                                use_newton_actuators=args.use_newton_actuators == "true")
     report["cfg_info"] = info
     tasks.register()
 

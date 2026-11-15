@@ -27,7 +27,7 @@ PLAY_ENTRY_POINT = "spikes.newton.tasks:UnitreeGo2RoughCerberusNewtonEnvCfg_PLAY
 _DEFAULT_JOINT_ORDERING = "none"
 
 
-def _select_newton_physics(cfg) -> dict:
+def _select_newton_physics(cfg, use_newton_actuators: bool = True) -> dict:
     """Replace the physics preset container with the concrete Newton backend."""
     physics = cfg.sim.physics
     newton = getattr(physics, "newton_mjwarp", None)
@@ -40,8 +40,8 @@ def _select_newton_physics(cfg) -> dict:
     cfg.sim.physics = newton  # SimulationContext rejects the unresolved preset container
     used_newton_actuators = None
     if hasattr(cfg.sim, "use_newton_actuators"):
-        cfg.sim.use_newton_actuators = True
-        used_newton_actuators = True
+        cfg.sim.use_newton_actuators = bool(use_newton_actuators)
+        used_newton_actuators = bool(use_newton_actuators)
     return {"preset_container": preset_container, "physics": type(newton).__name__,
             "use_newton_actuators": used_newton_actuators}
 
@@ -98,7 +98,8 @@ def apply_joint_ordering(cfg, joint_ordering: str) -> dict:
 
 
 def build_cfg(*, num_envs: int = 64, joint_ordering: str = "none", episode_length_s: float | None = None,
-              forward_command: float | None = None, seed: int | None = None) -> tuple[object, dict]:
+              forward_command: float | None = None, seed: int | None = None,
+              use_newton_actuators: bool = True) -> tuple[object, dict]:
     """The Cerberus rough Play cfg on Newton, with the transfer flags applied.
 
     Returns ``(cfg, info)`` where ``info`` records every deviation from the PhysX config.
@@ -107,7 +108,7 @@ def build_cfg(*, num_envs: int = 64, joint_ordering: str = "none", episode_lengt
 
     cfg = UnitreeGo2RoughCerberusEnvCfg_PLAY()
     info = {"base_cfg": type(cfg).__name__, "num_envs": int(num_envs)}
-    info.update(_select_newton_physics(cfg))
+    info.update(_select_newton_physics(cfg, use_newton_actuators))
     info.update(_newton_height_scanner(cfg))
     info.update(apply_joint_ordering(cfg, joint_ordering))
 

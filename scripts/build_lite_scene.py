@@ -70,10 +70,10 @@ def triangle_areas(points, faces):
 
 
 def build(scene_usd: Path, out_dir: Path, scene_id: str, budget_s: float = 1800.0,
-          thresholds=(0.0, 0.0025, 0.005, 0.01, 0.02), max_mb: float = 100.0,
+          thresholds=(0.0, 0.0025, 0.005, 0.01, 0.02, 0.05), max_mb: float = 100.0,
           min_iou: float = 0.98) -> dict:
     from common.cerberus_worlds.scene_geometry import write_triangle_mesh_usd
-    from planning.occupancy import OccupancyConfig, build_grid, save_npz, scene_triangles_m
+    from planning.occupancy import OccupancyConfig, from_usd, save_npz, scene_triangles_m
 
     out_dir.mkdir(parents=True, exist_ok=True)
     sid = folder_name(scene_id)
@@ -85,10 +85,11 @@ def build(scene_usd: Path, out_dir: Path, scene_id: str, budget_s: float = 1800.
         config = OccupancyConfig.from_yaml(cfg_path) if cfg_path.is_file() else OccupancyConfig()
     except ImportError:  # PyYAML is optional on a bare CPU image; the defaults are the same policy
         config = OccupancyConfig()
-    # Grids come from the in-memory triangle set; reloading the 21M-triangle stage per threshold OOMed a CPU pod.
-    grid_orig = build_grid(points, faces, config=config, scene_id=sid)
 
+    # Size-first: write a candidate and measure it; only a candidate that fits the budget gets a grid. Building a
+    # grid per threshold, or reloading the 21M-triangle stage repeatedly, OOMed the CPU pods.
     attempts, chosen = [], None
+    grid_orig = None
     for threshold in thresholds:
         if threshold > 0:
             p_keep, f_keep = compact(points, faces, areas >= threshold)
@@ -98,16 +99,27 @@ def build(scene_usd: Path, out_dir: Path, scene_id: str, budget_s: float = 1800.
         write_triangle_mesh_usd(p_keep, f_keep, lite, meters_per_unit=1.0,
                                 root_prim="/World", mesh_prim="/World/CollisionMesh")
         add_collision(lite, "/World/CollisionMesh")
-        grid_lite = build_grid(p_keep, f_keep, config=config, scene_id=sid)
-        iou = grid_iou(grid_orig, grid_lite)
         size = lite.stat().st_size
-        attempts.append({"threshold_m2": threshold, "bytes": size, "triangles": len(f_keep),
+        fits = size <= max_mb * 1e6
+        print(f"[lite] threshold {threshold:g} m2 -> {size} B, {len(f_keep)} tris, fits={fits}")
+        if not fits:
+            attempts.append({"threshold_m2": threshold, "bytes": size, "triangles": int(len(f_keep)),
+                             "iou_blocked": None})
+            lite.unlink(missing_ok=True)
+            del p_keep, f_keep
+            continue
+        if grid_orig is None:
+            grid_orig = from_usd(scene_usd, scene_id=sid, config=config)
+        grid_lite = from_usd(lite, scene_id=sid, config=config)
+        iou = grid_iou(grid_orig, grid_lite)
+        attempts.append({"threshold_m2": threshold, "bytes": size, "triangles": int(len(f_keep)),
                          "iou_blocked": round(iou, 6)})
-        print(f"[lite] threshold {threshold:g} m2 -> {size} B, {len(f_keep)} tris, IoU {iou:.6f}")
-        if size <= max_mb * 1e6 and iou >= min_iou:
+        print(f"[lite] threshold {threshold:g} m2 IoU {iou:.6f}")
+        if iou >= min_iou:
             chosen = (lite, p_keep, f_keep, iou, threshold, grid_lite)
             break
         lite.unlink(missing_ok=True)
+        del p_keep, f_keep, grid_lite
     if chosen is None:
         raise SystemExit("[lite] no threshold met both size and IoU")
 
@@ -119,7 +131,7 @@ def build(scene_usd: Path, out_dir: Path, scene_id: str, budget_s: float = 1800.
     save_npz(grid_lite, out_dir / "occupancy.npz")
 
     report = {"scene_id": sid, "lite_file": final.name, "lite_bytes": final.stat().st_size,
-              "triangles": len(f_keep), "vertices": len(p_keep), "iou_blocked": round(iou, 6),
+              "triangles": int(len(f_keep)), "vertices": int(len(p_keep)), "iou_blocked": round(iou, 6),
               "triangle_area_min_m2": threshold, "attempts": attempts,
               "grid_shape": list(grid_orig.grid.shape), "source_bytes": scene_usd.stat().st_size}
     (out_dir / "lite_report.json").write_text(json.dumps(report, indent=2) + "\n")

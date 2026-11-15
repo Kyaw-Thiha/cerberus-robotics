@@ -197,7 +197,27 @@ for i in $(seq 1 60); do
     [ $((i % 6)) -eq 0 ] && echo "[job] waiting for the image layers ($i/60): $LAB_PATH/isaaclab.sh"
     sleep 5
 done
-[ -f "$LAB_PATH/isaaclab.sh" ] || { echo "[job] isaaclab.sh still missing at $LAB_PATH after 5 min" >&2; ls -la /workspace 2>&1 | head; finish 9; }
+if [ ! -f "$LAB_PATH/isaaclab.sh" ]; then
+    # RunPod defaults a 20 GB volume at /workspace, which shadows the image's /workspace (and its Lab).
+    FOUND=$(find / -maxdepth 6 -name isaaclab.sh -not -path '/proc/*' -not -path '/sys/*' 2>/dev/null | head -1)
+    if [ -n "$FOUND" ]; then
+        LAB_PATH=$(dirname "$FOUND"); echo "[job] found Isaac Lab at $LAB_PATH"
+    else
+        echo "[job] Lab missing at $LAB_PATH; installing the pinned ref into the visible /workspace"
+        rm -rf "$LAB_PATH"; mkdir -p "$LAB_PATH"
+        git init "$LAB_PATH" >/dev/null 2>&1
+        git -C "$LAB_PATH" remote add origin https://github.com/isaac-sim/IsaacLab.git
+        git -C "$LAB_PATH" fetch --depth 1 origin e3f7d9ff1f5d7f8280de3ece9000b7117f66bcf4 >/dev/null 2>&1 \
+            && git -C "$LAB_PATH" checkout --detach FETCH_HEAD >/dev/null 2>&1 \
+            || { echo "[job] Lab fetch failed" >&2; finish 10; }
+        ln -sfn /isaac-sim "$LAB_PATH/_isaac_sim"
+        chmod +x "$LAB_PATH/isaaclab.sh"
+        timeout 1500 bash -c "cd '$LAB_PATH' && ./isaaclab.sh --install all" > /workspace/lab_install.log 2>&1 \
+            || { echo "[job] Lab install failed" >&2; tail -20 /workspace/lab_install.log; finish 10; }
+        echo "[job] Lab installed from the pinned ref"
+    fi
+    export ISAACLAB_PATH="$LAB_PATH"
+fi
 echo "[job] lab present at $LAB_PATH (isaac-sim: $( [ -d /isaac-sim ] && echo yes || echo no ))"
 
 heartbeat & HEARTBEAT_PID=$!
@@ -213,7 +233,7 @@ cd "$REPO" || finish 4
 export PYTHONPATH="$REPO${PYTHONPATH:+:$PYTHONPATH}"
 echo "[job] code at $(git log --oneline -1)"
 
-LAB="${ISAACLAB_PATH:-/workspace/isaaclab}/isaaclab.sh"
+LAB="$LAB_PATH/isaaclab.sh"
 S=MV7J6NIKTKJZ2AABAAAAADQ8_usd
 CKPT=policy/locomotion/checkpoints/go2_locomotion_ga_v1_candidate.pt
 ROOT="data/reports/h4_nav/job_$(date -u +%Y%m%dT%H%MZ)"

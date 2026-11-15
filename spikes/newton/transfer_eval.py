@@ -79,13 +79,14 @@ def main() -> int:
 
         robot = env.unwrapped.scene["robot"]
         n = args.num_envs = int(num_envs)
-        alive = torch.ones(n, dtype=torch.bool)
-        first_fall = torch.full((n,), -1, dtype=torch.long)
-        fall_steps = torch.zeros(n)
-        err_vx = torch.zeros(n)
-        err_vy = torch.zeros(n)
-        err_wz = torch.zeros(n)
-        alive_steps = torch.zeros(n)
+        device = obs_vec.device
+        alive = torch.ones(n, dtype=torch.bool, device=device)
+        first_fall = torch.full((n,), -1, dtype=torch.long, device=device)
+        fall_steps = torch.zeros(n, device=device)
+        err_vx = torch.zeros(n, device=device)
+        err_vy = torch.zeros(n, device=device)
+        err_wz = torch.zeros(n, device=device)
+        alive_steps = torch.zeros(n, device=device)
         nan_seen = False
 
         dt = float(report["sim"].get("step_dt") or 0.02)
@@ -97,7 +98,7 @@ def main() -> int:
                 obs = result[0]
                 obs_vec = common.obs_vector(obs)
                 base_contact = common.term_bool(env, "base_contact")
-                just_fell = torch.zeros(n, dtype=torch.bool)
+                just_fell = torch.zeros(n, dtype=torch.bool, device=device)
                 if base_contact is not None:
                     just_fell = base_contact.bool() & alive
                     first_fall[just_fell] = step

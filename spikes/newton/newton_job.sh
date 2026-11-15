@@ -175,9 +175,11 @@ if ! command -v uv >/dev/null 2>&1; then
 fi
 export PATH="$HOME/.local/bin:$PATH"
 command -v uv || { echo "[deps] uv missing" >&2; finish 6; }
-if ! command -v rclone >/dev/null 2>&1; then
+# The image may ship rclone 1.58, which rejects the `Cloudflare` S3 provider, so install the pinned build
+# even when one is already present (`scripts/sync_to_r2.py` documents the same trap).
+if ! rclone version 2>/dev/null | head -1 | grep -q 'v1.7'; then
     curl -fsSL -o /tmp/rclone.zip https://downloads.rclone.org/v1.75.1/rclone-v1.75.1-linux-amd64.zip \
-        && unzip -q /tmp/rclone.zip -d /tmp/rclone \
+        && unzip -q -o /tmp/rclone.zip -d /tmp/rclone \
         && install -m 0755 /tmp/rclone/rclone-v1.75.1-linux-amd64/rclone /usr/local/bin/rclone
 fi
 command -v rclone || { echo "[deps] rclone missing" >&2; finish 6; }
@@ -386,7 +388,7 @@ sync_outputs
 stage stage4-transfer
 for ORDER in none contract; do
     [ "$(remaining)" -gt 420 ] || { echo "[stage4] out of time before ordering=$ORDER"; break; }
-    timeout --signal=KILL 1500 "$VENV/bin/python" -m spikes.newton.transfer_eval \
+    timeout --signal=KILL 900 "$VENV/bin/python" -m spikes.newton.transfer_eval \
         --policy "$CKPT" --out "$OUT/stage4_$ORDER" --joint_ordering "$ORDER" \
         --levels 0,1,2,3,4,5 --envs_per_level 64 --steps 1000 --vx 0.8 --viz none --device cuda:0 \
         > "$LOGS/stage4_$ORDER.log" 2>&1
@@ -417,7 +419,7 @@ stage stage5-scene-fetch
 if [ "$(remaining_min)" -lt 18 ]; then
     echo "[stage5] skipped: $(remaining_min)min left"
 else
-    timeout --signal=KILL 1500 python3 scripts/fetch_grscenes_from_r2.py --scene-id "$SCENE_ID" \
+    timeout --signal=KILL 1200 python3 scripts/fetch_grscenes_from_r2.py --scene-id "$SCENE_ID" \
         --dest "$SCENE_DEST" > "$LOGS/stage5_fetch.log" 2>&1
     echo "[stage5] fetch rc=$?"
     tail -5 "$LOGS/stage5_fetch.log"

@@ -108,7 +108,9 @@ def observation_layout(env) -> dict:
     out = {"groups": {}}
     if manager is None:
         return out
-    active = getattr(manager, "active_terms", {}) or {}
+    active = getattr(manager, "active_terms", None) or {}
+    if not isinstance(active, dict):
+        active = {"policy": list(active)}
     dims = getattr(manager, "group_obs_dim", None)
     for group, terms in active.items():
         names = [getattr(t, "name", str(t)) for t in terms]
@@ -147,10 +149,16 @@ def action_layout(env) -> dict:
     manager = getattr(base, "action_manager", None)
     out = {}
     if manager is not None:
-        out["terms"] = [getattr(t, "name", str(t)) for t in getattr(manager, "active_terms", [])]
+        active = getattr(manager, "active_terms", None) or []
+        # Lab 2.x/3.0 expose active_terms as a dict name->cfg; some 3.0 builds expose a list of terms
+        if isinstance(active, dict):
+            pairs = list(active.items())
+        else:
+            pairs = [(getattr(t, "name", str(i)), t) for i, t in enumerate(active)]
+        out["terms"] = [name for name, _ in pairs]
         out["total_action_dim"] = int(getattr(manager, "total_action_dim", -1))
         term_cfgs = {}
-        for name, term_cfg in (getattr(manager, "active_terms", {}) or {}).items():
+        for name, term_cfg in pairs:
             params = {}
             for field in ("scale", "use_default_offset", "clip", "preserve_order", "joint_names", "joint_ids"):
                 value = getattr(term_cfg, field, None)

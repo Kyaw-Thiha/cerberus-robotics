@@ -59,6 +59,13 @@ The pod runs one job and stops itself; nothing reaches it over SSH.
   is the independent second layer.
 - **Caps**: 3 USD per session across live pods, 90 min of job wall, 3 h absolute, at most 3 pod creations.
 
+**Volume trap (2026-11-15).** The REST default for an omitted `volumeInGb` is a **20 GB volume mounted at
+`/workspace`**, and that mount shadows the image's own `/workspace`, where `v6-*` installs Isaac Lab. A job pod created
+without `volumeInGb: 0` therefore sees an empty `/workspace` and `isaaclab.sh missing`; `create_runpod_job.py` now
+sends `volumeInGb: 0` and an empty `volumeMountPath`. The volume cannot be removed from an existing pod (only grown), so
+a pod created before the fix can only recover by re-installing the pinned Lab ref into the visible `/workspace`, which
+took **~25 minutes** on a 4090 host (the recipe is the fallback branch in `scripts/job_entrypoint.sh`).
+
 Vast job mode is **parked**: the doc-exact args hook (`onstart` = command, `args` = arguments) works, but the 35 GB
 image pull stalls and Vast stops the host mid-pull. The code stays in `scripts/create_vast_instance.py` and
 `scripts/vast_session.py`; it needs a slimmer image.

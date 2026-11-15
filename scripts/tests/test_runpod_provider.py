@@ -2,7 +2,6 @@
 
 import base64
 
-import pytest
 
 import runpod_provider as rp
 

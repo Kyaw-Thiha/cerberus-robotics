@@ -26,9 +26,10 @@ unchanged; where a change to an existing file would be needed it is described be
 
 ## Host and environment
 
-One pod, one GPU. Two more boot cycles were resumptions of the *same* pod (`POST /pods/{id}/start` after a
-stop, and one `reset`), not new creations — the session used 2 creations in total, the second because the
-first could not fetch its code bundle (a bug in my submit script, see "Mistakes made here").
+One pod, one GPU. Two further job boots were resumptions of the *same* pod (`POST /pods/{id}/start` after a
+stop), plus one `reset` attempt that produced no boot; none of those is a creation. The session used **2
+creations** in total — the second because the first could not fetch its code bundle (a bug in my submit
+script, see "Mistakes made here") — which is the handoff's cap.
 
 | | |
 |---|---|
@@ -36,12 +37,12 @@ first could not fetch its code bundle (a bug in my submit script, see "Mistakes 
 | driver | **595.91.07** (CUDA 13.2 shown) — the build that crashes Kit at startup for the PhysX path |
 | price | $0.89/h (secure cloud) |
 | image | `nvidia/cuda:13.0.0-base-ubuntu24.04` (public Docker Hub tag, ~0.25 GB) |
-| image pull + boot | **~9 s** (created 03:57:49Z → first job log line 03:57:58Z) |
+| image pull + boot | **~3–5 s** (pod created 03:57:55Z → the job's first log line 03:57:58Z) |
 | Isaac Lab | tag `v3.0.0` = **`e3f7d9ff`**, the commit the Cerberus `v6-ga` image pins |
 | install (apt + clone + `uv sync`) | **820 s** first boot (deps 44 s, clone ~5 s, `uv sync` 820 s); ~4–5 min on the later boots |
 | launches ok | **5/5** |
 | python deps | isaaclab 28.0.0, isaaclab_newton 9.1.4, newton 1.6.1, warp-lang 1.17.0, torch 2.11.0+cu130, usd-exchange 3.0.1 (**OpenUSD 26.08**), rsl-rl-lib 5.5.1 |
-| spend | ~**$0.95** for this pod (guard estimate at 05:01Z) plus ~$0.02 for the discarded first pod — under the 2.5 USD cap; pod wall clock ~1 h 20 min inside the 2 h cap |
+| spend | **≈ $0.90** of GPU time (≈ 60 min of running pod at $0.89/h) plus ~$0.02 for the discarded first pod; the guard's wall-clock estimate reads $1.10 because it runs from the guard start and counts stopped time. Under the 2.5 USD / 2 h cap |
 
 The install command, at this tag:
 
@@ -65,8 +66,10 @@ isaaclab train --rl_library rsl_rl --task Isaac-Velocity-Rough-UnitreeGo2 \
     --max_iterations 50 --viz none physics=newton_mjwarp env.scene.num_envs=128
 ```
 
-* 50 iterations in **84.15 s** (0.38–0.41 s/iteration at 128 envs), `Episode_Termination/base_contact`
-  0.98 and mean reward rising — it is learning, which is all a smoke run has to show.
+* `Training time: 84.15 s` for 50 iterations at 128 envs, steady-state **0.38–0.41 s/iteration** (the first
+  iterations carry compilation and CUDA-graph capture). This is a smoke run, not a learning result: mean
+  reward drifts from −0.89 to −8.64 and `Episode_Termination/base_contact` is 0.98, i.e. an untrained policy
+  still falls over. What it does show is that the step loop, the logger and the checkpoints are finite.
 * `model_49.pt` written, `params_finite: true`, no `nan` anywhere in the log.
 * **5/5** consecutive launches succeeded (31, 32, 31, 31, 31 s each), each a fresh `isaaclab train` process.
 * Logs: `jobs/newton-20261115T035749Z/logs/stage1_train.log`, `stage1_launch_{1..5}.log`,
@@ -263,7 +266,7 @@ exactly those per level).
   (implemented, `stage4b` in `spikes/newton/newton_job.sh`) could not execute — the pod's host had no free
   GPU when I tried to start it after the disk failure (`start pod: There are not enough free GPUs on the
   host machine`). No policy retrain on Newton was attempted (the handoff's condition for it was "if budget
-  remains"; after four boot cycles it did not).
+  remains"; after three job boots — one creation and two resumes — plus a failed restart it did not).
 * **Stage 5 produced no data at all.** No parse, no load, no spawn pose check, no OpenUSD crash verdict — only
   the disk exhaustion and the OpenUSD 26.08 fact.
 * **No PhysX number was re-measured on this pod.** The comparison uses the committed GA and September sweeps,

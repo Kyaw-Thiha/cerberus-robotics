@@ -14,7 +14,10 @@ of 384 environments falls within ~1.5 s. The two explanations that phase 2 could
   explicit list changes nothing (fall rate 1.0 in both, medians 74 vs 77 steps);
 * **the backend-native actuator path** — switching `use_newton_actuators` off leaves the transfer result
   unchanged (1.0 vs 1.0, medians 76 vs 71 steps) and leaves the rest pose identical to 0.05 deg, so the
-  reported Newton double-PD issue (#5806) is not what breaks this policy.
+  reported Newton double-PD issue (#5806) is not what breaks this policy;
+* **the height scan hitting the robot** — it *did* hit it (5 % of cells, all under the body and feet), and
+  preserving the stock `global_world_only` flag makes the flat-ground scan match the formula **187/187 cells
+  within 1 cm**, but the transfer result does not move (1.0 vs 1.0, medians 79 vs 78 steps).
 
 Scene loading still has no result, but the reason is now measured rather than suspected: one home mirror is
 **24.9 GB**, of which **20.2 GB is the shared model geometry** and **4.7 GB is textures**, and the fetch target
@@ -32,7 +35,7 @@ unchanged; where a change to an existing file would be needed it is described be
 | 3 | Cerberus task parity on Newton | **yes, MDP-identical** | 235-D obs, term order equal to the contract, joint order equal to the contract by name, decimation 4 @ dt 0.005, action dim 12, command ranges ±1, no NaN, 500/500 steps standing |
 | 4 | policy transfer | **no**, and the two explanations on the table are closed | 100 % fall rate at levels 0–5 in four runs; ordering none/contract → medians 74/77 steps; actuators on/off → medians 76/71 steps; rest pose identical across actuator paths (≤0.05 deg) |
 | 5 | scene load | **not reached**, cause measured | home mirror 24.9 GB (models geometry 20.2 GB, Materials textures 4.7 GB, per-scene USD 3.2 MB) against a 20 GB `/workspace` volume; a geometry-only fetch of the shared model library (20.2 GB) still does not fit |
-| 6 | height-scan convention | **formula verified, value not measured** | installed `mdp.height_scan` reads `pos_w_z - ray_hits_z - offset` (offset 0.5, no clip in the function); the flat-ground measurement did not run (script bugs, then the pod could not be restarted) |
+| 6 | height-scan convention | **verified, and the self-hit contamination is fixed** | formula from the installed source: `pos_w_z - ray_hits_z - 0.5`; contaminated scan 94.8 % of cells within 1 cm (11 outliers under the torso and feet); with the stock `global_world_only=True`, **187/187 within 1 cm** and hits all at z = 0 |
 
 ## Host and environment
 
@@ -258,7 +261,7 @@ What this means for the report: the 0.20 m sink seen in stage 3 is real but ordi
 identically with PhysX-style actuators — so it explains why a PhysX policy *starts* lower on Newton than it
 expects, but not why it falls within 1.5 s.
 
-## Stage 6 — height-scan convention (formula verified, value not measured)
+## Stage 6 — height-scan convention: the formula (phase 2)
 
 The observation term the environment actually imports, read from the installed package **on the pod**
 (`inspect.getsource`, saved verbatim to `outputs/height_scan/height_scan_source.txt`):
@@ -275,14 +278,9 @@ So, at this tag: **height = sensor_frame_z − ray_hit_z − 0.5**, no clip and 
 belongs to the observation term, not to this function. That is consistent with the contract file's stated
 formula, including the sign — i.e. the *convention* is not misread.
 
-The measured flat-ground value was **not obtained**. The check (`spikes/newton/height_scan_check.py`) builds
-the task with a plane terrain and compares the height-scan slice of the observation cell by cell with the
-formula. It failed twice on my own bugs — a duplicate `--steps` flag, then a term lookup that assumed the
-observation manager exposes term *objects* while this build exposes a list of names — and by the time both
-were fixed the pod could not be restarted (its host had no free GPU) and the session's creation budget was
-spent. What the check would print is `base_z − 0 − 0.5` per cell (≈ **−0.20 m** at the settled 0.30 m base
-height), which is what the formula gives; that number is a prediction, not a measurement, and is not used as
-evidence anywhere in this report.
+The flat-ground value was not measured in phase 2 (`height_scan_check.py` failed twice on my own bugs, then
+the pod could not be restarted). **Phase 3 measured it** and the result is in stage 8: with a clean sensor the
+187 cells are all within 1 cm of `base_z − 0.5` and every hit is at z = 0.
 
 ## Stage 7 — scene payloads and the container volume (phase 2)
 
@@ -315,6 +313,91 @@ rather than GB, and (5) run the existing parse probe plus a 200-step stand on it
 (and the navigation lane) testable on a 20 GB volume at all; it needs no change to any existing file, and the
 colliders are the one thing that must survive.
 
+## Stage 8 — ray attribution and the scan fix (phase 3)
+
+Flat ground, the Go2 held at its default joint targets (100 steps to settle), 4 envs, the 187-cell scan dumped
+(`spikes/newton/ray_attribution.py`). On a plane the formula predicts the same value in every cell:
+`base_z − 0 − 0.5 = 0.2681 − 0.5 = −0.2319`.
+
+| sensor config | cells within 1 cm | hit z range | scan value |
+|---|---|---|---|
+| `global_world_only = false` (phases 1–2) | **176–178 of 187 per env (94.8 % pooled)** | 0.0 – 0.391 m | −0.54 m in the bad cells |
+| `global_world_only = true` (stock cfg flag, restored) | **187/187 in every env** | 0.0 m exactly | −0.2319 m, i.e. `base_z − 0.5` |
+
+The 11 outliers per env, in the 17 x 11 grid (row-major, 0.1 m spacing, rows run along x, cols along y):
+
+```
+  ...........        rows 5-11 of 17 -> x in [-0.3, +0.3] m
+  ......X....        cols 1-9 of 11  -> y in [-0.4, +0.4] m
+  ........X..        i.e. directly under the torso, both sides
+  .X.........
+  ....XXX.X..
+  .........X.
+  ..X........
+  ...X....X..
+```
+
+* **8 of the 11 outliers hit at z = 0.310–0.333 m** — the underside/top of the base link's own collision
+  geometry (the base origin sits at 0.268 m, the torso surface extends above and below it). These are quarters
+  and fore/aft parts of the body.
+* **3 of the 11 hit at z = 0.025–0.066 m** — feet and lower legs.
+* **No hit identifiers exist to report.** `NewtonRaycastSensorData` exposes only `pos_w`, `quat_w`,
+  `ray_hits_w`, `ray_distances`, `ray_normals_w`, and the sensor calls
+  `newton.intersect_ray(..., out_dist, out_normal)` — distance and normal only, no shape or prim id. The
+  attribution above therefore comes from the hit *height* and the cell's position; both are unambiguous, since
+  a ground hit on a plane can only be z = 0.
+
+**The fix is a flag I had dropped, not a Newton limitation.** `NewtonRaycastSensorCfg` inherits
+`RayCasterCfg.global_world_only`, and the stock velocity cfg sets it to `True` for exactly this reason. With
+it, the sensor passes `ray_worlds = -1` and `enable_global_world = False` to `newton.intersect_ray`, so rays
+query the global world (terrain, plane) only and every dynamic body — including the robot carrying the sensor
+— is excluded. Restored in `spikes/newton/tasks.py` (`global_world_only=True`, the default), verified above:
+**187/187 cells within 1 cm, hits at z = 0 for every ray.**
+
+Excluding the robot by *shape* instead (a per-shape ray filter) is not exposed by this sensor config or by
+`newton.intersect_ray`; `global_world_only` is the supported mechanism at this tag, and it is the one the
+stock task already used.
+
+## Stage 9 — transfer with a clean scan (phase 3), and what is left (phase 3)
+
+Same rollout as before (384 envs, levels 0–5, fixed 0.8 m/s, 1000 steps), 4090, both sensor settings on the
+same host:
+
+| scan | fall rate | median steps to first fall | mean abs vx err | per-level medians |
+|---|---|---|---|---|
+| contaminated (`global_world_only=false`) | **100 %** (384/384) | 78 | 0.828 m/s | 77, 77, 79, 79, 77, 78 |
+| **clean** (`global_world_only=true`, 187/187 correct) | **100 %** (384/384) | **79** | 0.818 m/s | 85, 70, 82, 81, 72, 87 |
+
+Against the PhysX reference (88 % at level 0, 0 N; 83 % at level 4): Newton is at 0 % on the same levels. The
+scan was genuinely contaminated and is now genuinely clean, and the policy falls exactly as before — so the
+height scan is **not** the cause either.
+
+Five explanations are now closed by measurement, across three sessions: joint/body ordering, the
+backend-native actuator path, the double-PD issue #5806, the height-scan formula, and height-scan
+contamination. Remaining suspects, cheapest test first:
+
+| # | suspect | one test | cost |
+|---|---|---|---|
+| 1 | **observation *values* other than the scan** (projected gravity / base velocity frames or scales differ between backends even though the layout matches) | dump both backends' 235-D observation for the same pose and command, diff term by term | ~5 min of pod time, one run |
+| 2 | **action path**: does `default_joint_pos + 0.25 x` land where the policy expects (offset sign, joint target ordering inside the action term) | one rollout with the policy's first action recorded and compared against the PhysX run's | ~10 min |
+| 3 | **does it fall while standing?** zero forward command with the policy in the loop, 500 steps | 1 run: if it falls standing, the gait is irrelevant and the actuator/contact model is | ~5 min |
+| 4 | **contact model** (`ke 160 000`, `kd 1100`, `cone pyramidal`, `impratio 1.0`): the stock preset only; any change is tuning and out of scope here | substepping (`num_substeps 2 -> 4`) is the one lever the preset names | ~5 min per variant |
+| 5 | **the policy simply does not transfer** and needs a Newton-conditioned retrain | one Newton retrain + sweep (cost below) | ~1–1.5 h of GPU |
+
+**Estimated cost of one Newton retrain** (Go2 rough, Cerberus config, stock recipe, 1500 iterations), from the
+measured iteration time: phase 1 ran **0.38–0.41 s/iteration at 128 envs** on a 4090 (steady state, after
+warm-up). Scaling linearly in env count to 4096 (32x):
+
+* 12.2–13.1 s/iteration → **5.1–5.5 h** of 4090 time → **$4.5–4.9** at $0.89/h, or **$1.4–1.5** on an A5000
+  class host at $0.27/h;
+* that linear scaling is an **upper bound**: at 128 envs the GPU is mostly idle, and the same recipe on PhysX
+  at 4096 envs took 4009 s (1.1 h, `docs/h2_report.md`). The honest range is therefore **1.1–5.5 h**, which
+  is too wide to plan with;
+* pin it with one **50-iteration probe at 4096 envs** (~2 min of install already paid, ~10 min of run time at
+  the upper-bound rate, <$0.15) before committing to a retrain.
+
+No retrain was run, and nothing was tuned.
+
 ## Decision table
 
 | axis | verdict | evidence |
@@ -323,14 +406,15 @@ colliders are the one thing that must survive.
 | video recording | **Go** | 1080p50 mp4 through the Newton GL viewer with no display and no RTX; only `libegl1/libgl1/libopengl0/libxrender1/libvulkan1` needed |
 | Cerberus task parity | **Go** | 235-D, contract term order, contract joint order (no permutation needed), decimation/dt, action dim, command ranges all identical; height scan on the Newton sensor with 100 % finite hits; 500/500 standing steps |
 | standing / actuator behaviour | **Go, with a caveat** | rest pose settles 8.3° mean / 15.0° max from the commanded defaults and the base sinks 15 cm — gravity, identical (≤0.05°) with and without the backend-native actuator path; no sign of #5806 |
-| height-scan convention | **Conditional** | formula and offset verified from the installed source; the flat-ground value was not measured, and Newton's sensor sees dynamic bodies (self-hits) which is now the leading suspect |
-| policy transfer | **No-go (as shipped)** | 100 % falls in every run: ordering none/contract 74/77 steps, actuators on/off 76/71 steps; four independent runs agree |
+| height-scan convention | **Go** | formula and offset from the installed source; contaminated scan 94.8 % of cells within 1 cm (11 outliers under the torso and feet), clean scan **187/187 within 1 cm** once the stock `global_world_only` flag is kept |
+| policy transfer | **No-go (as shipped)** | 100 % falls in six runs: ordering 74/77 steps, actuators 76/71, contaminated/clean scan 78/79; all six agree |
 | scene loading | **No-go at this volume** | home mirror 24.9 GB vs a 20 GB `/workspace`; per-scene USD 3.2 MB, shared model geometry 20.2 GB; a lite geometry USD is proposed, not built |
 
 Overall: **Conditional go** for a Newton *training and evaluation* lane on procedural terrain — install, video,
-task parity and standing all measure clean, and none of the five things that would block a from-scratch
-training run is missing. **No-go** for claiming the existing PhysX checkpoints run on Newton (four runs, same
-collapse; ordering and actuators ruled out). **No-go** for scenes until a lite asset path exists.
+task parity, standing and the height scan all measure clean, so nothing about the *task* blocks a from-scratch
+training run. **No-go** for claiming the existing PhysX checkpoints run on Newton: six runs across three
+sessions collapse the same way, and the five explanations the spike could test are closed. **No-go** for scenes
+until a lite asset path exists.
 
 ## Effort estimate for adoption
 
@@ -346,12 +430,13 @@ env-steps/s at 64 envs and ~3 300 at 384 (4090), ~70 min for a 4096-env retrain 
 | physics plug-in: `common/cerberus_physics/registry.py` (`PHYSICS_BACKEND`, lazy factories, `physx` + `newton_mjwarp`, no silent default — the `cerberus_worlds.registry` pattern), with `pin_physx` becoming the `physx` adapter | 2 days |
 | Newton adapter: physics preset, actuator path, height-scan sensor swap, ordering presets, recorded in saved params | 2 days |
 | certify Go2 flat/rough × train/play + the push-recovery eval on Newton (same MDP, the existing contract check plus a zero-command standing check in front of each run) | 2–3 days |
-| settle the transfer question: ray-hit attribution / self-hit test, scan-vs-PhysX comparison at one pose, then one Newton retrain and its sweep | 2 days + 1–2 GPU sessions (~1 h each) |
+| settle the transfer question: term-by-term observation diff against PhysX, a standing-with-policy run, then one Newton retrain and its sweep (the ray-attribution and scan-convention parts are done) | 1–2 days + 1–2 GPU sessions (1.1–5.5 h each, see stage 9) |
 | PP/PN/NN/NP evaluation columns and report tooling (the sweep axes stay) | 1–2 days |
 | kit-less CI lane + a ~3 GB image with the `uv` environment baked in (44–820 s of install per boot is the only recurring cost) | 2 days |
 
-**≈ 2 weeks (10–12 person-days)** for a minimal, certified second backend on procedural terrain, including
+**≈ 2 weeks (9–11 person-days)** for a minimal, certified second backend on procedural terrain, including
 one Newton retrain. That is the lane I would fund: it needs no scene, no camera work and no new task code.
+Budget the retrain at **$1.4–4.9 and 1.1–5.5 h** until a 50-iteration probe at 4096 envs pins the rate.
 
 ### Scene lane (separate, gated)
 
@@ -382,8 +467,8 @@ height-scan question has to be answered before a Newton retrain is even meaningf
   height, and was **not** tested. The other open item is the height-scan *value* comparison against PhysX.
 * **No policy retrain on Newton** in either session (in phase 2 the height-scan convention should be settled
   first, or the retrain inherits the same suspect input channel).
-* **The flat-ground height-scan value was not measured** (two of my own script bugs, then the pod could not be
-  restarted); only the formula and its offset were verified, from the installed source.
+* **The flat-ground height-scan value was measured in phase 3 only** (stage 8); the phase-2 attempt failed on my
+  own script bugs before the pod could not be restarted.
 * **No scene parse, load, or OpenUSD crash verdict.** An OpenUSD 26.08 runtime means the known
   collider-rich-body crash is not expected, and `PXR_WORK_THREAD_LIMIT=1` is the documented workaround, but
   neither was exercised.
@@ -399,8 +484,11 @@ height-scan question has to be answered before a Newton retrain is even meaningf
   filled volume blocked the next boot. Budget a cold install on every boot (44–820 s depending on the host's
   network) or bake the image.
 * **Phase 2 used both of its pod creations**, and the second pod could not be restarted
-  (`start pod: There are not enough free GPUs on the host machine`), so the last two checks (flat height scan,
-  scene parse) could not be retried in-session.
+  (`start pod: There are not enough free GPUs on the host machine`); the phase-3 session retried the flat scan
+  as a separate pod instead of a restart, and got it.
+* **The scan fix changes nothing about the transfer result.** It is a real bug fix (5 % of the observation was
+  wrong on flat ground, more on rough) but it is not the cause of the collapse, and the report does not claim
+  otherwise.
 
 ## Mistakes made here (and what they cost)
 
@@ -433,6 +521,10 @@ Recorded because they are the kind of thing that eats a two-hour budget:
 9. **Phase 2, disk:** I asked for a 200 GB container disk but `/workspace` is a 20 GB **volume**, so the
    container-disk size never applied to the fetch target. The size listing should have come before the first
    fetch in phase 1 — it is one `rclone lsf` and it would have prevented the 25 GB download into 19 GB.
+10. **Phase 3, flat terrain:** swapping the terrain for a plane without disabling `curriculum.terrain_levels`
+    crashed both attribution runs at the first `env.reset()` (the stock curriculum indexes
+    `terrain_generator.size`, which a plane does not have). One pod boot lost (~$0.12); fixed and re-run as a
+    second pod rather than a restart, per the session rule.
 
 **Hygiene:** a stop/patch response body echoes the pod's full `env` map, including the base64 bootstrap and
 `RUNPOD_API_KEY`. Phase 1 printed one such body (truncated by the client); phase 2 never prints or stores a
@@ -444,21 +536,21 @@ masks the rest through the repo's redaction helper, and `pod_guard.py` records o
 
 * Code and this report: branch `newton-spike`, commits `8c08b2b..HEAD` (local; not pushed — SSH auth is
   broken). Pod code travels as a git bundle.
-* Phase 1 R2 prefix `cerberus-robotics/jobs/newton-20261115T035749Z/`:
-  `outputs/{host.json,stage1/,stage2/,stage3/,stage4_none/,stage4_contract/,versions.json}`;
-  `logs/{uv_sync,import_probe,stage1_train,stage1_launch_1..5,stage2_video,stage3_parity,stage4_none,
-  stage4_contract,stage5_fetch}.log`; `rl_logs/` (the smoke checkpoints); `job.log`, `status.json`,
-  `log_tail.txt`. Input side `spike/newton-20261115T035749Z/{code/cerberus-newton.bundle,
-  inputs/checkpoint/model_1499.pt}`.
-* Phase 2 R2 prefixes:
-  * `cerberus-robotics/jobs/newton-20261115T153614Z/` — `outputs/{host.json,rest_pose_true,rest_pose_false,
-    transfer_true,transfer_false,height_scan,scene_assets,solver_params.json}`,
-    `logs/{rest_pose_true,rest_pose_false,transfer_true,transfer_false,height_scan,scene_sizes,
-    scene_fetch_lite}.log`, `job.log`.
-  * `cerberus-robotics/jobs/newton-20261115T160621Z/` — `outputs/height_scan/height_scan_source.txt` (the
-    installed `mdp.height_scan` source, read on the pod) and `host.json`.
-* Pods `rwmhwno9bflsbf`, `ofcqe4o85uqsjh`, `62f3leopdsfgu1` are all **stopped** (`EXITED`), not deleted: the
-  owner deletes them. The phase-1 pod's volume still holds its partial scene fetch.
-* Reproduce: `python3 spikes/newton/submit_run.py --dry-run`, then `--start-watch`; phase 2 uses
-  `--bootstrap spikes/newton/newton_job2.sh --disk-gb 200 --wall-s 5400 --usd-cap 1.5`; results with
-  `python3 spikes/newton/collect_results.py --job-id <job>`.
+* Phase 3 R2 prefixes:
+  * `cerberus-robotics/jobs/newton-20261115T175131Z/` — `outputs/{host.json,transfer_gwo_true,transfer_gwo_false}`
+    (the clean-scan transfer and the contaminated comparison), `logs/{ray_false,ray_true,transfer_gwo_true,
+    transfer_gwo_false}.log`. The two `ray_*` runs in this prefix failed on the plane/curriculum bug.
+  * `cerberus-robotics/jobs/newton-20261115T180119Z/` — `outputs/ray_{false,true}/{ray_attribution.json,
+    grid_env0.txt}`, `logs/ray_{false,true}.log`, `host.json` (the attribution measurement).
+* Phase 2: `jobs/newton-20261115T153614Z/` (rest pose, transfer A/B, scene sizes) and
+  `jobs/newton-20261115T160621Z/` (the installed `mdp.height_scan` source). Phase 1:
+  `jobs/newton-20261115T035749Z/` (install, stock-task smoke, video, parity, ordering transfer).
+* Pods `rwmhwno9bflsbf`, `ofcqe4o85uqsjh`, `62f3leopdsfgu1`, `dwf452id9j7f6e`, `5v3r6d7nl7l3xu` are all
+  **stopped** (`EXITED`), not deleted: the owner deletes them. The phase-1 pod's volume still holds its partial
+  scene fetch.
+* Reproduce: `python3 spikes/newton/submit_run.py --dry-run`, then `--start-watch`; phase 3 uses
+  `--bootstrap spikes/newton/newton_job3.sh --set CERBERUS_ONLY=ray` (attribution only) or without `--set`
+  (attribution + transfer); results with `python3 spikes/newton/collect_results.py --job-id <job>`.
+* Phase-3 spend: ≈ **$0.18** of GPU time across two pods (12 min at $0.89/h, 6 min at $0.59/h), inside the
+  1.0 USD / 60 min cap. All pod logs are the containers' own files; no API response body is printed or stored
+  (`submit_run.py:safe_body` strips the pod `env` map and masks through `scripts/redact.py`).

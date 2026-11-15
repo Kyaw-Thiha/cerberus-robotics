@@ -39,6 +39,9 @@ def main() -> int:
     parser.add_argument("--clip_steps", type=int, default=500, help="500 steps at 50 Hz = 10 s")
     parser.add_argument("--stand_steps", type=int, default=300)
     parser.add_argument("--log_envs", type=int, default=5)
+    parser.add_argument("--clip_only", action="store_true", help="record the clip and stop (no stand/term diff)")
+    parser.add_argument("--plane", action="store_true", help="flat ground for the clip (readable camera framing)")
+    parser.add_argument("--camera", default="", help="eye_x,eye_y,eye_z,lookat_x,lookat_y,lookat_z")
     args = parser.parse_args(sys.argv[1:])
     out = common.out_dir(args.out)
     timer = common.Timer()
@@ -56,6 +59,27 @@ def main() -> int:
     cfg, info = tasks.build_cfg(num_envs=max(args.log_envs, 5), joint_ordering="none",
                                 forward_command=args.vx, seed=args.seed,
                                 episode_length_s=args.clip_steps * 0.02 + 2.0)
+    if args.plane:
+        import isaaclab.sim as sim_utils
+        from isaaclab.terrains import TerrainImporterCfg
+
+        cfg.curriculum.terrain_levels = None
+        cfg.curriculum.terrain_level_max = None
+        cfg.curriculum.terrain_level_frac_at_max = None
+        cfg.scene.terrain = TerrainImporterCfg(
+            prim_path="/World/ground", terrain_type="plane",
+            physics_material=sim_utils.RigidBodyMaterialCfg(
+                friction_combine_mode="multiply", restitution_combine_mode="multiply",
+                static_friction=1.0, dynamic_friction=1.0),
+            debug_vis=False)
+        report["clip"]["terrain"] = "plane"
+    if args.camera:
+        from isaaclab.visualizers import VisualizerCfg
+
+        eye = tuple(float(v) for v in args.camera.split(",")[:3])
+        lookat = tuple(float(v) for v in args.camera.split(",")[3:6])
+        cfg.sim.default_visualizer_cfg = VisualizerCfg(eye=eye, lookat=lookat)
+        report["clip"]["camera"] = {"eye": eye, "lookat": lookat}
     cfg.video_recorders = [VideoRecorderCfg(source="visualizer:newton_gl",
                                             output_dir=str(out / "videos"),
                                             video_length=args.clip_steps, video_interval=0)]
@@ -94,10 +118,15 @@ def main() -> int:
         report["clip"]["videos"] = [p.name for p in sorted((out / "videos").glob("*.mp4"))]
         env.close()
 
-        # ---- 3: zero-command stand with the policy in the loop ------------------------------------
+            # ---- 3: zero-command stand with the policy in the loop ------------------------------------
         stand_cfg, stand_info = tasks.build_cfg(num_envs=8, joint_ordering="none", forward_command=0.0,
                                                 seed=args.seed, episode_length_s=args.stand_steps * 0.02 + 2.0)
         report["stand"] = {"cfg_info": stand_info}
+    if args.clip_only:
+        report["timings"] = timer.as_dict()
+        common.write_json(out / "rollout_clip.json", report)
+        print("[clip] clip_only: wrote the clip and the per-step log, skipping stand/term diff", flush=True)
+        return 0
     with launch_simulation(stand_cfg, args):
         env2 = gym.make(tasks.NEWTON_TASK_PLAY_ID, cfg=stand_cfg)
         robot2 = env2.unwrapped.scene["robot"]

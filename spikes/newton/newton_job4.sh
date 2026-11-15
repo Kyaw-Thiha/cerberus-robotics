@@ -169,6 +169,28 @@ print(json.dumps({"job_started_epoch": int(started), "created_epoch": int(create
 PY
 cat "$OUT/host.json"
 
+if [ "${CERBERUS_ONLY:-}" = "clip" ]; then
+    stage clip-closeup
+    timeout --signal=KILL 900 "$VENV/bin/python" -m spikes.newton.rollout_clip \
+        --policy "$CKPT" --out "$OUT/clip_plane" --num_envs 1 --clip_steps 500 --clip_only --plane \
+        --camera "1.6,-1.6,0.9,0.0,0.0,0.3" --viz newton_gl --device cuda:0 \
+        > "$LOGS/clip_plane.log" 2>&1
+    echo "[clip] rc=$?"
+    tail -14 "$LOGS/clip_plane.log"
+    sync_outputs
+    CLIP=$(ls "$OUT"/clip_plane/videos/*.mp4 2>/dev/null | head -1)
+    if [ -n "${CLIP:-}" ]; then
+        timeout --signal=KILL 300 "$VENV/bin/python" -m spikes.newton.clip_stills \
+            --clip "$CLIP" --report "$OUT/clip_plane/rollout_clip.json" \
+            --out "$OUT/clip_plane/stills" > "$LOGS/clip_plane_stills.log" 2>&1
+        echo "[stills] rc=$?"
+        tail -5 "$LOGS/clip_plane_stills.log"
+        sync_outputs
+    fi
+    stage done
+    finish 0
+fi
+
 # ---------------------------------------------------------------------------------------------
 # 1-3: clip + fall definition + stand + term diff
 # ---------------------------------------------------------------------------------------------

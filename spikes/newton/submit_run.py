@@ -171,6 +171,8 @@ def main(argv: list[str] | None = None) -> int:
                         help="resume an existing (stopped) pod: re-upload the bundle to --job-id's prefix, "
                              "PATCH the start command + env, then POST /start")
     parser.add_argument("--job-id", default=None, help="job prefix to reuse with --resume-pod")
+    parser.add_argument("--set", action="append", default=[], metavar="KEY=VALUE",
+                        help="extra env for the resumed pod (repeatable)")
     parser.add_argument("--dry-run", action="store_true")
     args = parser.parse_args(argv)
 
@@ -207,6 +209,11 @@ def main(argv: list[str] | None = None) -> int:
         env["CERBERUS_CREATED_EPOCH"] = str(int(time.time()))
         env["CERBERUS_LAB_REF"] = "v3.0.0"
         env["CERBERUS_FORCE_STAGE"] = os.environ.get("CERBERUS_FORCE_STAGE", "1")
+        for item in args.set:
+            key, _, value = item.partition("=")
+            if not key or not _:
+                raise SystemExit(f"--set needs KEY=VALUE, got {item!r}")
+            env[key] = value
         env["CERBERUS_BOOTSTRAP_B64"] = bootstrap
         body = json.dumps({"env": env, "dockerEntrypoint": ["/bin/bash", "-c"],
                            "dockerStartCmd": [rp.SHORT_BOOTSTRAP]})

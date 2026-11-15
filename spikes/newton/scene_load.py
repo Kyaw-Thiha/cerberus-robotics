@@ -149,7 +149,10 @@ def main() -> int:
         timer.mark("env_built")
         report["sim"] = common.sim_info(env)
         robot = env.unwrapped.scene["robot"]
-        scanner = env.unwrapped.scene.sensors.get("height_scanner") if env.unwrapped.scene.sensors else None
+        try:
+            scanner = env.unwrapped.scene["height_scanner"]
+        except (KeyError, TypeError):
+            scanner = None
         result = env.reset()
         obs = result[0] if isinstance(result, tuple) else result
         obs_vec = common.obs_vector(obs)

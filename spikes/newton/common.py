@@ -125,14 +125,21 @@ def observation_layout(env) -> dict:
 
 
 def _dims_to_list(value) -> list | None:
+    """Normalise a per-term dim sequence: ``[(name, dim)]`` and ``[dim]`` both become ``[dim, ...]``."""
     if value is None:
         return None
     if hasattr(value, "tolist"):
-        return value.tolist()
+        value = value.tolist()
+    out = []
     try:
-        return [list(v) if isinstance(v, (list, tuple)) else int(v) for v in value]
-    except TypeError:
+        for entry in value:
+            if isinstance(entry, (list, tuple)):
+                out.append(int(entry[-1]))
+            else:
+                out.append(int(entry))
+    except (TypeError, ValueError):
         return None
+    return out
 
 
 def action_layout(env) -> dict:
@@ -179,11 +186,12 @@ def sim_info(env) -> dict:
     base = env.unwrapped if hasattr(env, "unwrapped") else env
     sim = getattr(base, "sim", None)
     cfg = getattr(base, "cfg", None)
+    sim_cfg = getattr(cfg, "sim", None)
+    physics = (getattr(sim, "physics", None) if sim is not None else None) or getattr(sim_cfg, "physics", None)
     info = {
-        "physics_backend": type(getattr(sim, "physics", None)).__name__ if sim is not None else None,
+        "physics_backend": type(physics).__name__ if physics is not None else None,
         "device": str(getattr(base, "device", "")),
     }
-    sim_cfg = getattr(cfg, "sim", None)
     if sim_cfg is not None:
         info["sim_dt"] = getattr(sim_cfg, "dt", None)
         info["use_newton_actuators"] = getattr(sim_cfg, "use_newton_actuators", None)

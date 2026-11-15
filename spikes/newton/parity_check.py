@@ -58,7 +58,10 @@ def main() -> int:
         report["action"] = common.action_layout(env)
         report["joints"] = common.joint_layout(env)
         report["observation_layout"] = common.observation_layout(env)
-        scanner = env.unwrapped.scene.sensors.get("height_scanner") if env.unwrapped.scene.sensors else None
+        try:
+            scanner = env.unwrapped.scene["height_scanner"]
+        except (KeyError, TypeError):
+            scanner = None
         if scanner is not None:
             report["height_scanner"] = {"type": type(scanner).__name__,
                                         "num_rays": int(getattr(scanner, "num_rays", -1)) if hasattr(scanner, "num_rays") else None,
@@ -131,7 +134,7 @@ def main() -> int:
         checks = {
             "obs_dim_matches": dim == expected_obs["total_dim"],
             "obs_term_order_matches": live_names == expected_obs["names"],
-            "obs_term_dims_match": bool(live_dims) and [int(v) if not isinstance(v, (list, tuple)) else sum(v) for v in live_dims] == expected_obs["dims"] if live_dims else None,
+            "obs_term_dims_match": (None if not live_dims else [int(v) for v in live_dims] == expected_obs["dims"]),
             "joint_name_set_matches": sorted(live_joints) == sorted(contract_joints),
             "joint_order_matches_contract": live_joints == contract_joints,
             "decimation_matches": report["sim"].get("decimation") == contract_summary["control"]["decimation"],

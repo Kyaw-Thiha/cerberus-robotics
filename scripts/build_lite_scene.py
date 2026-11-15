@@ -68,7 +68,10 @@ def build(scene_usd: Path, out_dir: Path, scene_id: str, budget_s: float = 1800.
     cfg_path = _REPO / "planning" / "config" / "occupancy.yaml"
     from planning.occupancy import OccupancyConfig
 
-    config = OccupancyConfig.from_yaml(cfg_path) if cfg_path.is_file() else OccupancyConfig()
+    try:
+        config = OccupancyConfig.from_yaml(cfg_path) if cfg_path.is_file() else OccupancyConfig()
+    except ImportError:  # PyYAML is optional on a bare CPU image; the defaults are the same policy
+        config = OccupancyConfig()
     grid_orig = from_usd(scene_usd, scene_id=sid, config=config)
     grid_lite = from_usd(lite, scene_id=sid, config=config)
     iou = grid_iou(grid_orig, grid_lite)

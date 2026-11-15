@@ -10,7 +10,7 @@ cd "$REPO_ROOT"
 SID=$(python3 -c "import sys; sys.path.insert(0,'scripts'); from scene_id import folder_name; print(folder_name('$SID_RAW'))")
 echo "[lite] scene $SID"
 
-python3 -m pip install -q --no-input usd-core numpy >/dev/null 2>&1 || { echo "[lite] pip install failed" >&2; exit 2; }
+python3 -m pip install -q --no-input usd-core numpy pyyaml >/dev/null 2>&1 || { echo "[lite] pip install failed" >&2; exit 2; }
 
 df -h /workspace | tail -1
 FREE_GB=$(df --output=avail -BG /workspace | tail -1 | tr -dc '0-9')

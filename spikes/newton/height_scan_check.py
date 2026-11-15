@@ -22,8 +22,7 @@ from spikes.newton import common, tasks
 
 
 def main() -> int:
-    parser = common.build_parser(__doc__)
-    parser.add_argument("--steps", type=int, default=30)
+    parser = common.build_parser(__doc__)  # already carries --steps
     args = parser.parse_args(sys.argv[1:])
     out = common.out_dir(args.out)
     timer = common.Timer()

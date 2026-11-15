@@ -222,6 +222,18 @@ print(json.dumps({
 PY
 cat "$OUT/host.json"
 
+if [ "${CERBERUS_ONLY:-}" = "height-scan" ]; then
+    stage height-scan
+    timeout --signal=KILL 600 "$VENV/bin/python" -m spikes.newton.height_scan_check \
+        --out "$OUT/height_scan" --num_envs 4 --steps 30 --viz none --device cuda:0 \
+        > "$LOGS/height_scan.log" 2>&1
+    echo "[scan] rc=$?"
+    tail -14 "$LOGS/height_scan.log"
+    sync_outputs
+    stage done
+    finish 0
+fi
+
 # ---------------------------------------------------------------------------------------------
 # 1. rest pose: zero action (default joint targets) for 200 steps, both actuator paths
 # ---------------------------------------------------------------------------------------------

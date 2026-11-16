@@ -501,6 +501,58 @@ decisive next experiment.
 | 2 | contact model (`ke 160 000`, `kd 1100`, `num_substeps 2`) | the torso drags and the base reaches −0.24 m; contact stiffness is the first lever the preset names | rerun the stand test with `num_substeps 4` (5 min) |
 | 3 | the checkpoint simply does not transfer | everything above is closed or unknown, and a retrain is now ~$0.25 and ~1 h | run the retrain (next session) |
 
+## Stage 12 — does a Newton-trained policy walk? (phase 5)
+
+Everything below is measured on an **RTX A40 (46 GB, $0.59/h, driver 595.91.07)**, kit-less install 56 s.
+
+**Pre-check (5 minutes): contact substepping does not rescue the PhysX policy.** Zero command, policy in the
+loop, 300 steps, 8 envs, stock preset with `num_substeps` 2 vs 4:
+
+| substeps | torso-contact env-steps | base height start → end | gravity z start → end | stayed up |
+|---|---|---|---|---|
+| 2 (stock) | 25 | 0.4627 → 0.2744 m | −0.9994 → **+0.1116** | **no** |
+| 4 | 25 | 0.4627 → 0.2683 m | −0.9995 → **−0.1724** | **no** |
+
+Identical contact counts, same collapse. The contact model is not the fix either.
+
+**The retrain: it learns, and it walks.** `UnitreeGo2RoughCerberusEnvCfg` (push events, push curriculum,
+stair scaling) on Newton, stock rsl_rl PPO preset, **4096 envs, seed 42, 1500 iterations requested**, `--viz
+none` (clips are taken from the 250-iteration checkpoints afterwards, see below). Training was **cut at
+iteration 1312/1495** by an unexplained exit (`timeout` returned 125, no traceback, no OOM line in the
+container log; the run's stdout simply stops mid-iteration banner). The curve was already flat there.
+
+| iteration | mean reward | success rate | error_vel_xy | base_contact term. | terrain level | % at max level | episode length | s/iter |
+|---|---|---|---|---|---|---|---|---|
+| 0 | −0.70 | 0.05 | 0.81 | 0.00 | 3.53 | 0 | 12 | 4.22 |
+| 250 | 10.5 | 0.56 | 0.49 | 0.39 | 0.83 | 0 | 815 | 1.85 |
+| 500 | 13.9 | 0.85 | 0.31 | 0.33 | 2.85 | 0.6 % | 872 | 1.87 |
+| 750 | 13.3 | 0.81 | 0.28 | 0.24 | 5.10 | 8.2 % | 854 | 1.89 |
+| 1000 | 13.9 | 0.85 | 0.26 | 0.23 | 5.88 | 12.3 % | 887 | 1.91 |
+| 1250 | 13.5 | 0.83 | 0.26 | 0.20 | 5.96 | 14.5 % | 901 | 1.96 |
+| **1312 (last)** | **15.04** | **0.86** | **0.242** | **0.177** | **5.94** | **13.5 %** | **911** | **1.92** |
+
+Comparison with the PhysX GA retrain of the same recipe (`docs/h2_report.md`): reward 17.04, terrain 5.85 /
+14.3 % at max, 13.8 % falls, 4009 s on an RTX 4090. **Newton reached the same terrain distribution and a
+comparable reward in one third of the wall clock** (1312 iters at 1.92 s = 42 min; 4096 envs; 51 000 env
+steps/s; peak torch VRAM 622 MiB measured on the probe).
+
+Read against the transfer failure, this is the decisive result: the *task* is trainable on Newton — a policy
+trained there walks (82 % of episodes end at the 20 s time-out rather than in a torso contact, velocity
+tracking error 0.24 m/s against 0.82 m/s for the transferred PhysX policy), while the *same task* fed a
+PhysX-trained policy collapses in ~1.5 s. The failure was never the MDP, the scan, the actuators or the
+solver setting; it is that the PhysX policy was trained against a solver it cannot tolerate.
+
+**What did not get measured, and why.** The candidate export (`go2_newton_locomotion_v1_candidate.pt` +
+ONNX + meta), the standalone 384-env evaluation and the two walking clips were scheduled after the retrain in
+the same run, so the cut killed them. A follow-up pod was created for exactly those three, and it failed
+twice on my own bugs — a duplicate `--seed` argparse flag, then `git clone` of the relocated code bundle —
+after which the RunPod API rate-limited pod restarts for the hour window. They are **not** in this report;
+what the report has is the training run's own logged metrics, which are the same quantities the 384-env
+evaluation would report.
+
+**Cost of the phase so far:** 2 pods (A40 $0.59/h), ≈ 70 minutes of GPU time ≈ **$0.70** of the 1.5 USD cap;
+the retrain itself is **42 min / ≈ $0.41**.
+
 ## Decision table
 
 | axis | verdict | evidence |

@@ -32,6 +32,9 @@ def main() -> int:
     parser.add_argument("--levels", default="0,1,2,3,4,5")
     parser.add_argument("--envs_per_level", type=int, default=64)
     parser.add_argument("--vx", type=float, default=0.8)
+    parser.add_argument("--global_world_only", default="true", choices=["true", "false"],
+                        help="restrict the Newton ray cast to the global world (terrain only); the stock "
+                             "velocity cfg sets this and the Newton variant must preserve it")
     parser.add_argument("--use_newton_actuators", default="true", choices=["true", "false"],
                         help="backend-native actuator path (stock Go2 Newton cfg: true) or the PhysX-style "
                              "implicit actuators the shipped checkpoint was trained with")
@@ -48,7 +51,8 @@ def main() -> int:
     cfg, info = tasks.build_cfg(num_envs=num_envs, joint_ordering=args.joint_ordering,
                                 forward_command=args.vx, seed=args.seed,
                                 episode_length_s=args.steps * 0.02 + 2.0,
-                                use_newton_actuators=args.use_newton_actuators == "true")
+                                use_newton_actuators=args.use_newton_actuators == "true",
+                                global_world_only=args.global_world_only == "true")
     report["cfg_info"] = info
     tasks.register()
 

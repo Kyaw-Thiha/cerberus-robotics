@@ -51,5 +51,20 @@ def test_every_lite_threshold_attempt_records_size_and_iou(monkeypatch, tmp_path
     import inspect
 
     params = inspect.signature(lite.build).parameters
-    for name in ("max_mb", "min_iou", "thresholds"):
+    for name in ("light_mb", "min_iou", "thresholds"):
         assert name in params
+
+
+def test_build_grid_can_be_pinned_to_a_shared_frame():
+    import numpy as np
+
+    from planning.occupancy import OccupancyConfig, build_grid
+
+    pts = np.array([[0, 0, 0], [2, 0, 0], [2, 2, 0], [0, 2, 0], [0.5, 0.5, 0.2]], dtype=float)
+    faces = np.array([[0, 1, 2], [0, 2, 3], [0, 1, 4]], dtype=np.int64)
+    cfg = OccupancyConfig(resolution_m=0.1)
+    a = build_grid(pts, faces, config=cfg)
+    # a subset would estimate a different extent; the shared frame must reproduce a's shape exactly
+    b = build_grid(pts[:4], faces[:2], config=cfg, origin_xy=a.origin_xy, shape=a.grid.shape)
+    assert b.grid.shape == a.grid.shape
+    assert np.allclose(b.origin_xy, a.origin_xy)

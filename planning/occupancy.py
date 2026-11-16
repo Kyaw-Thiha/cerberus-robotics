@@ -209,6 +209,8 @@ def build_grid(
     floor_z: float | None = None,
     chunk_faces: int = 200_000,
     collect_diagnostics: bool = False,
+    origin_xy: np.ndarray | tuple[float, float] | None = None,
+    shape: tuple[int, int] | None = None,
 ) -> OccupancyGrid:
     """Rasterise world triangles (metres) into a FREE / BLOCKED / UNKNOWN grid, then inflate.
 
@@ -221,12 +223,18 @@ def build_grid(
     if len(points) == 0 or len(faces) == 0:
         raise ValueError("no geometry")
 
-    # Origin and size from the 0.1-99.9 percentile of the vertices, so one stray plane cannot blow the grid up.
-    lo = np.percentile(points[:, :2], 0.1, axis=0) - config.resolution_m
-    hi = np.percentile(points[:, :2], 99.9, axis=0) + config.resolution_m
-    ny = int(np.ceil((hi[1] - lo[1]) / config.resolution_m)) + 1
-    nx = int(np.ceil((hi[0] - lo[0]) / config.resolution_m)) + 1
-    origin = np.array([lo[0], lo[1]])
+    if origin_xy is not None and shape is not None:
+        # Shared frame: a filtered (lite) grid must be rasterised on the original's origin and extent, otherwise the
+        # two grids have different shapes and any cell-wise comparison is meaningless.
+        origin = np.asarray(origin_xy, dtype=np.float64)[:2]
+        ny, nx = int(shape[0]), int(shape[1])
+    else:
+        # Origin and size from the 0.1-99.9 percentile of the vertices, so one stray plane cannot blow the grid up.
+        lo = np.percentile(points[:, :2], 0.1, axis=0) - config.resolution_m
+        hi = np.percentile(points[:, :2], 99.9, axis=0) + config.resolution_m
+        ny = int(np.ceil((hi[1] - lo[1]) / config.resolution_m)) + 1
+        nx = int(np.ceil((hi[0] - lo[0]) / config.resolution_m)) + 1
+        origin = np.array([lo[0], lo[1]])
     n_cells = ny * nx
 
     # Fixed pitch, a fraction of the cell size. It must NOT be derived from the scene's total triangle area: a

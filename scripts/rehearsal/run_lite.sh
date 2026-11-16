@@ -27,7 +27,8 @@ fi
 echo "[lite] source $SCENE_USD $(du -h "$SCENE_USD" | cut -f1)"
 
 OUT="data/scenes/grscenes_lite/$SID"
-python3 scripts/build_lite_scene.py --scene-usd "$SCENE_USD" --out-dir "$OUT" --scene-id "$SID" || exit 6
+python3 scripts/build_lite_scene.py --scene-usd "$SCENE_USD" --out-dir "$OUT" --scene-id "$SID" \
+    --light-mb 20 --min-iou 0.98 || exit 6
 
 rclone mkdir "$REMOTE/worlds/grscenes_lite/$SID" 2>/dev/null || true
 rclone copy "$OUT" "$REMOTE/worlds/grscenes_lite/$SID" --no-check-dest || { echo "[lite] upload failed" >&2; exit 7; }
@@ -35,6 +36,9 @@ cp "$OUT/lite_report.json" "$ROOT/lite_report.json"
 python3 - "$ROOT/lite_report.json" <<'PY'
 import json, sys
 d = json.load(open(sys.argv[1]))
-print("[lite] bytes=%s triangles=%s iou=%s" % (d["lite_bytes"], d["triangles"], d["iou_blocked"]))
-raise SystemExit(0 if d["lite_bytes"] < 100_000_000 and d["iou_blocked"] >= 0.98 else 1)
+ex, li = d["exact"], d.get("light")
+print("[lite] exact=%s B iou=%s | light=%s" % (ex["bytes"], ex["iou_blocked"],
+      ("%s B tris=%s iou=%s" % (li["bytes"], li["triangles"], li["iou_blocked"])) if li else "none"))
+ok = ex["iou_blocked"] >= 1.0 and (li is None or li["iou_blocked"] >= 0.98)
+raise SystemExit(0 if ok else 1)
 PY

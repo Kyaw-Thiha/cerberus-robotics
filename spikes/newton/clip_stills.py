@@ -32,6 +32,8 @@ def main(argv: list[str] | None = None) -> int:
     picks = {"frame0": 0}
     if first_fall is not None:
         picks["first_fall"] = min(first_fall, max(n_frames - 1, 0))
+    else:
+        picks["mid"] = max(n_frames // 2, 0)
     picks["last"] = max(n_frames - 1, 0)
     written = {}
     for name, index in picks.items():

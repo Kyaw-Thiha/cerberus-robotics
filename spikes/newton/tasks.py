@@ -27,7 +27,7 @@ PLAY_ENTRY_POINT = "spikes.newton.tasks:UnitreeGo2RoughCerberusNewtonEnvCfg_PLAY
 _DEFAULT_JOINT_ORDERING = "none"
 
 
-def _select_newton_physics(cfg, use_newton_actuators: bool = True) -> dict:
+def _select_newton_physics(cfg, use_newton_actuators: bool = True, num_substeps: int | None = None) -> dict:
     """Replace the physics preset container with the concrete Newton backend."""
     physics = cfg.sim.physics
     newton = getattr(physics, "newton_mjwarp", None)
@@ -37,13 +37,16 @@ def _select_newton_physics(cfg, use_newton_actuators: bool = True) -> dict:
             f"got {type(physics).__name__} with {sorted(k for k in vars(physics) if not k.startswith('_'))}"
         )
     preset_container = type(physics).__name__
+    if num_substeps is not None:
+        newton.num_substeps = int(num_substeps)
     cfg.sim.physics = newton  # SimulationContext rejects the unresolved preset container
     used_newton_actuators = None
     if hasattr(cfg.sim, "use_newton_actuators"):
         cfg.sim.use_newton_actuators = bool(use_newton_actuators)
         used_newton_actuators = bool(use_newton_actuators)
     return {"preset_container": preset_container, "physics": type(newton).__name__,
-            "use_newton_actuators": used_newton_actuators}
+            "use_newton_actuators": used_newton_actuators,
+            "num_substeps": getattr(newton, "num_substeps", None)}
 
 
 def _newton_height_scanner(cfg, global_world_only: bool = True) -> dict:
@@ -104,21 +107,30 @@ def apply_joint_ordering(cfg, joint_ordering: str) -> dict:
 def build_cfg(*, num_envs: int = 64, joint_ordering: str = "none", episode_length_s: float | None = None,
               forward_command: float | None = None, seed: int | None = None,
               use_newton_actuators: bool = True,
-              global_world_only: bool = True) -> tuple[object, dict]:
+              global_world_only: bool = True,
+              num_substeps: int | None = None,
+              variant: str = "play") -> tuple[object, dict]:
     """The Cerberus rough Play cfg on Newton, with the transfer flags applied.
 
     Returns ``(cfg, info)`` where ``info`` records every deviation from the PhysX config.
     """
-    from policy.locomotion.core.platforms.go2.env_cfg import UnitreeGo2RoughCerberusEnvCfg_PLAY
+    if variant == "train":
+        # the training cfg the PhysX recipe uses: push disturbances, the push curriculum, the full terrain grid
+        from policy.locomotion.core.platforms.go2.env_cfg import UnitreeGo2RoughCerberusEnvCfg
 
-    cfg = UnitreeGo2RoughCerberusEnvCfg_PLAY()
-    info = {"base_cfg": type(cfg).__name__, "num_envs": int(num_envs)}
-    info.update(_select_newton_physics(cfg, use_newton_actuators))
+        cfg = UnitreeGo2RoughCerberusEnvCfg()
+    else:
+        from policy.locomotion.core.platforms.go2.env_cfg import UnitreeGo2RoughCerberusEnvCfg_PLAY
+
+        cfg = UnitreeGo2RoughCerberusEnvCfg_PLAY()
+    info = {"base_cfg": type(cfg).__name__, "variant": variant, "num_envs": int(num_envs)}
+    info.update(_select_newton_physics(cfg, use_newton_actuators, num_substeps))
     info.update(_newton_height_scanner(cfg, global_world_only))
     info.update(apply_joint_ordering(cfg, joint_ordering))
 
     cfg.scene.num_envs = int(num_envs)
-    cfg.scene.env_spacing = 2.5
+    if variant == "play":
+        cfg.scene.env_spacing = 2.5
     if episode_length_s is not None:
         cfg.episode_length_s = float(episode_length_s)
     if seed is not None:

@@ -137,8 +137,12 @@ fi
 
 stage fetch-code
 rclone copyto "$REMOTE/$CERBERUS_CODE_BUNDLE" /root/code.bundle || { echo "[job] bundle fetch failed" >&2; finish 4; }
-GIT_LFS_SKIP_SMUDGE=1 git clone /root/code.bundle "$REPO" >/dev/null 2>&1 || { echo "[job] clone failed" >&2; finish 4; }
-cd "$REPO" && git checkout newton-spike >/dev/null 2>&1
+ls -la /root/code.bundle
+rm -rf "$REPO"
+git init -q "$REPO" || { echo "[job] git init failed" >&2; finish 4; }
+git -C "$REPO" fetch -f /root/code.bundle newton-spike:refs/heads/newton-spike \
+    || { echo "[job] git fetch from the bundle failed" >&2; git -C "$REPO" bundle verify /root/code.bundle >&2 || true; finish 4; }
+git -C "$REPO" checkout -f newton-spike || { echo "[job] checkout failed" >&2; finish 4; }
 export PYTHONPATH="$REPO${PYTHONPATH:+:$PYTHONPATH}"
 echo "[job] code at $(git log --oneline -1)"
 INPUT_BASE="${CERBERUS_CODE_BUNDLE%/code/*}"

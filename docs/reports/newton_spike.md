@@ -37,6 +37,7 @@ unchanged; where a change to an existing file would be needed it is described be
 | 5 | scene load | **not reached**, cause measured | home mirror 24.9 GB (models geometry 20.2 GB, Materials textures 4.7 GB, per-scene USD 3.2 MB) against a 20 GB `/workspace` volume; a geometry-only fetch of the shared model library (20.2 GB) still does not fit |
 | 7 | how "fall" is measured | **the flag fires on upright robots** | `base_contact` (torso touching terrain), not height or orientation: all 5 logged envs flagged at gravity z = −1.000, bases at 0.14–0.72 m; "100 % fall rate" = 100 % torso-contact terminations |
 | 8 | retrain cost at 4096 envs | **0.8–0.9 h, $0.21–0.79** | 50 iterations measured: 2.14 s/iteration wall (1.90 s steady state), 28.5 s env build, 622 MiB torch peak |
+| 9 | **does a Newton-trained policy walk?** | **yes** | 1312 iterations of the stock recipe on 4096 envs: reward 15.04, success 0.86, velocity error 0.24 m/s, 82 % of episodes reach the 20 s time-out, terrain 5.94 with 13.5 % at max level — comparable to the PhysX GA retrain (17.04 / 13.8 % falls / 5.85) in one third of the wall clock |
 | 6 | height-scan convention | **verified, and the self-hit contamination is fixed** | formula from the installed source: `pos_w_z - ray_hits_z - 0.5`; contaminated scan 94.8 % of cells within 1 cm (11 outliers under the torso and feet); with the stock `global_world_only=True`, **187/187 within 1 cm** and hits all at z = 0 |
 
 ## Host and environment
@@ -563,7 +564,8 @@ the retrain itself is **42 min / ≈ $0.41**.
 | standing / actuator behaviour | **Go, with a caveat** | rest pose settles 8.3° mean / 15.0° max from the commanded defaults and the base sinks 15 cm — gravity, identical (≤0.05°) with and without the backend-native actuator path; no sign of #5806 |
 | height-scan convention | **Go** | formula and offset from the installed source; contaminated scan 94.8 % of cells within 1 cm (11 outliers under the torso and feet), clean scan **187/187 within 1 cm** once the stock `global_world_only` flag is kept |
 | policy transfer | **No-go (as shipped)** | 100 % torso-contact terminations in six runs: ordering 74/77 steps, actuators 76/71, contaminated/clean scan 78/79; all six agree |
-| closed-loop control on Newton | **No-go (as shipped)** | zero command, policy in the loop, 300 steps: base 0.46 → 0.23 m and gravity z −0.999 → **+0.331** (inverted). It fails when it only has to stand |
+| closed-loop control on Newton | **No-go for the PhysX policy, go for a Newton one** | PhysX policy, zero command, 300 steps: base 0.46 → 0.23 m, gravity z −0.999 → **+0.331** (inverted); unchanged by `num_substeps` 4. Newton-trained policy: 82 % of episodes reach the time-out, 0.24 m/s tracking error |
+| the kit-less lane's locomotion policy | **needs a Newton retrain, and that is 42 minutes** | the retrain reached the PhysX terrain distribution in 1312 iterations (42 min, ≈$0.41 on an A40); the PhysX checkpoint does not transfer |
 | retrain cost | **cheap** | 4096 envs measured at 1.90–2.14 s/iteration → **0.8–0.9 h** for 1500 iterations, **$0.21–0.79** depending on host |
 | scene loading | **No-go at this volume** | home mirror 24.9 GB vs a 20 GB `/workspace`; per-scene USD 3.2 MB, shared model geometry 20.2 GB; a lite geometry USD is proposed, not built |
 
@@ -579,6 +581,11 @@ Two separate lanes, because they do not share a blocker.
 
 ### Minimal lane: train and evaluate on procedural terrain (no scenes)
 
+**Measured, not estimated any more:** a Newton retrain of the Go2 rough task reaches the PhysX recipe's
+terrain distribution in **1312 iterations / 42 min / ≈$0.41** on a rented A40, and the resulting policy walks
+(success 0.86, 0.24 m/s tracking error). The minimal lane below is therefore about plumbing and certification,
+not about whether Newton can produce a usable policy.
+
 Estimates from what this spike actually measured: 44–820 s install (network-bound), ~20 s env build, 1 240
 env-steps/s at 64 envs and ~3 300 at 384 (4090), ~70 min for a 4096-env retrain on the existing PhysX recipe.
 
@@ -587,7 +594,7 @@ env-steps/s at 64 envs and ~3 300 at 384 (4090), ~70 min for a 4096-env retrain 
 | physics plug-in: `common/cerberus_physics/registry.py` (`PHYSICS_BACKEND`, lazy factories, `physx` + `newton_mjwarp`, no silent default — the `cerberus_worlds.registry` pattern), with `pin_physx` becoming the `physx` adapter | 2 days |
 | Newton adapter: physics preset, actuator path, height-scan sensor swap, ordering presets, recorded in saved params | 2 days |
 | certify Go2 flat/rough × train/play + the push-recovery eval on Newton (same MDP, the existing contract check plus a zero-command standing check in front of each run) | 2–3 days |
-| settle the transfer question: **the observation diff and the stand test are done** (stage 10) and point at the closed loop, so what is left is one Newton retrain plus its sweep, and one substepping run | 1 day + 2 GPU sessions (~1.5 h of GPU, <$2) |
+| settle the transfer question: **done conceptually** — the PhysX checkpoint does not survive Newton contact dynamics (ordering, actuators, scan and substepping are all excluded) and a Newton retrain walks. What is left is the candidate artifacts + the 384-env sweep + clips, and a second retrain for a control | 1 day + 1 GPU session (~25 min, <$0.5) |
 | PP/PN/NN/NP evaluation columns and report tooling (the sweep axes stay) | 1–2 days |
 | kit-less CI lane + a ~3 GB image with the `uv` environment baked in (44–820 s of install per boot is the only recurring cost) | 2 days |
 
@@ -644,10 +651,19 @@ height-scan question has to be answered before a Newton retrain is even meaningf
 * **Phase 2 used both of its pod creations**, and the second pod could not be restarted
   (`start pod: There are not enough free GPUs on the host machine`); the phase-3 session retried the flat scan
   as a separate pod instead of a restart, and got it.
+* **Phase 5's candidate export, 384-env evaluation and walking clips are missing.** The training run was cut at
+  iteration 1312/1495 by an unexplained `timeout` exit (125) with no traceback and no OOM line, so the stages
+  scheduled after it did not run; the follow-up pod meant to produce them failed on two of my own bugs (a
+  duplicate `--seed` flag, then `git clone` of the relocated bundle) and the RunPod API then rate-limited pod
+  restarts for the hour window, which ended after this session's budget window. The checkpoints are safe in
+  R2 (`outputs/train/train/go2_newton_locomotion_v1_candidate/model_1250.pt` and neighbours) and
+  `spikes/newton/export_candidate.py` + `newton_job5b.sh` are the ready-made ~20-minute path to them.
 * **The clip is not visually informative.** The Newton GL default camera is world-fixed and far, so the five
   robots are a few pixels tall at the horizon; the close-up re-record failed on a bug and the session's pod
   budget was spent. The stills are attached for completeness, and the posture claims rest on the per-step log
   (base height and gravity z at the termination step), not on the video.
+* **The retrain's 1312 iterations are reported from the run's own log**, not re-measured: the training curve,
+  reward, success rate and terrain distribution above come from its tensorboard/stdout output.
 * **The scan fix changes nothing about the transfer result.** It is a real bug fix (5 % of the observation was
   wrong on flat ground, more on rough) but it is not the cause of the collapse, and the report does not claim
   otherwise.
@@ -692,6 +708,13 @@ Recorded because they are the kind of thing that eats a two-hour budget:
     a few pixels tall; the close-up re-run then died on a `KeyError: 'clip'` in my own script (a report key read
     before it was created) and there was no pod budget left to retry. Both are fixed in the branch
     (`rollout_clip --clip_only --plane --camera`, guarded report keys).
+
+12. **Phase 5, the cut:** the retrain died at iteration 1312 with `timeout` exit 125 and no diagnostic; the
+    driver had sent the training stdout to its own file, so the job log's heartbeat carried no trace of the
+    training progress and the failure is unexplained. Tailing the child log into the job log would have shown it.
+13. **Phase 5, the follow-up pod:** two self-inflicted failures in a row (duplicate `--seed` in an argparse
+    parser that already had one; `git clone` of a relocated bundle instead of `git init` + `git fetch`), then
+    the API's hourly rate limit on pod restarts. All three are fixed in the branch.
 
 **Hygiene:** a stop/patch response body echoes the pod's full `env` map, including the base64 bootstrap and
 `RUNPOD_API_KEY`. Phase 1 printed one such body (truncated by the client); phase 2 never prints or stores a

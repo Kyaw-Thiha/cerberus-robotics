@@ -28,6 +28,18 @@ STALE_S = 300
 TICK_S = 30
 
 
+def status_age_s(status: dict | None, now: float) -> float | None:
+    """Seconds since the job wrote ``updated_utc`` (a re-fetched but frozen status is not a heartbeat)."""
+    import time as _time
+    stamp = str((status or {}).get("updated_utc", ""))
+    if not stamp:
+        return None
+    try:
+        return max(0.0, now - _time.mktime(_time.strptime(stamp, "%Y-%m-%dT%H:%M:%SZ")) + _time.timezone)
+    except ValueError:
+        return None
+
+
 def decide(status: dict | None, *, now: float, last_ok: float | None, started: float,
            wall_s: float = 90 * 60, stale_s: float = STALE_S, startup_grace_s: float = 900,
            rate: float = 0.0, usd_cap: float = 3.0) -> str:
@@ -45,6 +57,9 @@ def decide(status: dict | None, *, now: float, last_ok: float | None, started: f
         return "stop"
     if last_ok is None:
         return "wait" if now - started < startup_grace_s else "stop"
+    age = status_age_s(status, now)
+    if age is not None and age > stale_s:
+        return "stop"
     if now - last_ok > stale_s:
         return "stop"
     if now - started >= wall_s:

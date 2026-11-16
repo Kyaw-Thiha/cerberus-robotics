@@ -109,7 +109,7 @@ def write_mesh(points, faces, path: Path) -> None:
 
 
 def build(scene_usd: Path, out_dir: Path, scene_id: str, budget_s: float = 1800.0,
-          thresholds=(0.00002, 0.00005, 0.0001, 0.0002, 0.0005, 0.001, 0.0025),
+          thresholds=(0.000001, 0.000002, 0.000005, 0.00001, 0.00002, 0.00005, 0.0001, 0.0005),
           light_mb: float = 20.0, min_iou: float = 0.98) -> dict:
     from planning.occupancy import OccupancyConfig, build_grid, save_npz, scene_triangles_m
 
@@ -137,18 +137,22 @@ def build(scene_usd: Path, out_dir: Path, scene_id: str, budget_s: float = 1800.
     iou_exact = 1.0
     save_npz(grid_orig, out_dir / "occupancy.npz")
 
-    light_report, light = None, None
+    light_report, light, attempts = None, None, []
     for threshold in thresholds:
         p_keep, f_keep = compact(points, faces, areas >= threshold)
         candidate = light_dir / f"{sid}.usd"
         write_mesh(p_keep, f_keep, candidate)
         size = candidate.stat().st_size
         if size > light_mb * 1e6:
+            attempts.append({"threshold_m2": threshold, "bytes": size, "triangles": len(f_keep),
+                             "iou_blocked": None})
             print(f"[lite] threshold {threshold:g}: {size} B (over {light_mb:g} MB), next")
             candidate.unlink(missing_ok=True)
             continue
         grid_light = build_grid(p_keep, f_keep, config=config, scene_id=sid, origin_xy=origin, shape=shape)
         iou = grid_iou(grid_orig, grid_light)
+        attempts.append({"threshold_m2": threshold, "bytes": size, "triangles": len(f_keep),
+                         "iou_blocked": round(iou, 6)})
         print(f"[lite] threshold {threshold:g}: {size} B, {len(f_keep)} tris, IoU {iou:.6f}")
         light_report = {"triangle_area_min_m2": threshold, "bytes": size, "triangles": len(f_keep),
                         "vertices": len(p_keep), "iou_blocked": round(iou, 6)}
@@ -166,6 +170,7 @@ def build(scene_usd: Path, out_dir: Path, scene_id: str, budget_s: float = 1800.
                   "iou_blocked": round(iou_exact, 6), "verify": verify_file(exact)},
         "light": ({"file": str(light.relative_to(out_dir)), **light_report, "verify": verify_file(light)}
                   if light else None),
+        "light_attempts": attempts,
     }
     (out_dir / "lite_report.json").write_text(json.dumps(report, indent=2) + "\n")
     (out_dir / "README.md").write_text(

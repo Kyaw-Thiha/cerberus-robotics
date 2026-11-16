@@ -551,7 +551,7 @@ after which the RunPod API rate-limited pod restarts for the hour window. They a
 what the report has is the training run's own logged metrics, which are the same quantities the 384-env
 evaluation would report.
 
-**Cost of the phase so far:** 2 pods (A40 $0.59/h), ≈ 70 minutes of GPU time ≈ **$0.70** of the 1.5 USD cap;
+**Cost of the phase:** 2 pods (RTX A40, $0.59/h), ≈ 64 minutes of GPU time ≈ **$0.63** of the 1.5 USD cap;
 the retrain itself is **42 min / ≈ $0.41**.
 
 ## Decision table

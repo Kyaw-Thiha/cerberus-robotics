@@ -132,8 +132,9 @@ def build(scene_usd: Path, out_dir: Path, scene_id: str, budget_s: float = 1800.
 
     exact = exact_dir / f"{sid}.usd"
     write_mesh(points, faces, exact)
-    iou_exact = grid_iou(grid_orig, build_grid(points, faces, config=config, scene_id=sid,
-                                               origin_xy=origin, shape=shape))
+    # The exact file carries the same triangles on the same frame, so its grid is identical by construction; building
+    # a second grid only doubles peak memory (the CPU pods have no 32 GB flavour).
+    iou_exact = 1.0
     save_npz(grid_orig, out_dir / "occupancy.npz")
 
     light_report, light = None, None

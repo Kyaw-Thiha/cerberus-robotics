@@ -65,6 +65,8 @@ def create_job_pod(api_key: str, *, image: str, gpu_types: list[str] | None, env
         parsed = json.loads(text) if text else {}
     except ValueError:
         parsed = {"raw": text[:2000]}
+    if isinstance(parsed, list):  # the API answers a one-element list for a create
+        parsed = parsed[0] if parsed else {}
     return status, parsed
 
 

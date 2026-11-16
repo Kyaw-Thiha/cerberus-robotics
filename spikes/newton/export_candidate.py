@@ -25,7 +25,6 @@ def main() -> int:
     parser.add_argument("--checkpoint", required=True)
     parser.add_argument("--run-dir", default=None, help="the training run dir, for the reward/terrain curves")
     parser.add_argument("--iterations", type=int, default=1250)
-    parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args(sys.argv[1:])
     out = common.out_dir(args.out)
     report: dict = {"stage": "export_candidate", "args": vars(args), "versions": common.software_versions()}

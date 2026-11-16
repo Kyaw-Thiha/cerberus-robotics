@@ -208,6 +208,9 @@ tail -10 "$LOGS/eval_newton.log"
 sync_outputs
 
 stage eval-push-sweep
+if [ "${CERBERUS_SKIP_PUSH:-0}" = "1" ]; then
+    echo "[push] skipped (CERBERUS_SKIP_PUSH=1)"
+else
 timeout --signal=KILL 600 "$VENV/bin/python" -m spikes.newton.run_push_recovery \
     --task "Isaac-Velocity-Rough-Unitree-Go2-Cerberus-Newton-Play-v0" --platform go2 --terrain rough \
     --headless --checkpoint "$NEW_CKPT" --magnitudes 0,80 --terrain_levels 0,4 --trials_per_cell 20 \
@@ -215,6 +218,7 @@ timeout --signal=KILL 600 "$VENV/bin/python" -m spikes.newton.run_push_recovery 
 echo "[push] rc=$?"
 tail -12 "$LOGS/push_sweep.log"
 echo "$?" > "$OUT/push_sweep_rc.txt" 2>/dev/null || true
+fi
 sync_outputs
 
 stage walk-clips

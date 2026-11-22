@@ -67,30 +67,66 @@ confirmed superseded (`blind_ppo.yaml` became `blind_ppo_flat.yaml` in H3, which
 
 Measured with `rclone size --fast-list` before and after; deletes ran object by object after a per-object dry run.
 
-| prefix | before | after |
-|---|---|---|
-| bucket | 23,994 objects / 27.315 GiB | 23,875 / 27.209 GiB |
-| `cache/` | 1 / 8.3 MiB | 0 |
-| `worlds/rehearsal/` | 5 / 815 B | 0 |
-| `scene_admission/` | 68 / 72.1 MiB | 7 / 4.6 MiB |
-| `spike/` (Newton bundles held back) | 45 / 138 MiB | 45 / 138 MiB |
-| `jobs/` (status, logs, tails only) | 596 / 292 MiB | 559 / 289 MiB |
-| `migration/` (per-pod code bundles) | 308 / 225 MiB | 293 / 196 MiB |
-| `locomotion/` (all checkpoints held) | 465 / 1.297 GiB | 465 / 1.297 GiB |
-| `worlds/` | 22,492 / 25.044 GiB | 22,487 / 25.044 GiB |
+Two passes, both measured with `rclone size --fast-list` and both deleting object by object after a per-object dry run.
 
-Total freed: 119 objects, 107.77 MiB (113.0 MB), 0.4% of the bucket.
+| prefix | at the start | after pass 1 | after pass 2 |
+|---|---|---|---|
+| bucket | 23,994 / 27.315 GiB | 23,875 / 27.209 GiB | **23,248 / 26.191 GiB** |
+| `cache/` | 1 / 8.3 MiB | 0 | 0 |
+| `worlds/rehearsal/` | 5 / 815 B | 0 | 0 |
+| `scene_admission/` | 68 / 72.1 MiB | 7 / 4.6 MiB | 6 / 4.6 MiB |
+| `spike/` | 45 / 138 MiB | 45 / 138 MiB | 30 / 98.9 MiB |
+| `jobs/` | 596 / 292 MiB | 559 / 289 MiB | 227 / 243 MiB |
+| `migration/` | 308 / 225 MiB | 293 / 196 MiB | 201 / 62.3 MiB |
+| `locomotion/` | 465 / 1.297 GiB | 465 / 1.297 GiB | 278 / 505 MiB |
+| `slam/` | 18 / 257 MiB | 18 / 257 MiB | 18 / 257 MiB |
+| `worlds/` | 22,492 / 25.044 GiB | 22,487 / 25.044 GiB | 22,487 / 25.044 GiB |
+| `backups/` | 1 / 3.6 MiB | 1 / 3.6 MiB | 1 / 3.6 MiB |
 
-**The bucket is not "clean" and was never going to be.** The preprocessed scene cache is 92% of it: `worlds/` holds
-25.04 of 27.21 GiB, of which `worlds/grscenes/home/` is 22,482 objects and 24.88 GiB of GRScenes scenes, materials and
-model geometry. That cache is deliberate, it is expensive to rebuild, and it stays. The deletions here are per-job and
-per-experiment leftovers; the substantial reduction available is not in this cleanup but in whether that cache is
-wanted at all.
+Pass 1 freed 119 objects and 107.77 MiB. Pass 2 freed 627 objects and 1.018 GiB. Total: 746 objects, 1.124 GiB
+(1.21 GB), from 27.315 GiB to 26.191 GiB.
+
+Pass 2 keep list, as specified: per run the final checkpoint, `model_best_*`, ONNX and `.onnx.data`, meta and params,
+eval CSVs, cited videos; the adversary checkpoint the gate verdict names and the verdict; the GA candidate set under
+`migration/h4_nav/20261115T174943Z/inputs/checkpoints/` (the only ONNX copy); the Newton walking candidate
+(`model_1250.pt`), its clips and stills, and the results the archived report cites; every object cited in `docs/`;
+`worlds/`, `slam/` and `backups/` untouched. The guards removed 136 candidates from the delete list (videos, Newton
+stills, `model_best`, the adversary checkpoint, the verdict, the GA set, the per-run finals, ONNX and meta files, and
+objects cited by name); `GUARD_REMOVED.tsv` lists each one with its rule.
+
+Some over-keeping is deliberate: basenames like `model_0.pt` and `model_1000.pt` are cited as examples in docs, so the
+citation guard keeps those objects even where they are an earlier periodic checkpoint.
+
+**The bucket is not "clean", and saying so would be wrong.** `worlds/` is 25.04 of 26.19 GiB — 95.6% of it (92% before
+this pass) — and it is untouched. `worlds/grscenes/home/` alone is 22,482 objects and 24.88 GiB of GRScenes scenes,
+materials and model geometry. That cache is deliberate and expensive to rebuild; nothing in this cleanup was ever going
+to touch it. What was removed is per-job and per-experiment debris, and the remaining reduction is a decision about
+whether that cache is wanted at all, not housekeeping.
+
+One gap found while doing this: R2 holds only three Phase 0 clips (`unitree_go2_flat/2026-09-03_04-24-43`,
+`unitree_go2_rough/2026-09-03_06-56-49`, `unitree_go2_rough/2026-11-07_07-29-40`). The local
+`runs/2026-09-05_02-30-44_videos` and `runs/2026-09-08_19-28-32_videos` sets are not mirrored, so they stay local-only.
 
 Guards applied to the delete list, per the owner's conditions: everything under `jobs/newton-*` held; all checkpoints
 (intermediate, adversary, staged candidate sets) held; all videos and stills held; SLAM rosbags held; and any object
 whose name is cited in `docs/` held. That removed 60 of the 179 candidates; the list is in
 `~/cerberus-backups/r2-audit/manifests2/DROPPED.tsv`, with the per-object delete and dry-run logs beside it.
+
+## Local disk
+
+| removed | freed |
+|---|---|
+| `~/.cache/rattler` (pixi package cache) | 9.4 GiB |
+| `~/.cache/uv` | 12.9 MiB |
+| `~/.cache/pip`, `~/.cache/torch` | 12 MiB and 72 KiB |
+| repo `build/`, `install/`, `log/`, `.pytest_cache/`, `.ruff_cache/` | about 23 MiB |
+| `~/.cache/yay` | **not removed**: `yay -Sc` needs a sudo password; the directory is 2.7 MiB |
+
+Free space as `df` reports it: 59 GiB available before and 58.7 GiB after, even though 9.4 GiB of cache verifiably
+disappeared (`du` confirms it). Something else on the machine consumed the difference during the same window; I could
+not attribute it without root, and I am not calling this a win. `.pixi` (4.3 GiB), `third_party` (3.1 GiB), `data/`,
+`outputs/` and `policy/locomotion/runs/` were not touched. `pixi run lint` and `pixi run pytest -q` both pass after the
+purge (1285 passed, 20 skipped).
 
 ## Commits
 
@@ -136,12 +172,12 @@ git ... push <url> --delete cleanup-2026-11-08
 git ... push <url> --delete h1-docs-interfaces
 ```
 
-Remote state now: `refs/heads/main` at `5d55828`, `refs/heads/newton-spike` still present (its tip is in
-`archive/newton-spike-2026-11-21`; delete it with the same `--delete` command if it should go), and the four tags.
+Later in the same session, with approval, `origin/newton-spike` was deleted too (its tip is the archive tag). Remote
+state now: `refs/heads/main` only, plus the four tags.
 
 ## Open items for the owner
 
-- `origin/newton-spike` still exists on GitHub; its content is the archive tag. Say the word and it is deleted.
 - R2 lifecycle rules still need to be set in the dashboard; the recommended set is in `docs/storage.md`.
+- `yay -Sc` was not run (needs a sudo password); the yay cache is 2.7 MiB, so it is not worth a session.
 - The next task's provider-neutral host contract should supply replacements for the four archived entry points listed in
   `docs/archive.md`.

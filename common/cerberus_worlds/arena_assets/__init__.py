@@ -252,6 +252,11 @@ def ensure_mdl_system_path(mdl_path: Path | str | None) -> bool:
     """
     if not mdl_path:
         return False
+    if os.environ.get("CERBERUS_SKIP_MDL_PATH") == "1":
+        # Measured 2026-11-22: pointing Kit at the fetched GRScenes Materials folder (810 MDL files) makes it crash
+        # in libcarb.tasking at startup, before our code runs. Skipping the path keeps physics and rendering alive;
+        # materials fall back to the USD defaults. Set to 0 to restore the textured look once the bad MDL is found.
+        return False
     if (isaac_sim_root() / UE4_MDL_SOURCE_SUBPATH).is_dir():
         install_ue4_mdl_modules(mdl_path)
     old = os.environ.get(MDL_SYSTEM_PATH_ENV)

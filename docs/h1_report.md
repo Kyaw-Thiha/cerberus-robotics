@@ -77,7 +77,7 @@ Not done (with reason):
 - Package D implementation (the `ARX5_CFG` split): `docs/embodiment_split_plan.md` has the exact refactor, the byte-identical acceptance check and the sim smoke list.
 - Any L2/L3 evidence for a backend: no checkpoint-loading backend was written (explicitly out of scope); all six external cards stay L0.
 - Arena W1 rerun on a scene where the robot can stand; the `stock`-scene standing check still fails (`robot_z_min_max [-0.73,-0.48]`).
-- Phase 0.5 (`plans/handoff_phase0.5.md`), unchanged by this handoff.
+- Phase 0.5 (`docs/adversarial_gate_method.md`), unchanged by this handoff.
 
 **Housekeeping finding (A5):** `.env` is mode `644` with live-looking `WANDB_API_KEY`, `R2_ACCESS_KEY_ID`, `R2_SECRET_ACCESS_KEY`, `R2_TOKEN_VALUE`, `RUNPOD_API_KEY`. It is gitignored (`.gitignore:46`) and was never read or committed. Recommend `chmod 600 .env`.
 

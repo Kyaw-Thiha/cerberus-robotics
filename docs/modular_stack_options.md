@@ -74,7 +74,7 @@ The dashed path is how UMI-on-Legs runs a tabletop Diffusion Policy on legs: an 
 
 Two rules make this hold:
 
-1. **Backends declare their sensor needs and their boundary**, the same way `sensor_setup_handoff.md` already has algorithms declare required sensors. A config is valid only if every boundary has exactly one producer and one consumer.
+1. **Backends declare their sensor needs and their boundary**, the same way `docs/sensor_setup.md` already has algorithms declare required sensors. A config is valid only if every boundary has exactly one producer and one consumer.
 2. **The safety filter sits on B1/B2/B3 and on joint targets**, so it is paradigm-agnostic. A fully end-to-end joint-token VLA would bypass B1–B3 entirely, which is one more reason it is out of scope (§ Whole-body).
 
 ## Locomotion stacks

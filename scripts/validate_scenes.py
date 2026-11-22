@@ -1,6 +1,6 @@
 """Scene admission test: which scenes can the Go2 stack actually use, and where may the robot start?
 
-Spec: plans/arena_integration_handoff.md section 4c. One manifest per source (``data/scenes/<source>/admission.json``,
+Spec: docs/worlds_integration_spec.md. One manifest per source (``data/scenes/<source>/admission.json``,
 ``common/cerberus_worlds/admission.py``) with one row per scene: pass/fail/skip, reasons, validated spawn poses
 (best first, with the measured floor height) and metrics. Phase 1 navigation and the SLAM eval read it.
 

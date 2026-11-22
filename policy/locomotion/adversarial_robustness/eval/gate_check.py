@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Phase 0.5 gate evaluation: the minimum perturbation that breaks the candidate, per modality.
 
-The gate is relative (``plans/handoff_phase0.5.md``): the minimum *combined* force+command magnitude
+The gate is relative (``docs/adversarial_gate_method.md``): the minimum *combined* force+command magnitude
 that induces a fall must exceed the push range the candidate was trained and evaluated against
 (normalised to 1.0, see ``attack_math``). This script finds that minimum by reduce-until-survives --
 bisecting the wrapper's ``scale`` -- and writes ``gate_verdict.json`` with the numbers, plus the same

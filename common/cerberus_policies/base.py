@@ -119,7 +119,7 @@ class PolicyBackend(ABC):
 
     boundary: ClassVar[Boundary]
     role: ClassVar[Role] = Role.CONSUMER
-    #: sensor ids, same naming as plans/sensor_setup_handoff.md / sensor_profiles.yaml
+    #: sensor ids, same naming as docs/sensor_setup.md / sensor_profiles.yaml
     #: (lidar, front_camera, rear_camera, wrist_camera, imu) plus joint_encoders. Fused backends
     #: list the raw streams they consume here.
     required_sensors: ClassVar[Sequence[str]] = ()

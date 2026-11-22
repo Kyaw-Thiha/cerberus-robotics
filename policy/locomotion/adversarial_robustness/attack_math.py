@@ -1,7 +1,7 @@
 """Phase 0.5 gate arithmetic: perturbation bounds, rate limiting, magnitudes, reward, gate decision.
 
 Everything here is pure python so it can be tested without Isaac, and so the *definitions* the gate
-rests on are reviewable in one place. The rules come from ``plans/handoff_phase0.5.md``:
+rests on are reviewable in one place. The rules come from ``docs/adversarial_gate_method.md``:
 
   * the adversary emits a base push force (x/y) and a velocity-command override;
   * its output is rate-limited to 0.1x the channel's max range per simulation timestep (paper value);

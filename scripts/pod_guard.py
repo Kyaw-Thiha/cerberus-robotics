@@ -4,7 +4,7 @@ Why: a GRScenes home pulls in tens of GB of shared `Materials`/`models` (H2 meas
 scene alone), and the development laptop has only a few GB free. A failed or partial fetch fills the disk and
 leaves a half-written scene that later runs silently pick up. The owner's rule (2026-11-09) is therefore: scene
 assets are downloaded, preprocessed and read on the pod only, and nothing scene-sized is ever downloaded to the
-laptop. `docs/worlds.md` and `plans/handoff_h4_navigation_in_scene.md` state the same rule.
+laptop. `docs/worlds.md` states the same rule.
 
 Where the guard sits: the CLI entry of every scene-touching script. Three of them (`fetch_grscenes_from_r2.py`,
 `fetch_grscenes_to_r2.py`, `build_lidar_proxy.py`) are driven by existing tests through `main()` with mocked I/O,

@@ -34,7 +34,7 @@ while its *fall* rate is 0% — success also requires velocity tracking and a le
 wrapper does not re-implement. The check therefore compares fall rates, not success rates; comparing
 against 88% would have failed a correct wrapper by 12 points.
 
-Method: `plans/handoff_phase0.5.md` (Shi, Zhang, Miki, Lee, Hutter, Coros, RSS 2024). The locomotion
+Method: `docs/adversarial_gate_method.md` (Shi, Zhang, Miki, Lee, Hutter, Coros, RSS 2024). The locomotion
 candidate is frozen; a small MLP adversary is trained with PPO to emit a base push force and a
 velocity-command override; its reward is the paper's Eq. 2-3, including the Lipschitz penalty.
 

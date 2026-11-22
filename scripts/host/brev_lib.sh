@@ -73,10 +73,16 @@ try:
     data = json.loads(raw)
 except ValueError:
     print("unknown"); raise SystemExit
-rows = data.get("instances", data) if isinstance(data, dict) else data
+# The live API answers {"workspaces": [...]} and null when the org is empty; older builds used "instances".
+rows = data
+if isinstance(data, dict):
+    for key in ("workspaces", "instances", "nodes"):
+        if key in data:
+            rows = data[key] or []
+            break
 if not isinstance(rows, list):
     print("unknown"); raise SystemExit
-dead = {"STOPPED", "DELETED", "TERMINATED", "ERROR", "FAILED"}
+dead = {"STOPPED", "DELETED", "DELETING", "TERMINATED", "ERROR", "FAILED"}
 live = 0
 for row in rows:
     if not isinstance(row, dict):

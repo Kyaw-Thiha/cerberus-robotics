@@ -9,11 +9,13 @@ a claim of physical deployment.
 
 ## Status (2026-11-22)
 
-Tier **T0** of the first-scene run: the host tooling, doctor, bootstrap, session plan and Brev wrappers are on `main`
-and tested. **The cloud half did not run** — the Brev account was logged out, so no instance was created and no RTX
-clip or navigation number exists yet. Expect to run `brev login` once, then
-`scripts/host/brev_up.sh ...` and `scripts/host/run_session.sh ...`. Details and the exact next step:
-[`docs/reports/first_scene_session.md`](docs/reports/first_scene_session.md).
+Tier **T0** of the first-scene run: the host tooling, doctor, bootstrap, session plan and Brev wrappers are on `main`,
+tested, and were used for real. **T1-T3 are blocked by Brev, not by this repo:** four instances on three providers
+(massedcompute L40, scaleway L4, hyperstack L40) reached `RUNNING`/`READY`/`HEALTHY`, but Brev's SSH relay accepted the
+TCP connection and never delivered a shell ("banner exchange" timeout), so no Kit launch or scene run was possible.
+Spend was ~1.50 USD of the 12 USD cap; every instance was deleted and no timer remains. Expect to fix the SSH path
+first (support ticket with the timestamps in the report, or try another network); the run itself is ready to execute.
+Details: [`docs/reports/first_scene_session.md`](docs/reports/first_scene_session.md).
 
 ## Platform
 

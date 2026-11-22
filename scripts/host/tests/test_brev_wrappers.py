@@ -118,6 +118,22 @@ def test_up_refuses_when_not_logged_in(env):
     assert "create demo" not in calls(env)
 
 
+def test_up_reads_the_current_workspaces_schema(env):
+    env["BREV_LS_JSON"] = json.dumps({"workspaces": None})
+    assert "0" in subprocess.run(["bash", "-c", f"source {HOST}/brev_lib.sh; brev_live_count"], env=env,
+                                 capture_output=True, text=True, check=False).stdout
+    env["BREV_LS_JSON"] = json.dumps({"workspaces": [{"name": "x", "status": "RUNNING"}]})
+    assert "1" in subprocess.run(["bash", "-c", f"source {HOST}/brev_lib.sh; brev_live_count"], env=env,
+                                 capture_output=True, text=True, check=False).stdout
+
+
+def test_a_deleting_instance_is_not_live(env):
+    env["BREV_LS_JSON"] = json.dumps({"workspaces": [{"name": "x", "status": "DELETING"}]})
+    out = subprocess.run(["bash", "-c", f"source {HOST}/brev_lib.sh; brev_live_count"], env=env,
+                         capture_output=True, text=True, check=False).stdout
+    assert out.strip() == "0"
+
+
 def test_up_refuses_when_the_live_count_is_unreadable(env):
     env["BREV_LS_JSON"] = "not json"
     r = up(env)

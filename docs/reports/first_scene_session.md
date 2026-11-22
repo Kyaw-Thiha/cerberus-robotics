@@ -1,110 +1,123 @@
-# First scene session: tier reached, and why the cloud half did not run
+# First scene session: tier reached, the cloud attempt and why it stopped
 
-Date: 2026-11-21 22:00 to 2026-11-22 (local, unattended). Scope: the overnight handoff "Host Contract, Brev Setup and
-First Real Scene Render".
+Date: 2026-11-21 22:00 to 2026-11-22 (local, unattended), with a second cloud pass after the owner signed in to Brev.
+Scope: the overnight handoff "Host Contract, Brev Setup and First Real Scene Render".
 
-## Tier reached: **T0** (local setup done), and only T0
+## Tier reached: **T0** (local setup done); T1-T3 not reached
 
 | tier | meaning | reached |
 |---|---|---|
-| T0 | provider-neutral local setup, tested, committed | **yes** |
-| T1 | a compliant cloud machine, Kit starts, stand test passes | **no** — no instance was ever created |
+| T0 | provider-neutral local setup, tested, committed, pushed | **yes** |
+| T1 | a compliant cloud machine, Kit starts, stand test passes | **no** — no instance ever became reachable |
 | T2 | RTX clip of the Go2 following a scripted path in a real GRScenes home | **no** |
 | T3 | navigation eval (N=10) with success and failure clips | **no** |
 
-**Why no instance: Brev was logged out and could not be logged in without a human.** `brev --version` works
-(v0.6.337), but every authenticated call fails:
+The blocker is **not** the driver, the image, the scene or our code: it is that no Brev instance exposed a working SSH
+shell. Four instances on three providers, one stuck before boot and three fully "READY", none of them answered an SSH
+session.
 
-```
-$ brev ls
-WARN: malformed refresh token, logging out
-You are currently logged out, would you like to log in? [Y/n]:
-```
+## The cloud attempt, in order
 
-`~/.brev/credentials.json` holds a refresh token that the client rejects (`~/.brev/.invalid-refresh-token` is written
-on each attempt), no `BREV_*` token is present in the environment, and `brev login` requires an interactive browser
-flow. The handoff's own rule for this case is "if not logged in and no token in the environment, skip the cloud
-phases", so Phases 2-4 were skipped, no instance was created, and nothing was spent.
+| # | type / provider | USD/h | created | outcome | wall |
+|---|---|---|---|---|---|
+| 1 | `gpu_1x_rtx6000` (RTX 6000, 24 GB) | 0.828 | 08:02Z | stuck `DEPLOYING`/`BUILDING` for 38 min; `brev reset` unsupported ("Not Found"); deleted | 37m |
+| 2 | `massedcompute_L40` (L40, 48 GB) | 1.056 | 08:47Z | `RUNNING`, build `COMPLETED`, shell `READY`, health `HEALTHY`; SSH never answered (banner timeout); deleted | 17m |
+| 3 | `scaleway_L4` (L4, 24 GB) | 1.140 | 09:05Z | same as #2 after 26 min of retries; deleted | 26m |
+| 4 | `hyperstack_L40` (L40, 48 GB) | 1.200 | 09:31Z | same as #2; deleted | 9m |
 
-## Hosts tried
+All four stayed under the 1.50 USD/h cap, each had a kill timer armed **before** creation, and every instance was
+deleted within the 3.5 h window. Creation 4 of 4 was the last one the rules allow.
 
-None. Zero creations, zero live instances, **spend 0.00 USD of the 12 USD cap**. No kill timer was armed because no
-instance existed; the timer mechanism itself is implemented and mock-tested in `scripts/host/brev_up.sh`
-(`systemd-run --user --unit=cerberus-kill-<name> --on-calendar=... --timer-property=Persistent=yes`), including the
-refusal to create anything when the timer cannot be armed or does not appear in `systemctl --user list-timers`.
+### The exact SSH diagnosis
 
-Part of Phase 2 did run, because it needs no account: `brev search gpu --json` reads the public catalog. Filtered to
-RT-core GPUs, >= 24 GB VRAM, >= 32 GB RAM, >= 200 GB disk and <= 1.50 USD/h, six types remained; the cheapest is
-`gpu_1x_rtx6000` at 0.828 USD/h (24 GB, 46 GB RAM, 512 GB disk, 600 s boot). `brev create --dry-run` against it
-resolved the type. The table with the date and every exclusion rule is in `docs/dev_machine.md`.
+- `brev ls --json` for #2-#4: `status RUNNING`, `build_status COMPLETED`, `shell_status READY`, `health_status HEALTHY`.
+- `brev exec` and `brev shell`: `Connection timed out during banner exchange`.
+- Raw TCP to Brev's relay (`global.prd.ga.run.brev.nvidia.com` -> 75.2.122.140 / 99.83.144.240, port 12649) **connects**;
+  `ssh -v` reaches "Connection established" and then waits for a banner that never comes. So the relay accepts the
+  connection and has no live shell behind it.
+- Direct host ports are closed (`163.172.163.237:22` and `:12649` timed out for #3).
+- Tried and failed: `brev refresh` (several times), `brev enable-ssh`, clearing `ControlMaster` sockets and
+  `ssh -o ControlMaster=no -o ControlPath=none`, waiting 5-10 minutes after "READY", `brev exec --host`.
+- `brev healthcheck` reports `Healthy!`; local HTTPS egress works (200 from an external site), so neither our network
+  nor Brev's control plane is down: the data path from the relay to each instance's shell is.
 
-## Launches, assertions, metrics
+This is the same error class on three different providers (#2, #3, #4), which is the handoff's stop condition for cloud
+work. It was reached at #4, so there was no retry left to spend.
 
-None: no Kit launch was attempted, so launches ok/total, stand assertions, navigation metrics, clip locations and
-the physics-versus-kinematic comparison are all empty. The last physics numbers remain the H4 report's, and nothing
-here supersedes them. The kinematic upper bound is unchanged (20/20, SPL 1.0, synthetic flat), and it is still an
-upper bound, not a scene result.
+## Hosts tried, launches, assertions, metrics
+
+No Kit launch was attempted anywhere, because no shell was reachable: launches ok/total, the stand assertions, the
+navigation metrics and the clips are all absent, and no physics number in this repository changed. The H4 numbers
+remain the latest, and the kinematic upper bound (20/20, SPL 1.0, synthetic flat) is still only an upper bound.
 
 ## What was built (the T0 deliverable)
 
 | piece | what it does | evidence |
 |---|---|---|
 | `docs/host_contract.md` | NVIDIA's requirements with sources, marked verified-by-us or documentation-only; the driver rule and its evidence | sources read 2026-11-22 |
-| `scripts/host/host_doctor.py` | one PASS/FAIL per contract item with an exact fix, plus a JSON report; secret values never printed | 48 unit tests on mocked output; run on this laptop, which fails 6 of 10 checks (4 GB VRAM, 15 GiB RAM, driver 615.x, non-Ubuntu, 58 GB disk), and against the real bucket, which passes |
-| `scripts/host/{bootstrap_host,run_session}.sh` | idempotent image/scene/cache setup; the stand/demo/smoke/nav/replay plan judged by artifacts, with `--shutdown-after` refused outside a VM | dry runs; 12 shell tests with stubbed binaries |
-| `scripts/host/run_{stack_check,scene_admission,scene_eval,slam_eval}.sh` | the four archived entry points, re-created provider-neutral (no pod guard, no dead-man switch, no self-terminate; paths from the environment) | dry runs; a test asserts no provider-specific code remains |
-| `scripts/host/brev_{up,status,exec,copy,down}.sh` | price/hours/creation/live caps, kill timer before create, ownership guard, spend ledger | 18 mock tests, including every refusal path |
-| `scripts/host/` move | driver gate, launch probe, `kit_retry`, `kit_logs`, `launch_gate`, `job_attempt_log`, `run_resilient`, hygiene, allowlist | 1369 tests pass (baseline 1285; the new host tests add 84); lint clean |
-| `docs/dev_machine.md` | workstation, AWS worked example, Brev with prices dated 2026-11-22 | prices from the catalog; unverified items marked |
+| `scripts/host/host_doctor.py` | one PASS/FAIL per contract item with an exact fix, plus a JSON report; secret values never printed | 48 unit tests; run on this laptop (fails 6 of 10) and against the real bucket (passes) |
+| `scripts/host/{bootstrap_host,run_session}.sh` | idempotent image/scene/cache setup; the stand/demo/smoke/nav/replay plan judged by artifacts, `--shutdown-after` refused outside a VM | dry runs; 12 shell tests with stubbed binaries |
+| `scripts/host/run_{stack_check,scene_admission,scene_eval,slam_eval}.sh` | the four archived entry points, re-created provider-neutral | dry runs; a test asserts no provider-specific code remains |
+| `scripts/host/brev_{up,status,exec,copy,down}.sh` | price/hours/creation/live caps, kill timer before create, ownership guard, spend ledger | 20 mock tests plus live use on all four instances |
+| `scripts/host/` move | driver gate, launch probe, `kit_retry`, `kit_logs`, `launch_gate`, `job_attempt_log`, `run_resilient`, hygiene, allowlist | 1371 tests pass (baseline 1285); lint clean |
+| `docs/dev_machine.md` | workstation, AWS worked example, Brev with prices dated 2026-11-22 | catalog JSON; unverified items marked |
 
 ## Bugs found and fixed
 
-1. **`host_doctor` probed the GPU when every GPU check was skipped.** A test with a runner that raises caught it;
-   `nvidia-smi` is now only run when at least one of gpu/rt_cores/vram/driver is wanted.
-2. **`brev_live_count` never read its input.** It piped JSON into `python3 - <<'PY'`, where the heredoc replaces
-   stdin, so every creation would have been refused with "unknown live count". The JSON now passes as an argument.
-3. **`date -d '+3.5 hours'` is not portable**, so the kill deadline could be empty. Hours are converted to seconds
-   first, and an empty deadline now refuses creation.
-4. **`run_session.sh` passed `--internal-stage` to itself without parsing it**, so every stage child would have exited
-   2 and the artifact check would have reported a false failure. The flag is handled before the stage loop.
-5. **`run_slam_eval.sh`'s preflight read `$2`/`$3` from a function called with one argument**, an unbound variable
-   under `set -u`. Fixed and made dry-run aware.
-6. **The driver gate hard-coded RunPod termination and a pod-only guard.** It now returns a verdict plus an optional
-   `--on-reject-cmd` hook, and the tests assert no provider variable is consulted.
-7. Process bug: while editing docs, one script wrote the README text into `docs/project_structure.md`. Caught by the
-   diff (355 lines to 121), restored from HEAD, both edits redone separately. No commit contains the damaged file.
+1. `host_doctor` probed the GPU when every GPU check was skipped (found by a test with a runner that raises).
+2. `brev_live_count` never read its input: it piped JSON into `python3 - <<'PY'`, where the heredoc replaces stdin, so
+   every creation would have been refused with "unknown live count". The JSON now passes as an argument.
+3. `date -d '+3.5 hours'` is not portable, so the kill deadline could be empty; hours are converted to seconds and an
+   empty deadline refuses creation.
+4. `run_session.sh` did not parse `--internal-stage`, so every stage child would have exited 2.
+5. `run_slam_eval.sh`'s preflight read `$2`/`$3` from a function called with one argument (unbound under `set -u`).
+6. The driver gate hard-coded RunPod termination and a pod-only guard; it now returns a verdict plus an optional
+   `--on-reject-cmd` hook.
+7. The live-instance guard only knew `{"instances": ...}`, but the real API answers `{"workspaces": ...}`, and counted
+   `DELETING` as live. Both fixed before the cloud pass, which is why the creations were allowed at all.
+8. Process bug: a doc edit script wrote README text into `docs/project_structure.md`; caught by the diff, restored from
+   HEAD, redone. No commit contains the damaged file.
 
 ## What still fails, and the exact next step
 
-**What fails:** every tier above T0, for one reason: no authenticated Brev session.
+**What fails:** Brev's SSH data path on this account/network — the relay accepts TCP but never carries a shell, on
+three providers, while the API reports the instances healthy and ready. Until a shell answers, no tier above T0 can be
+attempted, on any GPU.
 
 **Next step, in order:**
 
-1. Log in: `brev login` (a human, once). Confirm with `brev ls`.
-2. `scripts/host/brev_up.sh --name cerberus-s1 --type gpu_1x_rtx6000 --price 0.828` — this arms the 3.5 h kill timer,
-   checks the caps, and creates the instance. If the driver is outside the allowlist, replace the instance with the
-   next row of the table (L40 or L4) instead of fighting the driver.
-3. On the instance: `host_doctor.py`, then `bootstrap_host.sh --data-dir /workspace/cerberus-data`.
-4. `run_session.sh --scene MV7J6NIKTKJZ2AABAAAAADQ8_usd` — stand first; if the assertions fail for a code reason, the
-   log names the artifact (`assertions.json`) and the 60-minute debug box applies.
-5. `brev_down.sh cerberus-s1` when the results are pulled. Delete the credential file first, and rotate the token:
-   it is designed to be copied to a rented host.
+1. From the same machine, check Brev's own reachability outside this repo: `brev create test --type scaleway_L4` then
+   `brev shell test`. If that also times out, it is account- or network-level: open a Brev support ticket with the
+   timestamps above and the `ssh -v` line "Connection established" followed by "banner exchange" timeout, and ask
+   whether the org's instances register with `global.prd.ga.run.brev.nvidia.com`.
+2. Try the same command from a different network (a phone hotspot is enough) to tell a local-egress problem from a
+   Brev-side one.
+3. With a working shell, the run is ready: `host_doctor.py`, `bootstrap_host.sh --data-dir /workspace/cerberus-data`,
+   `run_session.sh --scene MV7J6NIKTKJZ2AABAAAAADQ8_usd`. The first stage writes `assertions.json`; if it fails for a
+   code reason the log names it and the 60-minute debug box applies.
+4. If Brev cannot be fixed and a non-Brev VM is allowed later, the same three commands work on any host that passes
+   the contract; only `brev_*.sh` is Brev-specific.
 
 ## Decisions from `outputs/overnight_log.md` that mattered
 
-- Skip Phases 2-4 on the logged-out Brev account (handoff rule), and keep the local phase broad instead of idling.
-- Do not run `brev login`: it needs a browser, and asking the owner is not available.
-- Name the moved tools provider-neutrally (`driver_gate`, `launch_probe`) rather than keeping `pod_*` names.
-- Re-create the four archived entry points with a shared library instead of copying them, so the pod-only paths and
-  provider calls cannot come back by accident.
-- Mark every Brev command that was not run against a live account as **unverified** in the docs, rather than implying
-  a tested path.
+- Skip the cloud phases while Brev was logged out (handoff rule); do not run `brev login` unattended.
+- After the owner signed in: create with the cheapest compliant offering, keep the kill timer armed before creation,
+  and replace rather than debug a bad host.
+- #1: replace after 38 min of no boot (`brev reset` unsupported) instead of waiting out the 3.5 h.
+- #2-#4: treat "READY but no SSH" as a host-level failure after 3 retries plus `refresh`/`enable-ssh`, and move to a
+  provider with a different network path rather than re-running the same one.
+- Stop at #4: three consecutive same-class failures on different instances is the handoff's stop condition.
+- Do not exceed the 1.50 USD/h, 3.5 h, 4-creation or one-live limits at any point; all four were honoured.
 
 ## Spend
 
 | item | amount |
 |---|---|
-| instances created | 0 of 4 |
-| instance hours | 0 of 3.5 |
-| spend | **0.00 USD of 12.00** |
-| R2 objects written | 0 (no results to sync) |
+| instances created | 4 of 4 |
+| instance wall clock | 90 min (37 + 17 + 26 + 9) |
+| spend estimate (price x time, from the ledger) | **~1.50 USD of 12.00** |
+| kill timers armed / fired | 4 armed, 0 needed (all deleted normally); 0 timers left |
+| R2 objects written | 0 |
+
+The final billing could differ slightly if the provider bills boot time differently; the ledger estimate is the upper
+bound of what the four instances could have cost at their listed prices.

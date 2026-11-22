@@ -130,6 +130,22 @@ brev stop cerberus-t0 && brev delete cerberus-t0
 (`scripts/host/tests/test_brev_wrappers.py`), but no live call was made. `brev search gpu --json` and
 `brev create --dry-run` were run and worked.
 
+### If SSH to an instance times out at "banner exchange"
+
+Symptom: `brev exec`, `brev shell` and plain `ssh <name>` all print `Connection timed out during banner exchange`; `brev ls`
+shows the instance `RUNNING` with shell `READY` and health `HEALTHY`. The relay accepts TCP (ssh's `-vvv` says
+`Connection established`) and never sends a banner.
+
+What this machine showed on 2026-11-22 (CLI v0.6.337, OpenSSH 10.6, cloudflared 2024.10.0): the generated
+`~/.brev/ssh_config` entry had **no `ProxyCommand`**, and no cloudflared process or brev service was running.
+`brev register` installs the tunnel but requires sudo (`register.sudoWriteFile` in the CLI); after running it the config
+was unchanged and no tunnel appeared. `brev refresh`/`brev enable-ssh`, clearing `ControlMaster`, `brev exec --host`,
+`brev port-forward`, and a different instance/provider all failed the same way.
+
+So: check `grep ProxyCommand ~/.brev/ssh_config` and `pgrep -a cloudflared` first. If both are empty, this is the
+client-side tunnel, not the instance — do not spend money creating another instance. Full evidence, timeline and a
+ready-to-send support message: `docs/reports/brev_ssh_issue.md`.
+
 ## On the instance
 
 ```bash

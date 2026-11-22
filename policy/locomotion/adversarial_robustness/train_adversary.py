@@ -194,7 +194,7 @@ def main(argv=None) -> int:
         traceback.print_exc()
         return 1
     finally:
-        # SimulationApp.close() exits 0 regardless of what happened (docs/runpod.md) -- never mask it.
+        # SimulationApp.close() exits 0 regardless of what happened (docs/archive.md) -- never mask it.
         sys.stdout.flush()
 
 

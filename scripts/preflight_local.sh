@@ -24,19 +24,11 @@ VENV="${PREFLIGHT_VENV:-/tmp/cerberus-preflight}"
 SKIP_INSTALL=0
 [[ "${1:-}" == "--skip-install" ]] && SKIP_INSTALL=1
 
-# The scripts this phase owns. The repo has older shell scripts with constructs shellcheck cannot
-# parse (scripts/run_slam_eval_remote.sh), which are not this work's to change.
+# The host-side shell scripts that are still in the repo.
 OWNED_SCRIPTS=(
-    scripts/pod_isaac_lib.sh
-    scripts/run_ga_stack_check_pod.sh
-    scripts/run_ga_retrain_pod.sh
-    scripts/run_adversarial_gate_pod.sh
-    scripts/run_robustify_pod.sh
-    scripts/pull_pod_artifacts.sh
     scripts/preflight_local.sh
     scripts/pod_driver_gate.sh
     scripts/pod_launch_probe.sh
-    scripts/pod_deadman.sh
     scripts/kit_retry.sh
     scripts/kit_cache.sh
 )
@@ -150,10 +142,10 @@ if pixi run python scripts/build_scan_proxy.py --help > /dev/null 2>&1; then
 else
     record "h4-build-scan-proxy-help" FAIL
 fi
-if pixi run python scripts/create_pod.py --dry-run > /dev/null 2>&1 && env -u RUNPOD_API_KEY pixi run python scripts/pod_stop.py --pod-id test --dry-run > /dev/null 2>&1 && pixi run python scripts/pod_budget.py --rate 1 --start $(date +%s) > /dev/null 2>&1; then
-    record "h4-pod-tools" PASS
+if pixi run python -c "import sys; sys.path.insert(0, 'scripts'); import pod_driver_gate, pod_launch_probe, kit_retry, kit_logs, job_attempt_log, redact, pod_guard" > /dev/null 2>&1; then
+    record "host-tools-import" PASS
 else
-    record "h4-pod-tools" FAIL
+    record "host-tools-import" FAIL
 fi
 if pixi run python scripts/kit_cache.py discover > /dev/null 2>&1 && pixi run python scripts/nav_eval.py --dry-run > /dev/null 2>&1 && pixi run python scripts/build_occupancy.py --help > /dev/null 2>&1 && pixi run python scripts/kinematic_eval.py --help > /dev/null 2>&1; then
     record "h4-driver-clis" PASS

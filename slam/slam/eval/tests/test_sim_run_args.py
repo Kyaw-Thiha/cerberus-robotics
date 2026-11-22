@@ -145,7 +145,7 @@ def test_write_report_round_trips_and_reports_failure(tmp_path):
 
 
 def test_negative_spawn_is_accepted_with_the_equals_form():
-    """run_slam_eval_remote.sh passes --spawn=VALUE; with a space, argparse reads a leading '-' as an option."""
+    """The driver passes --spawn=VALUE; with a space, argparse reads a leading '-' as an option."""
     import argparse
 
     parser = argparse.ArgumentParser()

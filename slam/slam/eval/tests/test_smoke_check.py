@@ -122,7 +122,7 @@ def test_evaluate_sim_without_a_report():
 
 def test_collisions_are_reported_but_do_not_fail_the_plumbing_smoke(capsys):
     # The canned open-loop schedule is generic, so a collision is not a plumbing failure; scoring is refused
-    # separately (run_slam_eval_remote.sh reads valid_for_scoring), and the smoke must still say it happened.
+    # separately (the driver reads valid_for_scoring), and the smoke must still say it happened.
     report = _sim_report()
     report["collision"].update(
         collision_events=2, collision_steps=40, bodies_in_collision=["base"],

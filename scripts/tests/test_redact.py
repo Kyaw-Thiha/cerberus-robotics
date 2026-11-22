@@ -29,3 +29,12 @@ def test_nested_and_masked_json_contains_no_secret():
     parsed = json.loads(text)
     assert parsed["env"]["R2_SECRET_ACCESS_KEY"] == "tops…alue"
     assert parsed["args"] == ["bash"] and parsed["n"] == 1
+
+
+def test_a_job_body_with_env_is_masked():
+    body = ('{"id":"job1","env":{"R2_SECRET_ACCESS_KEY":"abcdef0123456789abcdef",'
+            '"GITHUB_TOKEN":"rpa_1234567890abcdef"},"apiKey":"rpa_1234567890abcdef"}')
+    masked = redact.mask_text(body)
+    assert "abcdef0123456789abcdef" not in masked
+    assert "rpa_1234567890abcdef" not in masked
+    assert '"R2_SECRET_ACCESS_KEY":"***"' in masked

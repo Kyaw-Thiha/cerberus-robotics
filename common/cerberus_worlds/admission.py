@@ -141,7 +141,7 @@ def write_scene_ids_file(path: Path | str, scene_ids: Iterable[str]) -> int:
 
     Callers must branch on the returned count, not on the file size: ``print("\\n".join([]))`` writes a lone
     newline, so a 1-byte file passes a size/`-s` test and is then handed to a consumer that reads zero ids and
-    treats that as misuse (see ``scripts/run_scene_admission_pod.sh``'s upload step).
+    treats that as misuse (see the scene-admission job's upload step, archived in docs/archive.md).
     """
     ids = [str(s) for s in scene_ids]
     Path(path).write_text("".join(f"{i}\n" for i in ids), encoding="utf-8")

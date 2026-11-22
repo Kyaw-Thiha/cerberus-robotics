@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs ON THE POD, execed by scripts/run_slam_eval_remote.sh from the repo
+# Runs ON THE POD, executed by the SLAM-eval driver (archived: docs/archive.md)
 # root, inside its own subshell that has already sourced
 # /pixi-project/activate-multicam_slam.sh and /colcon_ws/install/setup.bash.
 #
@@ -23,7 +23,7 @@
 # instances already running (they produce this node's *_depth_topic
 # inputs) -- launched here as background processes, kept alive for this
 # script's whole lifetime, rather than folded into
-# scripts/run_slam_eval_remote.sh's generic per-backend launch contract
+# the driver's generic per-backend launch contract
 # (every other backend's launch_algorithm.sh is a single exec'd process;
 # this is the one backend that genuinely needs two).
 set -euo pipefail
@@ -47,7 +47,7 @@ export LD_LIBRARY_PATH="/workspace/multicam_slam/lib:/workspace/multicam_slam/Th
 # multicam_slam_node's depth topics go unfed in that configuration. Not a
 # bug in this script; it's a real prerequisite (the repo's own `slam`
 # package must be colcon-built on the target pod, same as any real
-# run_slam_eval_remote.sh invocation already does for ground-truth/sensor
+# driver invocation already does for ground-truth/sensor
 # bridge nodes) that a bare artifact-only smoke test doesn't satisfy.
 ros2 launch "$REPO_ROOT/slam/slam/backends/multicam_slam/stereo_to_depth_launch.py" &
 STEREO_DEPTH_PID=$!
@@ -55,7 +55,7 @@ STEREO_DEPTH_PID=$!
 # process image, which would silently skip this trap (an EXIT trap never
 # fires across exec) and leak the two stereo_to_depth_node instances as
 # orphans once the SLAM node exits, uncleaned by
-# run_slam_eval_remote.sh's own ALGORITHM_PID kill (which only knows about
+# the driver's own ALGORITHM_PID kill (which only knows about
 # whatever PID this whole script ends up as).
 trap 'kill "$STEREO_DEPTH_PID" 2>/dev/null' EXIT
 sleep 2  # let both stereo_to_depth_node instances finish coming up before the SLAM node starts subscribing to their depth output

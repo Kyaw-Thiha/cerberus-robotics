@@ -1,7 +1,7 @@
 # Cerberus remote image, NEW stack: Isaac Sim 6.2.0, Python 3.12, Isaac Lab
 # v3.0.0 (GA), Isaac Lab Arena `main`. Lives side by side with docker/remote
 # (OLD stack: Sim 5.1.0 / Lab v2.3.2 / py3.11, kept for checkpoint-dependent
-# checks). Runs ONLY on a rented remote GPU pod (see docs/runpod.md).
+# checks). Runs ONLY on a rented remote GPU pod (see docs/archive.md).
 #
 # Sources each decision is based on (read 2026-10-05):
 #   - docker/remote/{Dockerfile,start.sh,requirements.txt}: the behaviours pods

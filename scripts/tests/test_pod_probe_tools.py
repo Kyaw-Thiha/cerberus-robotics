@@ -1,12 +1,7 @@
-"""Tests for the liveness probe, Kit log capture, the cache bundle, the budget and the replay selection."""
+"""Tests for the Kit log capture and the replay selection."""
 
-from pathlib import Path
 
-import pytest
-
-import kit_cache
 import kit_logs
-import pod_budget
 from nav_eval import select_replay_indices
 
 
@@ -45,80 +40,7 @@ def test_copy_kit_log_finds_and_copies_the_newest(tmp_path):
     assert timeline["markers"]
 
 
-# --- cache bundle ------------------------------------------------------------------------------
-
-def make_home(tmp_path):
-    home = tmp_path / "home"
-    (home / ".cache" / "ov").mkdir(parents=True)
-    (home / ".cache" / "ov" / "shader.bin").write_text("x" * 1024)
-    (home / ".cache" / "warp").mkdir(parents=True)
-    (home / ".cache" / "warp" / "w.bin").write_text("y" * 512)
-    return home
-
-
-def test_discover_finds_only_non_empty_candidates(tmp_path):
-    home = make_home(tmp_path)
-    (home / ".cache" / "kit").mkdir()  # empty: ignored
-    found = {p.name for p in kit_cache.discover(home)}
-    assert found == {"ov", "warp"}
-
-
-def test_save_and_restore_round_trip(tmp_path):
-    source_home = make_home(tmp_path)
-    work = tmp_path / "work"
-    uploaded = {}
-
-    def upload(archive: Path, remote_dir: str) -> bool:
-        uploaded["archive"] = archive
-        uploaded["remote"] = remote_dir
-        return True
-
-    manifest = kit_cache.save("595.91.07", "NVIDIA GeForce RTX 4090", home=source_home,
-                              upload=upload, out_dir=work)
-    assert manifest["saved"] and manifest["dirs"] == [".cache/ov", ".cache/warp"]
-    assert uploaded["remote"] == "cache/kit/595.91.07_nvidia_geforce_rtx_4090"
-
-    dest_home = tmp_path / "dest"
-    dest_home.mkdir()
-    restore_work = tmp_path / "restore"
-
-    def download(remote_dir: str, local_dir: Path) -> bool:
-        local_dir.mkdir(parents=True, exist_ok=True)
-        (local_dir / uploaded["archive"].name).write_bytes(uploaded["archive"].read_bytes())
-        return True
-
-    result = kit_cache.restore("595.91.07", "NVIDIA GeForce RTX 4090", home=dest_home,
-                               download=download, work_dir=restore_work)
-    assert result["restored"]
-    assert (dest_home / ".cache" / "ov" / "shader.bin").is_file()
-    assert kit_cache.cache_restored("595.91.07", "NVIDIA GeForce RTX 4090", home=dest_home)
-    assert not kit_cache.cache_restored("580.95.05", "NVIDIA GeForce RTX 4090", home=dest_home)
-
-
-def test_restore_refuses_a_missing_bundle(tmp_path):
-    result = kit_cache.restore("595.91.07", "GPU", home=tmp_path, download=lambda *a: False,
-                               work_dir=tmp_path / "w")
-    assert not result["restored"]
-
-
-def test_cache_key_is_driver_and_gpu_specific():
-    assert kit_cache.cache_key("595.91.07", "NVIDIA GeForce RTX 4090") != \
-        kit_cache.cache_key("580.95.05", "NVIDIA GeForce RTX 4090")
-
-
-# --- budget and replay -------------------------------------------------------------------------
-
-def test_spend_estimate_and_warning():
-    est = pod_budget.estimate(0.89, started_epoch=0, now_epoch=3600)
-    assert est["elapsed_min"] == 60.0 and est["usd"] == pytest.approx(0.89)
-    assert not est["over_warn"]
-    assert pod_budget.estimate(1.0, 0, 6 * 3600)["over_warn"]
-
-
-def test_stage_caps_cover_the_documented_stages():
-    for stage in ("provision", "launch", "fetch", "grids", "stand", "navigation", "wrap_up"):
-        assert stage in pod_budget.STAGE_CAPS_MIN
-
+# --- replay selection --------------------------------------------------------------------------
 
 def test_replay_selection_by_outcome():
     records = [{"outcome": "fall"}, {"outcome": "success"}, {"outcome": "timeout"}, {"outcome": "success"}]

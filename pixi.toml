@@ -181,7 +181,7 @@ msgpack-python = "*"
 
 # `evo` (evo_ape/evo_rpe CLIs) scores a recorded mission bag against ground truth
 # (slam/slam/eval/score_with_evo.py shells out to them). Lives in this env so the
-# remote image carries it; run_slam_eval_remote.sh puts this env's bin/ on PATH.
+# remote image carries it; the SLAM-eval driver (archived) put this env's bin/ on PATH.
 [feature.sim-ros2.pypi-dependencies]
 evo = "*"
 

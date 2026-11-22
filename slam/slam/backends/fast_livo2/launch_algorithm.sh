@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs ON THE POD, execed by scripts/run_slam_eval_remote.sh from the repo
+# Runs ON THE POD, executed by the SLAM-eval driver (archived: docs/archive.md)
 # root, inside its own subshell that has already sourced
 # /pixi-project/activate-fast_livo2.sh and /colcon_ws/install/setup.bash.
 #
@@ -63,7 +63,7 @@ BLACKBOARD_PID=$!
 # drops any trap table with it. The blackboard node is left running after
 # this script's own process ends (orphaned, reparented) -- harmless (no
 # lasting state, whole pod gets torn down after eval anyway), just not
-# auto-cleaned by run_slam_eval_remote.sh's own ALGORITHM_PID kill, which
+# auto-cleaned by the driver's own ALGORITHM_PID kill, which
 # only ever sees this script's own PID (pre-exec) or fastlivo_mapping's
 # (post-exec).
 

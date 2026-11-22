@@ -3,12 +3,12 @@
 topics (/slam/odom, /tf, /slam/map), the RAW sensor feeds, /ground_truth/odom,
 and the showcase camera. It does NOT drive the robot: sim_ground_truth_loop.py
 applies the canned schedule itself (its process has no rclpy). It records until
-`--sim-done-file` appears -- the file scripts/run_slam_eval_remote.sh creates once the
+`--sim-done-file` appears -- the file the SLAM-eval driver creates once the
 sim loop has exited -- plus a short drain, NOT for a wall-clock mission length: the
 sim usually runs slower than real time, so a timer truncates the bag. `--run-timeout-s`
 is the hard cap.
 
-With --smoke (scripts/run_slam_eval_remote.sh --smoke) no SLAM backend runs: it records and counts only the
+With --smoke (the driver's own smoke mode) no SLAM backend runs: it records and counts only the
 relay's own topics, see slam/slam/eval/smoke_check.py.
 
 Output path is derived entirely from --run-timestamp (single source of
@@ -28,7 +28,7 @@ _REPO_ROOT = str(Path(__file__).resolve().parents[3])
 if _REPO_ROOT not in sys.path:
     sys.path.insert(0, _REPO_ROOT)
 # Needed when this file is invoked by its own relative path (e.g. `python3
-# slam/slam/eval/record_mission_bag.py`, as scripts/run_slam_eval_remote.sh
+# slam/slam/eval/record_mission_bag.py`, as the SLAM-eval driver
 # does) -- Python puts the SCRIPT's own directory on sys.path[0], not the
 # repo root, so the `from slam.slam...` absolute import below fails with
 # "ModuleNotFoundError: No module named 'slam'" otherwise. Confirmed by
@@ -147,7 +147,7 @@ def main() -> int:
 
     sync_cmd = ["python3", "scripts/sync_to_r2.py", "sync-run", "--module", "slam", "--run-dir", str(run_dir)]
     print(f"[record_mission_bag] syncing to R2: {' '.join(sync_cmd)}")
-    subprocess.run(sync_cmd, check=False)  # per run_remote_job.sh's own pattern: warn, don't crash the run, on a sync failure
+    subprocess.run(sync_cmd, check=False)  # same pattern as the archived job wrapper: warn, don't crash the run, on a sync failure
 
     if not finished:
         print(f"[record_mission_bag] ERROR: the sim did not finish within {args.run_timeout_s:.0f}s", file=sys.stderr)

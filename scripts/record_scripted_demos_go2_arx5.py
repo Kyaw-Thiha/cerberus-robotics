@@ -22,7 +22,7 @@ Then (repo root on PYTHONPATH so the task ids can be registered):
 
 Everything at module level is pure python (import-safe without Isaac); isaaclab is imported only inside main()/_run(),
 after the app launched. Writes the JSON report first, then hard-exits with the real code (no SimulationApp.close(),
-see docs/runpod.md).
+see docs/archive.md).
 
 Exit codes: 0 recorded --num_demos successful demos, 1 fewer / exception, 2 bad args.
 
@@ -372,7 +372,7 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def _finish(simulation_app, exit_code: int) -> None:
-    """Hard-exit; never calls simulation_app.close() (it exits 0 and has hung for >10 min, docs/runpod.md)."""
+    """Hard-exit; never calls simulation_app.close() (it exits 0 and has hung for >10 min, docs/archive.md)."""
     del simulation_app  # kept for call-site compatibility
     try:
         sys.stdout.flush()

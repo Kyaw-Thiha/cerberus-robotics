@@ -320,7 +320,7 @@ def _run_mission(args: argparse.Namespace, plan: RunPlan, report: dict, env_cfg,
 
     # Collision/clearance bookkeeping (collision_monitor.py). Written into the report before the first step and
     # every step after, so a report from a crashed or killed run still carries the verdict, and read by
-    # smoke_check.py / run_slam_eval_remote.sh before any scoring happens.
+    # smoke_check.py / the driver before any scoring happens.
     floor_z = plan.scene.spawn.floor_z if plan.scene.spawn is not None else 0.0
     monitor = CollisionMonitor()
     report["collision"] = monitor.summary()
@@ -338,7 +338,7 @@ def _run_mission(args: argparse.Namespace, plan: RunPlan, report: dict, env_cfg,
     time.sleep(2.0)
 
     # Showcase-camera video -- opt-in on --backend/--run-timestamp both
-    # being given (matches run_slam_eval_remote.sh's usage; a bare smoke
+    # being given (matches the driver's usage; a bare smoke
     # test invocation without them just skips video, same as before this
     # was added). Frames written directly via imageio, same convention
     # policy/locomotion/core/video_capture.py's record_condition_clips()

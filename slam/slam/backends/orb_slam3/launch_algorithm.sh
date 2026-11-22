@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Runs ON THE POD, execed by scripts/run_slam_eval_remote.sh from the repo
+# Runs ON THE POD, executed by the SLAM-eval driver (archived: docs/archive.md)
 # root, inside its own subshell that has already sourced
 # /pixi-project/activate-orb_slam3.sh and /colcon_ws/install/setup.bash.
 #

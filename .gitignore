@@ -29,7 +29,7 @@ policy/locomotion/runs/*_videos/
 third_party/
 
 # SLAM eval run artifacts (rosbags, evo score .zips) -- large, regenerable,
-# synced to R2 by record_mission_bag.py/run_slam_eval_remote.sh, same
+# synced to R2 by record_mission_bag.py and the SLAM-eval driver, same
 # convention as policy/locomotion/eval/results/ above.
 slam/slam/eval/results/
 

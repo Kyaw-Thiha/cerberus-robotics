@@ -17,7 +17,7 @@ common/cerberus_worlds/arena_assets/go2_arx5_embodiment.py for the full list):
     `--task <arena env name> --mimic --external_callback
     isaaclab_arena.environments.isaaclab_interop.environment_registration_callback` (+ `--external_environment_class_path
     module:Class` for an out-of-tree environment). `generate` uses exactly that, as a subprocess, so that a hang in
-    SimulationApp.close() (docs/runpod.md) cannot swallow the report.
+    SimulationApp.close() (docs/archive.md) cannot swallow the report.
   * `annotate` runs an in-process port of annotate_demos.py auto mode by default (`--engine inprocess`): the Lab
     script reads `args_cli.headless`, which the pinned AppLauncher does not register any more (AttributeError before it
     does anything; fixing it would mean patching Lab). `--engine lab` runs the Lab script anyway, for a Lab commit where
@@ -36,7 +36,7 @@ Pod usage (repo root on PYTHONPATH, Arena installed, Lightwheel SDK reachable):
     python scripts/arena_mimic_go2_arx5.py generate --generation_num_trials 20 --num_envs 4
 
 Every subcommand writes its JSON report FIRST, then flushes and hard-exits with the real code (no
-SimulationApp.close(), see docs/runpod.md), with a faulthandler watchdog. `--dry-run` prints the resolved plan and
+SimulationApp.close(), see docs/archive.md), with a faulthandler watchdog. `--dry-run` prints the resolved plan and
 touches no Isaac. Exit codes: 0 pass, 1 fail, 2 bad args.
 
 Verified on a pod (Sim 6.2 / Lab v3.0.0 GA, 2026-10-25): `smoke` passed in a Lightwheel kitchen
@@ -521,7 +521,7 @@ def _report_path(args: argparse.Namespace) -> Path:
 
 
 def _finish(exit_code: int) -> None:
-    """Hard-exit; never calls simulation_app.close() (it exits 0 on failure and hangs >10 min, docs/runpod.md)."""
+    """Hard-exit; never calls simulation_app.close() (it exits 0 on failure and hangs >10 min, docs/archive.md)."""
     try:
         sys.stdout.flush()
         sys.stderr.flush()

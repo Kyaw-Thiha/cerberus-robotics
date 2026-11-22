@@ -20,7 +20,7 @@ ssh-keygen -A
 mkdir -p /var/run/sshd
 
 # ssh command sessions do not inherit PID 1's env nor Dockerfile ENV, and are
-# not login shells; scripts/run_remote_job.sh sources this file explicitly.
+# not login shells; the job wrapper sourced this file explicitly (archived: docs/archive.md).
 # ISAACLAB_PATH is in the Dockerfile ENV, so it is present here.
 # RUNPOD_API_KEY is deliberately excluded: this file gets cat'd and sourced by agents
 # and the key leaked into a transcript once (2026-10-05). Pod self-termination from a

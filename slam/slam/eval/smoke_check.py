@@ -1,7 +1,7 @@
 """Backend-free SLAM plumbing smoke check: did every sensor topic the rig should publish actually arrive, and did the
 sim side run as intended (scene, spawn, PhysX + legacy actuators, policy type, robot upright at the end).
 
-Used by ``scripts/run_slam_eval_remote.sh --smoke``, which runs the sim loop + the rclpy relay + this module's
+Used by the SLAM-eval driver's smoke mode, which runs the sim loop + the rclpy relay + this module's
 recorder (``record_mission_bag.py --smoke``) with NO SLAM backend and NO scoring. Two steps:
 
 1. ``collect_topic_stats`` (under the sim-ros2 env, concurrent with the sim): subscribes to every topic and keeps
@@ -255,7 +255,7 @@ def print_report(report: dict[str, Any]) -> None:
     collision = report["sim"].get("collision")
     if collision is not None:
         # Not a smoke failure by itself: the canned open-loop schedule is generic, and only the non-smoke path
-        # refuses to score an invalid run (see run_slam_eval_remote.sh). Reported so it cannot go unnoticed.
+        # refuses to score an invalid run (see the driver). Reported so it cannot go unnoticed.
         verdict = "ok" if collision["valid_for_scoring"] else f"INVALID ({','.join(collision['invalid_reasons'])})"
         print(
             f"[smoke] collision check: {verdict}; {collision['collision_events']} event(s) over "

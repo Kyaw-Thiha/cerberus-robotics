@@ -15,7 +15,7 @@ scripts/fetch_arena.py):
 Flow: launch app -> register embodiment -> load scene -> build env -> `env.reset()` -> N zero-action steps, checking
 observations are finite and timing each step -> JSON report written FIRST -> flush -> `os._exit(code)`.
 `SimulationApp.close()` is never called: it exits 0 whatever happened and has hung >10 min at shutdown (see
-docs/runpod.md "Operational gotchas" and scripts/spawn_hold_go2_arx5.py). A faulthandler watchdog (`--watchdog_s`)
+docs/archive.md "Operational gotchas" and scripts/spawn_hold_go2_arx5.py). A faulthandler watchdog (`--watchdog_s`)
 dumps all thread stacks if a stage stalls, and a progress report is written at every stage so a hang or kill
 leaves evidence on disk.
 

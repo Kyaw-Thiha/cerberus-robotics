@@ -29,7 +29,7 @@ already in the manifest. Phases per scene (a later one only runs if the earlier 
 
 Verdict logic and thresholds (provisional) live in ``scripts/scene_admission_logic.py`` (unit tested).
 
-Pod usage (new stack; data from ``scripts/run_scene_admission_pod.sh``)::
+Pod usage (new stack; data from the scene-admission job; its driver is archived, see docs/archive.md)::
 
     python3 scripts/validate_scenes.py --source grscenes --limit 8 --resume        # 8 smallest scenes per category
     python3 scripts/validate_scenes.py --source grscenes --resume --arena-probe 3
@@ -438,7 +438,7 @@ def dry_run(args: argparse.Namespace, plans: list[ScenePlan]) -> int:
     )
     warnings = []
     if not plans:
-        warnings.append(f"no {args.source} scenes found; run scripts/run_scene_admission_pod.sh first")
+        warnings.append(f"no {args.source} scenes found; fetch and admit scenes first (see docs/archive.md)")
     plan = {
         "source": args.source, "backend": SOURCES[args.source], "manifest": str(manifest_path(args.source)),
         "scenes_planned": len(plans), "scenes_to_run": len(todo), "first_scenes": todo[:5],
@@ -864,7 +864,7 @@ def main(argv: list[str] | None = None) -> int:
     if args.dry_run:
         return dry_run(args, plans)
     if not plans:
-        print(f"[ERROR] no {args.source} scenes found (run scripts/run_scene_admission_pod.sh first)", file=sys.stderr)
+        print(f"[ERROR] no {args.source} scenes found (fetch and admit scenes first; see docs/archive.md)", file=sys.stderr)
         return 1
     report_path = _abs(args.report_dir) / f"validate_scenes_{args.source}.json"
     try:

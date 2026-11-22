@@ -335,7 +335,7 @@ def main(argv: list[str] | None = None) -> int:
                 },
             )
             print(f"[quat_check] merged into {args.merge_into}")
-        # SimulationApp.close() exits 0 whatever happened (docs/runpod.md); never let it mask a failure.
+        # SimulationApp.close() exits 0 whatever happened (docs/archive.md); never let it mask a failure.
         sys.stdout.flush()
         os._exit(exit_code)
 

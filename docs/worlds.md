@@ -77,7 +77,7 @@ GRScenes data in R2: private prefix `worlds/grscenes/home/` holds scene `MVUHLWY
 `77876dc639285dd77d7129dd2b94a8c41af73e851f69eaa473abafe03adc1357`, 0 unresolved USD dependencies). Consumer:
 `scripts/fetch_grscenes_from_r2.py` (links the scene and writes an `env.sh` with `MDL_SYSTEM_PATH`); fetch took
 1.31 GiB in 48.6 s on an EA pod. Only the home zip was extracted so far, one scene validated. Extraction ran on an A5000 GPU pod
-(7z reads the split zip directly, 170,029 members); see `docs/runpod.md`.
+(7z reads the split zip directly, 170,029 members); see `docs/archive.md`.
 
 License caveats: GRScenes is CC BY-NC-SA 4.0 and the R2 copy must stay private (no redistribution). The ARX official
 model (`ARXroboticsX/ARX_Model` X5/X5A) has no license file: do not redistribute, keep gitignored at `third_party/arx-model`.

@@ -76,7 +76,7 @@ Current backends, levels and targets: [`docs/backend_support.md`](docs/backend_s
 - `docs/interfaces.md`, `docs/backend_support.md`: the three command boundaries and per-backend support levels
 - `docs/modular_stack_options.md`: locomotion / manipulation / whole-body options and the three boundaries
 - `docs/worlds.md`, `docs/arena_integration_log.md`: scene sources and the Arena gate log
-- `docs/isaac_lab_workflow.md`, `docs/runpod.md`, `docs/artifact_storage.md`: remote GPU workflow
+- `docs/isaac_lab_workflow.md`, `docs/archive.md`, `docs/artifact_storage.md`: remote GPU workflow
 
 ## Git workflow
 

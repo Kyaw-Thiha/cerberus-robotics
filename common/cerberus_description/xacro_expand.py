@@ -25,15 +25,6 @@ DEFAULT_PACKAGE_DIR = Path(__file__).resolve().parent
 _SUBSTITUTED_SUFFIXES = (".xacro", ".urdf")
 
 
-def xacro_available() -> bool:
-    """True when the `xacro` python package can be imported."""
-    try:
-        import xacro  # noqa: F401
-    except ImportError:
-        return False
-    return True
-
-
 def _rewrite_text(
     text: str, package_name: str, package_dir: Path, copy_root: Path, copy_name: str
 ) -> str:

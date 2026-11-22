@@ -464,10 +464,6 @@ def choose_scenes(
     return (ranking if n is None else ranking[: max(1, n)]), ranking
 
 
-def looks_like_path(s: str) -> bool:
-    return bool(PATH_RE.search(s))
-
-
 def collect_path_strings(obj) -> set[str]:
     """Collect every path-like substring (ending in a known asset extension) from any JSON shape."""
     out: set[str] = set()

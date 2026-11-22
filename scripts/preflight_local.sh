@@ -30,7 +30,6 @@ OWNED_SCRIPTS=(
     scripts/pod_driver_gate.sh
     scripts/pod_launch_probe.sh
     scripts/kit_retry.sh
-    scripts/kit_cache.sh
 )
 
 FAILS=0
@@ -147,7 +146,7 @@ if pixi run python -c "import sys; sys.path.insert(0, 'scripts'); import pod_dri
 else
     record "host-tools-import" FAIL
 fi
-if pixi run python scripts/kit_cache.py discover > /dev/null 2>&1 && pixi run python scripts/nav_eval.py --dry-run > /dev/null 2>&1 && pixi run python scripts/build_occupancy.py --help > /dev/null 2>&1 && pixi run python scripts/kinematic_eval.py --help > /dev/null 2>&1; then
+if pixi run python scripts/nav_eval.py --dry-run > /dev/null 2>&1 && pixi run python scripts/build_occupancy.py --help > /dev/null 2>&1 && pixi run python scripts/kinematic_eval.py --help > /dev/null 2>&1; then
     record "h4-driver-clis" PASS
 else
     record "h4-driver-clis" FAIL

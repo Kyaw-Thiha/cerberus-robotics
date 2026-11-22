@@ -1,8 +1,7 @@
 """Composes the full Cerberus ROS2 graph for a given --platform/--mode.
 Resolves platforms.yaml (config/platforms.yaml) into concrete params for
 robot_state_publisher and locomotion_policy -- see
-docs/superpowers/specs/2026-09-09-multi-platform-config-design.md for the
-schema and reasoning. Only this launch file, locomotion_policy, and (once
+docs/platform_config.md for the schema and reasoning. Only this launch file, locomotion_policy, and (once
 built) manipulation_policy are platform-aware; every other package gets
 robot identity from the standard /robot_description parameter.
 

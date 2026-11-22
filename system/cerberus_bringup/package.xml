@@ -3,7 +3,7 @@
 <package format="3">
   <name>cerberus_bringup</name>
   <version>0.1.0</version>
-  <description>Launch files composing the full Cerberus graph. Owns platform/locomotion-mode selection (platforms.yaml) -- see docs/superpowers/specs/2026-09-09-multi-platform-config-design.md.</description>
+  <description>Launch files composing the full Cerberus graph. Owns platform/locomotion-mode selection (platforms.yaml) -- see docs/platform_config.md.</description>
   <maintainer email="k.thiha10.mail@gmail.com">Kevin Thiha</maintainer>
   <license>MIT</license>
 

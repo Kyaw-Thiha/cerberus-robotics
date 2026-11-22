@@ -65,9 +65,8 @@ class SensorSuiteCfg:
         plain bool map -- the same shape `system/cerberus_bringup`'s
         `sensor_profiles.yaml` records on the ROS2 side, so the two can be
         compared/kept in sync without either side importing the other's
-        objects (see the platform-selection precedent in
-        `docs/superpowers/specs/2026-09-09-multi-platform-config-design.md`
-        for why that cross-language split is deliberate, not an oversight).
+        objects (see `docs/platform_config.md` for why that cross-language
+        split is deliberate, not an oversight).
 
         Deliberately excludes front_camera_right/rear_camera_right: those are a
         presence-only detail of *how* front_camera/rear_camera are populated on a

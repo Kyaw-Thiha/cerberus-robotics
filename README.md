@@ -12,7 +12,7 @@ a claim of physical deployment.
 - **Robot:** Unitree Go2 (legs) + ARX5 / X5A (6-DoF arm + motorised gripper), fused into a 20-DoF embodiment
   (`common/cerberus_description/`, see `docs/embodiment_asset_composition.md`).
 - **Middleware:** ROS2 Jazzy nodes on a pixi + colcon workspace (the repo root is the colcon workspace).
-- **Sim stack:** Isaac Sim 6.2 / Isaac Lab 3.0 GA on `docker/remote_v6` (legacy: Sim 5.1 / Lab 2.3.2 on `docker/remote`).
+- **Sim stack:** Isaac Sim 6.2 / Isaac Lab 3.0 GA on `docker/remote_v6`.
 
 ## Missions and scenes
 

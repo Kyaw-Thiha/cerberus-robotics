@@ -3,7 +3,7 @@ process (sim_ground_truth_loop.py, which owns the env step loop and reads
 robot/sensor state) and the rclpy-side process (ros2_bridge_relay.py, which
 republishes to ROS2). The two processes can't share one Python interpreter
 -- rclpy is only installed into pixi's sim-ros2 env, a different Python
-entirely from Isaac Sim's bundled interpreter (docker/remote/Dockerfile's
+entirely from Isaac Sim's bundled interpreter (docker/remote_v6/Dockerfile's
 /workspace/isaaclab/_isaac_sim/python.sh) -- so this module is the only
 thing both sides need to agree on, and deliberately imports neither
 `isaaclab` nor `rclpy` so it unit-tests locally under the default pixi env.

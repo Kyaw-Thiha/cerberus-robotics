@@ -1,6 +1,6 @@
 # Pinned additive packages for the NEW (Isaac Sim 6.1.0 / Python 3.12 / Isaac
 # Lab 3.0 line) remote image, installed into Isaac Sim's bundled interpreter.
-# Carried over from docker/remote/requirements.txt (old stack); every pin has
+# Carried over from the legacy docker/remote/requirements.txt (removed; see docs/archive.md); every pin has
 # a py3.12-compatible release on PyPI (checked 2026-10-05). Installed AFTER
 # Isaac Lab and Arena, so a conflicting pin fails the build loudly rather than
 # being silently overridden.

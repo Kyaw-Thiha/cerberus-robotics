@@ -7,7 +7,7 @@
 # separate container (see the SLAM-remote-orchestration plan's Context
 # section for why: RunPod pods are one container each, and baking sim and
 # backend together at Docker-build time would break the deliberate
-# decoupling between docker/remote/Dockerfile and docker/slam/*/Dockerfile).
+# decoupling between docker/remote_v6/Dockerfile and docker/slam/*/Dockerfile).
 #
 # `docker create` (never runs the image) + `docker cp` is the standard way
 # to pull files out of an image's filesystem without executing it.
@@ -25,7 +25,7 @@
 #
 # Renames the extracted activation script from the image's own
 # /pixi-project/activate.sh to activate-<backend>.sh -- both
-# docker/remote/Dockerfile's sim-ros2 env AND every docker/slam/<name>/
+# docker/remote_v6/Dockerfile's sim-ros2 env AND every docker/slam/<name>/
 # Dockerfile use that exact same fixed filename for their own, DIFFERENT
 # pixi env's activation script. Merged onto one running container
 # (this extraction's whole point), the backend's copy would silently

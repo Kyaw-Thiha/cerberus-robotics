@@ -20,7 +20,7 @@
 # Source is vendored locally, NOT git-cloned in this Dockerfile -- run
 # `python scripts/fetch_slam_backends.py fast_lio2` before building this
 # image. This diverges from
-# docker/remote/Dockerfile's clone-inside-the-Dockerfile pattern.
+# docker/remote_v6/Dockerfile's clone-inside-the-Dockerfile pattern.
 
 FROM ghcr.io/prefix-dev/pixi:noble AS pixi-build
 

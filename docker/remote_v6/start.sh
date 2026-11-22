@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Cerberus remote image entrypoint (NEW stack: Isaac Sim 6.2.0 / Lab 3.0.0 GA).
 #
-# Same behaviour as docker/remote/start.sh: configure sshd from $PUBLIC_KEY
+# Same behaviour as the legacy docker/remote/start.sh (removed; see docs/archive.md): configure sshd from $PUBLIC_KEY
 # (RunPod convention), export RUNPOD_*/ISAACLAB_PATH for later non-login
 # `ssh host "command"` sessions via /etc/cerberus_env.sh, keep the container
 # alive by running sshd in the foreground. The Isaac Sim base image's own

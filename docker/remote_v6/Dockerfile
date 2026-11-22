@@ -1,10 +1,10 @@
 # Cerberus remote image, NEW stack: Isaac Sim 6.2.0, Python 3.12, Isaac Lab
-# v3.0.0 (GA), Isaac Lab Arena `main`. Lives side by side with docker/remote
-# (OLD stack: Sim 5.1.0 / Lab v2.3.2 / py3.11, kept for checkpoint-dependent
-# checks). Runs ONLY on a rented remote GPU pod (see docs/archive.md).
+# v3.0.0 (GA), Isaac Lab Arena `main`. Replaces docker/remote (OLD stack: Sim
+# 5.1.0 / Lab v2.3.2 / py3.11), which was removed and is archived (see
+# docs/archive.md). Runs ONLY on a rented remote GPU pod (see docs/archive.md).
 #
 # Sources each decision is based on (read 2026-10-05):
-#   - docker/remote/{Dockerfile,start.sh,requirements.txt}: the behaviours pods
+#   - the legacy docker/remote recipe (removed; see docs/archive.md): the behaviours pods
 #     rely on (root user, sshd from $PUBLIC_KEY, /etc/cerberus_env.sh, Isaac
 #     Lab at /workspace/isaaclab, ENTRYPOINT override, TERM, tmux/openssh).
 #   - https://github.com/isaac-sim/IsaacLab-Arena/blob/main/docker/Dockerfile.isaaclab_arena
@@ -32,7 +32,7 @@
 # relay (slam/slam/ground_truth/ros2_bridge_relay.py) and `evo` for scoring.
 # Isaac Sim's own Python cannot host rclpy (different interpreter/ABI), so
 # they live in the pixi `sim-ros2` env, copied to /pixi-project exactly like
-# docker/remote/Dockerfile does. The SLAM backends themselves are NOT baked in:
+# docker/remote_v6/Dockerfile does. The SLAM backends themselves are NOT baked in:
 # scripts/extract_slam_backend_artifact.sh layers them onto a running pod.
 # Build context therefore needs pixi.toml + pixi.lock (docker/remote_v6/build.sh
 # copies them from the repo root into its temp context).

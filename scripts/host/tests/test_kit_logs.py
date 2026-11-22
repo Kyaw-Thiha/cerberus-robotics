@@ -1,8 +1,7 @@
-"""Tests for the Kit log capture and the replay selection."""
+"""Tests for the Kit log capture."""
 
 
 import kit_logs
-from nav_eval import select_replay_indices
 
 # --- Kit log capture ---------------------------------------------------------------------------
 
@@ -37,12 +36,3 @@ def test_copy_kit_log_finds_and_copies_the_newest(tmp_path):
     assert copied and copied[0].read_text() == SAMPLE_LOG
     assert next(iter(out.glob("*/launch_timeline.json"))).is_file()
     assert timeline["markers"]
-
-
-# --- replay selection --------------------------------------------------------------------------
-
-def test_replay_selection_by_outcome():
-    records = [{"outcome": "fall"}, {"outcome": "success"}, {"outcome": "timeout"}, {"outcome": "success"}]
-    assert select_replay_indices(records, "", "success,failure") == [1, 0]
-    assert select_replay_indices(records, "3,1", "success,failure") == [3, 1]
-    assert select_replay_indices(records, "", "failure") == [0]

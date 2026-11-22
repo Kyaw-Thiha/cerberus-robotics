@@ -25,7 +25,7 @@ import time
 from dataclasses import dataclass
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 CSV_PATH = REPO_ROOT / "outputs" / "launch_probe.csv"
 ATTEMPT_DIR = REPO_ROOT / "outputs" / "kit_launches"
 STDOUT_TAIL = REPO_ROOT / "outputs" / "kit_retry.log"
@@ -196,7 +196,7 @@ def run(command: list[str], *, max_launches: int | None = None, window_s: float 
     env["PYTHONUNBUFFERED"] = "1"
     info = None
     try:
-        from pod_driver_gate import append_probe_row, collect_host_info
+        from driver_gate import append_probe_row, collect_host_info
 
         info = collect_host_info()
         log = log or (lambda **row: append_probe_row(CSV_PATH, info, **row))

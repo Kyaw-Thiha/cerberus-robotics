@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import sys
 
-from pod_driver_gate import CSV_PATH, append_probe_row, collect_host_info
+from driver_gate import CSV_PATH, append_probe_row, collect_host_info
 
 
 def main(argv: list[str]) -> int:

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Smallest possible Isaac Sim/Lab headless launch: ground-plane Go2, 1 env, a few steps.
 
-Run by ``scripts/pod_launch_probe.py`` under ``isaaclab.sh -p``, never on its own. It downloads nothing: the flat
+Run by ``scripts/launch_probe.py`` under ``isaaclab.sh -p``, never on its own. It downloads nothing: the flat
 Cerberus task uses a generated ground plane, not a scene USD and not a checkpoint. Its only job is to prove that Kit
 starts and the task steps on this host before a driver script spends time on downloads or a long job.
 
@@ -15,7 +15,7 @@ import os
 import sys
 from pathlib import Path
 
-_REPO_ROOT = Path(__file__).resolve().parents[1]
+_REPO_ROOT = Path(__file__).resolve().parents[2]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 

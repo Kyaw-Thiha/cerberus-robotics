@@ -2,7 +2,7 @@
 # Relaunch a long Isaac job after a post-startup failure. The driver must be resumable: relaunch skips finished work.
 # usage: run_resilient.sh --name stand --max-restarts 5 -- <cmd...>
 set -uo pipefail
-REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 NAME="job"; MAX=5; CMD=()
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -14,14 +14,14 @@ while [ $# -gt 0 ]; do
 done
 if [ ${#CMD[@]} -eq 0 ]; then echo "run_resilient: no command" >&2; exit 2; fi
 for attempt in $(seq 1 $((MAX + 1))); do
-  if [ "$attempt" -gt 1 ] && [ -x "$REPO_ROOT/scripts/launch_hygiene.sh" ]; then
-    bash "$REPO_ROOT/scripts/launch_hygiene.sh" >/dev/null 2>&1 || true
+  if [ "$attempt" -gt 1 ] && [ -x "$REPO_ROOT/scripts/host/launch_hygiene.sh" ]; then
+    bash "$REPO_ROOT/scripts/host/launch_hygiene.sh" >/dev/null 2>&1 || true
   fi
   START=$(date +%s)
   "${CMD[@]}"
   RC=$?
   ELAPSED=$(( $(date +%s) - START ))
-  python3 "$REPO_ROOT/scripts/job_attempt_log.py" "$NAME" "$attempt" "$RC" "$ELAPSED" >/dev/null 2>&1 || true
+  python3 "$REPO_ROOT/scripts/host/job_attempt_log.py" "$NAME" "$attempt" "$RC" "$ELAPSED" >/dev/null 2>&1 || true
   echo "[resilient] $NAME attempt $attempt exit=$RC elapsed=${ELAPSED}s" >&2
   if [ $RC -eq 0 ]; then exit 0; fi
   if [ $attempt -gt $MAX ]; then echo "[resilient] $NAME gave up after $MAX restarts" >&2; exit $RC; fi

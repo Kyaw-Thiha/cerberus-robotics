@@ -6,8 +6,8 @@ launch, record the attempt (elapsed, outcome, the window that ended it, crash si
 try again. Abandon the host after ``--max-consecutive-failures`` failures (default 10) or ``--cap-minutes`` minutes
 (default 15) in the launch stage.
 
-    python3 scripts/launch_gate.py --max-consecutive-failures 10 --cap-minutes 15 -- "$ISAACLAB_PATH/isaaclab.sh" \
-        -p scripts/pod_launch_probe_env.py --headless --verbose-kit
+    python3 scripts/host/launch_gate.py --max-consecutive-failures 10 --cap-minutes 15 -- "$ISAACLAB_PATH/isaaclab.sh" \
+        -p scripts/host/launch_probe_env.py --headless --verbose-kit
 """
 from __future__ import annotations
 
@@ -18,13 +18,13 @@ import sys
 import time
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[1]
+REPO = Path(__file__).resolve().parents[2]
 ABANDON_EXIT = 75
 
 
 def main(argv: list[str] | None = None) -> int:
+    from driver_gate import append_probe_row, collect_host_info
     from kit_retry import ATTEMPT_DIR, CSV_PATH, launch_once
-    from pod_driver_gate import append_probe_row, collect_host_info
 
     argv = list(sys.argv[1:] if argv is None else argv)
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -50,7 +50,7 @@ def main(argv: list[str] | None = None) -> int:
         hygiene = ""
         if not result.started:
             path = REPO / "outputs" / "launch_hygiene.log"
-            subprocess.run(["bash", str(REPO / "scripts" / "launch_hygiene.sh"), str(path)],
+            subprocess.run(["bash", str(REPO / "scripts" / "host" / "launch_hygiene.sh"), str(path)],
                            capture_output=True, text=True, check=False)
             hygiene = str(path.relative_to(REPO))
         if result.started:

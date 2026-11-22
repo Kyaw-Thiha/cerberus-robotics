@@ -27,9 +27,9 @@ SKIP_INSTALL=0
 # The host-side shell scripts that are still in the repo.
 OWNED_SCRIPTS=(
     scripts/preflight_local.sh
-    scripts/pod_driver_gate.sh
-    scripts/pod_launch_probe.sh
-    scripts/kit_retry.sh
+    scripts/host/driver_gate.sh
+    scripts/host/launch_probe.sh
+    scripts/host/kit_retry.sh
 )
 
 FAILS=0
@@ -141,7 +141,7 @@ if pixi run python scripts/build_scan_proxy.py --help > /dev/null 2>&1; then
 else
     record "h4-build-scan-proxy-help" FAIL
 fi
-if pixi run python -c "import sys; sys.path.insert(0, 'scripts'); import pod_driver_gate, pod_launch_probe, kit_retry, kit_logs, job_attempt_log, redact, pod_guard" > /dev/null 2>&1; then
+if pixi run python -c "import sys; sys.path.insert(0, 'scripts'); sys.path.insert(0, 'scripts/host'); import driver_gate, launch_probe, kit_retry, kit_logs, job_attempt_log, redact, pod_guard" > /dev/null 2>&1; then
     record "host-tools-import" PASS
 else
     record "host-tools-import" FAIL

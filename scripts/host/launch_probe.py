@@ -20,7 +20,7 @@ import os
 import subprocess
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
+REPO_ROOT = Path(__file__).resolve().parents[2]
 CSV_PATH = REPO_ROOT / "outputs" / "launch_probe.csv"
 LOG_DIR = REPO_ROOT / "outputs" / "kit_logs"
 STDOUT_LOG = REPO_ROOT / "outputs" / "probe_last.log"
@@ -46,8 +46,7 @@ def launch_counts(csv_path: Path, host: str) -> tuple[int, int]:
 def main(argv: list[str] | None = None) -> int:
     import argparse
 
-    from pod_driver_gate import append_probe_row, collect_host_info
-    from pod_guard import require_pod
+    from driver_gate import append_probe_row, collect_host_info
 
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--window", type=float, default=float(os.environ.get("CERBERUS_STARTUP_WINDOW_S", "60")))
@@ -55,7 +54,6 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--cache-restored", action="store_true",
                         help="record that a cache bundle was restored; does not change the launch logic")
     args = parser.parse_args(argv)
-    require_pod("pod_launch_probe.sh")
 
     lab = os.environ.get("ISAACLAB_PATH", "/workspace/isaaclab").rstrip("/") + "/isaaclab.sh"
     info = collect_host_info()
@@ -70,8 +68,8 @@ def main(argv: list[str] | None = None) -> int:
     env.setdefault("CERBERUS_ALLOW_BAD_DRIVER_RENDER", "1")
     env["CERBERUS_STARTUP_WINDOW_S"] = str(args.window)
     env["CERBERUS_MAX_LAUNCHES"] = str(args.max_launches)
-    cmd = ["bash", str(REPO_ROOT / "scripts" / "kit_retry.sh"), "--", lab, "-p",
-           str(REPO_ROOT / "scripts" / "pod_launch_probe_env.py"), "--headless", "--verbose-kit"]
+    cmd = ["bash", str(REPO_ROOT / "scripts" / "host" / "kit_retry.sh"), "--", lab, "-p",
+           str(REPO_ROOT / "scripts" / "host" / "launch_probe_env.py"), "--headless", "--verbose-kit"]
     STDOUT_LOG.parent.mkdir(parents=True, exist_ok=True)
     print(f"LAUNCH PROBE: starting (window={args.window:.0f}s, max_launches={args.max_launches}, "
           f"cap={LAUNCH_CAP_S}s, cache_restored={args.cache_restored})", flush=True)

@@ -5,13 +5,13 @@ import subprocess
 import sys
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[2]
+REPO = Path(__file__).resolve().parents[3]
 
 
 def run(out: Path, *, crash_after: int) -> subprocess.CompletedProcess:
     return subprocess.run(
-        ["bash", str(REPO / "scripts" / "run_resilient.sh"), "--name", "toy", "--max-restarts", "3", "--",
-         sys.executable, str(REPO / "scripts" / "tests" / "fixtures_resumable_job.py"),
+        ["bash", str(REPO / "scripts" / "host" / "run_resilient.sh"), "--name", "toy", "--max-restarts", "3", "--",
+         sys.executable, str(REPO / "scripts" / "host" / "tests" / "fixtures_resumable_job.py"),
          "--out", str(out), "--pairs", "6", "--crash-after", str(crash_after)],
         cwd=str(REPO), capture_output=True, text=True, timeout=120, check=False)
 

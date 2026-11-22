@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 import pytest
-from pod_driver_gate import (
+from driver_gate import (
     CSV_COLUMNS,
     TIER_A,
     TIER_REJECT,
@@ -14,9 +14,9 @@ from pod_driver_gate import (
     classify_driver,
     parse_cuda_version,
 )
-from pod_launch_probe import launch_counts
+from launch_probe import launch_counts
 
-ALLOWLIST = json.loads((Path(__file__).resolve().parents[1] / "pod_driver_allowlist.json").read_text())
+ALLOWLIST = json.loads((Path(__file__).resolve().parents[1] / "driver_allowlist.json").read_text())
 
 
 @pytest.mark.parametrize("driver", ["580.95.05", "580.159.04", "595.58.03"])

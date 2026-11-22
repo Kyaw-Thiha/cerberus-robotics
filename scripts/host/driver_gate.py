@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 """Host-driver gate: refuse to run on a driver build that segfaults Isaac Sim 6.x.
 
-Why this exists: the H4 pod session lost its physics runs to a startup SIGSEGV in ``libcarb.tasking`` (exit 139) on
+Why this exists: the H4 cloud session lost its physics runs to a startup SIGSEGV in ``libcarb.tasking`` (exit 139) on
 driver 595.91.07, on three different hosts. That matches NVIDIA's 595.71.05/595.79/595.84 failures; 595.58.03 is the
 validated 595 build and the 580 branch from 580.95.05 is validated by the Isaac Lab 3.0 docs. The host driver is the
 variable, so the check runs before anything is downloaded or launched.
 
-Rules live in ``scripts/pod_driver_allowlist.json`` (not hardcoded) with the evidence beside them.
+Rules live in ``scripts/host/driver_allowlist.json`` (not hardcoded) with the evidence beside them.
 
-On reject: one-line verdict with the exact driver string, a row in ``outputs/launch_probe.csv``, and exit 2. A pod that
-fails this gate holds no data (nothing has been downloaded yet), so it may be terminated immediately through the
-provider API -- the one owner-approved exception to "never terminate a pod".
+On reject: one-line verdict with the exact driver string, a row in ``outputs/launch_probe.csv``, and exit 2. The gate
+runs before anything is downloaded, so a host that fails it holds no data. What to do with such a host is the caller's
+decision and is provider-specific, so the gate only offers a hook: ``--on-reject-cmd '<shell command>'`` runs after the
+verdict is recorded (for example ``brev delete <name>``) and its exit status is printed, never used as the gate result.
 """
 
 from __future__ import annotations
@@ -22,18 +23,15 @@ import platform
 import re
 import subprocess
 import sys
-import urllib.error
-import urllib.request
 from dataclasses import dataclass
 from datetime import datetime, timezone
 from pathlib import Path
 
-REPO_ROOT = Path(__file__).resolve().parents[1]
-ALLOWLIST_PATH = Path(__file__).resolve().parent / "pod_driver_allowlist.json"
+REPO_ROOT = Path(__file__).resolve().parents[2]
+ALLOWLIST_PATH = Path(__file__).resolve().parent / "driver_allowlist.json"
 CSV_PATH = REPO_ROOT / "outputs" / "launch_probe.csv"
 CSV_COLUMNS = ("ts", "stage", "driver", "cuda", "gpu", "host", "datacenter", "image", "verdict", "tier",
                "cache", "note")
-RUNPOD_API = "https://rest.runpod.io/v1/pods"
 EXIT_REJECT = 2
 
 
@@ -102,7 +100,7 @@ def collect_host_info(image: str | None = None) -> HostInfo:
         cuda=parse_cuda_version(header),
         gpu=(gpu[0].strip() if gpu else "unknown"),
         host=platform.node() or "unknown",
-        datacenter=(os.environ.get("RUNPOD_DATACENTER_ID") or os.environ.get("RUNPOD_DC_ID") or "unknown"),
+        datacenter=(os.environ.get("CERBERUS_HOST_LOCATION") or "unknown"),
         image=(image or os.environ.get("CERBERUS_IMAGE_TAG") or "unknown"),
     )
 
@@ -131,43 +129,40 @@ def append_probe_row(path: Path, info: HostInfo, *, stage: str, verdict: str, no
         })
 
 
-def terminate_pod(pod_id: str, api_key: str) -> tuple[bool, str]:
-    """DELETE the pod through the provider API. Only called when the gate rejects (no data on the pod yet)."""
-    request = urllib.request.Request(
-        f"{RUNPOD_API}/{pod_id}", method="DELETE",
-        headers={"Authorization": f"Bearer {api_key}", "Content-Type": "application/json"},
-    )
+def run_reject_hook(command: str) -> tuple[bool, str]:
+    """Run the caller's ``--on-reject-cmd`` through the shell; report success and a short detail."""
     try:
-        with urllib.request.urlopen(request, timeout=30) as response:
-            return response.status < 300, f"HTTP {response.status}"
-    except (urllib.error.URLError, OSError) as e:
+        proc = subprocess.run(command, shell=True, capture_output=True, text=True, timeout=120, check=False)
+    except (OSError, subprocess.SubprocessError) as e:
         return False, f"{type(e).__name__}: {e}"
+    return proc.returncode == 0, f"exit {proc.returncode}"
 
 
 def main(argv: list[str] | None = None) -> int:
-    from pod_guard import require_pod
+    import argparse
 
-    require_pod("pod_driver_gate.sh")
+    parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
+    parser.add_argument("--on-reject-cmd", default="",
+                        help="shell command to run after a REJECT verdict (for example a provider's delete command)")
+    args = parser.parse_args(argv)
     allowlist = json.loads(ALLOWLIST_PATH.read_text(encoding="utf-8"))
     info = collect_host_info()
     tier, reason = classify_driver(info.driver, allowlist)
     verdict = "ALLOW" if tier == TIER_A else ("PROBE_REQUIRED" if tier == TIER_B else "REJECT")
     line = (f"DRIVER GATE: TIER {tier} ({verdict}) driver={info.driver} cuda={info.cuda} gpu={info.gpu} "
-            f"datacenter={info.datacenter} image={info.image} host={info.host} ({reason})")
+            f"location={info.datacenter} image={info.image} host={info.host} ({reason})")
     print(line)
     append_probe_row(CSV_PATH, info, stage="gate", verdict=verdict, note=f"tier {tier}; {reason}", tier=tier)
     if tier in (TIER_A, TIER_B):
         return 0
 
-    pod_id = os.environ.get("RUNPOD_POD_ID", "")
-    api_key = os.environ.get("RUNPOD_API_KEY", "")
-    if pod_id and api_key:
-        ok, detail = terminate_pod(pod_id, api_key)
-        print(f"DRIVER GATE: terminating {pod_id} (no data on it yet): {'ok' if ok else 'failed'} ({detail})")
-        append_probe_row(CSV_PATH, info, stage="gate",
-                         verdict="TERMINATED" if ok else "TERMINATE_FAILED", note=detail, tier=tier)
+    if args.on_reject_cmd:
+        ok, detail = run_reject_hook(args.on_reject_cmd)
+        print(f"DRIVER GATE: on-reject command {'ok' if ok else 'failed'} ({detail})")
+        append_probe_row(CSV_PATH, info, stage="gate", verdict="HOOK_OK" if ok else "HOOK_FAILED", note=detail,
+                         tier=tier)
     else:
-        print("DRIVER GATE: no RUNPOD_POD_ID/RUNPOD_API_KEY; terminate the pod manually")
+        print("DRIVER GATE: no --on-reject-cmd given; stop or release this host yourself")
     return EXIT_REJECT
 
 

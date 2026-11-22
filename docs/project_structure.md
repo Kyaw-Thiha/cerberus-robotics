@@ -217,8 +217,18 @@ cerberus/
 │   ├── convert_go2_arx5_urdf_to_usd.py # UrdfConverter -> flattened USD + checks (pod)
 │   ├── compare_go2_urdf_to_usd.py      # URDF vs USD mass/CoM/inertia/limits (offline)
 │   ├── preflight_local.sh              # local checks before paying for a GPU host
-│   ├── pod_driver_gate.py / pod_launch_probe.py / kit_retry.py   # host checks and resilient launches
-│   └── tests/                          # colocated tests for the scripts above
+│   ├── host/                           # provider-neutral host tooling (docs/host_contract.md)
+│   │   ├── host_doctor.py              # PASS/FAIL per contract item, fix hints, JSON report
+│   │   ├── driver_gate.py|.sh, driver_allowlist.json  # reject drivers that crash Isaac Sim 6
+│   │   ├── launch_probe.py|.sh, kit_retry.py|.sh, kit_logs.py, launch_gate.py
+│   │   ├── run_resilient.sh, job_attempt_log.py, launch_hygiene.sh
+│   │   ├── session_lib.sh              # paths, env, gate, run_isaac watchdog, rclone helpers
+│   │   ├── bootstrap_host.sh           # caches, image, scene, checkpoint (idempotent)
+│   │   ├── run_session.sh              # stand/demo/smoke/nav/replay, judged by artifacts
+│   │   ├── run_stack_check.sh, run_scene_admission.sh, run_scene_eval.sh, run_slam_eval.sh
+│   │   ├── brev_{up,status,exec,copy,down}.sh  # caps, kill switch, ownership guard
+│   │   └── tests/                      # colocated tests (mocked system output only)
+│   └── tests/                          # colocated tests for the other scripts
 ├── data/                             # gitignored — demos, trajectories, scenes, reports
 ├── outputs/                          # gitignored — checkpoints, logs, videos, wandb runs
 └── README.md
@@ -237,7 +247,7 @@ Rules that keep this working without `__init__.py` files or a plugin:
   `prepend` import mode keys modules by basename, so two `test_algorithms.py`
   files collide. This is why the per-package ones are named
   `test_<package>_algorithms.py`.
-- **`pytest.ini` sets `pythonpath = . scripts`**, so `from common.x import y`
+- **`pytest.ini` sets `pythonpath = . scripts scripts/host`**, so `from common.x import y`
   (repo root) and `import build_lidar_proxy` (bare script imports) both resolve
   regardless of the current directory.
 - **Moving a test one level deeper changes its `__file__` anchors.** Every

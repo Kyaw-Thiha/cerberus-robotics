@@ -7,6 +7,14 @@ in as swappable backends behind three command boundaries, and every backend carr
 **Caveat: simulation only.** There is no real hardware. "Real-world demo" here means a well-instrumented simulation demo, not
 a claim of physical deployment.
 
+## Status (2026-11-22)
+
+Tier **T0** of the first-scene run: the host tooling, doctor, bootstrap, session plan and Brev wrappers are on `main`
+and tested. **The cloud half did not run** — the Brev account was logged out, so no instance was created and no RTX
+clip or navigation number exists yet. Expect to run `brev login` once, then
+`scripts/host/brev_up.sh ...` and `scripts/host/run_session.sh ...`. Details and the exact next step:
+[`docs/reports/first_scene_session.md`](docs/reports/first_scene_session.md).
+
 ## Platform
 
 - **Robot:** Unitree Go2 (legs) + ARX5 / X5A (6-DoF arm + motorised gripper), fused into a 20-DoF embodiment
@@ -68,6 +76,30 @@ policy, e.g. JEPLO, DAWN, Omni-Perception); both plug in at the same boundary.
 
 Current backends, levels and targets: [`docs/backend_support.md`](docs/backend_support.md) (generated from
 `common/cerberus_policies/cards/`; interfaces in [`docs/interfaces.md`](docs/interfaces.md)).
+
+## Requirements
+
+Isaac Sim needs an RT-core GPU (**A100/H100 are unsupported**), at least 16 GB VRAM and 32 GB RAM, Ubuntu 22.04/24.04
+(22.04 is deprecated by NVIDIA), Docker with the NVIDIA Container Toolkit, and a compliant driver (580.95.05+ or
+exactly 595.58.03; the 595 line shipped builds that crash at startup). Budget 200 GB of disk. Check any machine with:
+
+```bash
+python3 scripts/host/host_doctor.py --env-file .env
+```
+
+Sources, the evidence behind the driver rule, and what our own runs verified: [`docs/host_contract.md`](docs/host_contract.md).
+
+## Run on your own hardware or any cloud
+
+```bash
+scripts/host/bootstrap_host.sh --data-dir ~/cerberus-data --env-file .env   # image, scene, checkpoint
+scripts/host/run_session.sh --scene MV7J6NIKTKJZ2AABAAAAADQ8_usd            # stand, demo, nav, replay
+```
+
+Three routes to a compliant machine (workstation, an AWS worked example, Brev with the catalog prices read on
+2026-11-22) are in [`docs/dev_machine.md`](docs/dev_machine.md). The Brev wrappers in `scripts/host/brev_*.sh`
+enforce a 1.50 USD/h price cap, a 3.5 h wall clock (a systemd kill timer armed before the instance exists), at most
+four creations and one live instance, and they only touch instances they created.
 
 ## Key docs
 

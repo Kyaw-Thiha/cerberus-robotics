@@ -29,17 +29,21 @@ per-provider pod drivers, the six test files that covered them, and the RunPod r
 Kept on `main` and unaffected: the driver gate and allowlist, the launch probe, `kit_retry`, `run_resilient`, log capture,
 redaction, the secret scan, the preflight script, the R2 sync and fetch scripts, and the scene tools.
 
-### To be replaced
+### Replaced (2026-11-22)
 
-These four are the only entry points for jobs that remain in scope. Their replacements are the next task's work (a
-provider-neutral host contract and doctor). Until then, retrieve the driver from the tag and run it as before.
+The four job entry points were re-created provider-neutral in `scripts/host/`, from these archived originals as
+reference (not copies: the pod gate and dead-man switch are gone, paths are environment variables, and the provider
+self-terminate became an explicit stop hook). The originals stay in the tag; the replacements are what to run now.
 
-| entry point | was | lives in |
+| entry point | archived original | provider-neutral replacement |
 |---|---|---|
-| driver gate runner (host check + launch probe before any download) | `scripts/run_ga_stack_check_pod.sh`, with `scripts/pod_isaac_lib.sh` | `archive/provider-tooling-2026-11-21` |
-| scene admission (fetch, validate and upload admitted scenes) | `scripts/run_scene_admission_pod.sh` | `archive/provider-tooling-2026-11-21` |
-| scene evaluation | `scripts/run_scene_eval_pod.sh` | `archive/provider-tooling-2026-11-21` |
-| SLAM evaluation (sim loop, mission bag, scoring, sync) | `scripts/run_slam_eval_remote.sh` | `archive/provider-tooling-2026-11-21` |
+| GA-stack bring-up checks | `scripts/run_ga_stack_check_pod.sh` | `scripts/host/run_stack_check.sh` |
+| scene admission (fetch, validate, upload) | `scripts/run_scene_admission_pod.sh` | `scripts/host/run_scene_admission.sh` |
+| scene evaluation | `scripts/run_scene_eval_pod.sh` | `scripts/host/run_scene_eval.sh` |
+| SLAM evaluation | `scripts/run_slam_eval_remote.sh` | `scripts/host/run_slam_eval.sh` |
+
+Each replacement starts with `--help`, supports `--dry-run`, and expects the host to pass
+`scripts/host/host_doctor.py` (`docs/host_contract.md`). For the archived originals themselves:
 
 ```bash
 git checkout archive/provider-tooling-2026-11-21 -- scripts/run_slam_eval_remote.sh

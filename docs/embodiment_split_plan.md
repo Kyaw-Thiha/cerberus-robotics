@@ -1,7 +1,12 @@
 # Embodiment split plan: `UNITREE_GO2_CFG` + `ARX5_CFG` → `GO2_ARX5_CFG`
 
-Status: **plan only** (H1, 2026-11-06). Not implemented, because the code it touches imports `isaaclab`, which cannot run
-locally. It is part of the next remote handoff.
+> **Status (2026-11-21): implemented in essence.** `common/cerberus_description/go2_arx5_cfg.py` and
+> `go2_arx5_spec.py` now define the composed embodiment. The split described below was not carried out
+> verbatim: the code keeps one composed config plus joint-name specs rather than separate `UNITREE_GO2_CFG`
+> and `ARX5_CFG` symbols. Read this as the rationale for the composition, not as pending work.
+
+Original status (2026-11-06): **plan only**, because the code it touches imports `isaaclab`, which cannot run locally.
+The composition landed afterwards by a different route; see the status note above.
 
 ## Why
 
@@ -89,6 +94,6 @@ field-by-field with `dataclasses.fields`, recursively for nested cfgs.
   the world layer can never try to spawn the arm alone. Pick one and document it in `worlds.md`.
 - Whether `UNITREE_GO2_CFG` becomes a module-local copy (`UNITREE_GO2_CFG.replace(...)`) or stays a re-export of
   `isaaclab_assets` — the former satisfies "defined here" but forks the upstream asset on any upgrade; the latter keeps
-  one source of truth. The handoff's target allows either; a re-export plus a comment is the cheaper, safer choice.
+  one source of truth. Either satisfies the intent; a re-export plus a comment is the cheaper, safer choice.
 - Gripper gains are still provisional (`GRIPPER_ACTUATOR_GAINS`, stiffness 1e3 vs the 5000 N/m used in W2a tuning);
   the split must not change them, but the mismatch stays on the record.

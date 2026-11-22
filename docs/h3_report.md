@@ -103,7 +103,7 @@ the repo (`blind_ppo`, `available_backends("loco")`, `sensor_requirements`, `joi
   `locked: true`).
 - **`docs/h1_report.md` referred to the `blind_ppo` card**; annotated instead of rewritten, since
   reports are history.
-- **`docs/status_report_2026-11-06.md` cites `inference_node.py:153-155`** for the IMU TODOs; the line
+- **`docs/reports/status_report_2026-11-06.md` cites `inference_node.py:153-155`** for the IMU TODOs; the line
   numbers moved. The report is a dated audit and was left as written; the remaining TODO is
   `base_lin_vel` only.
 

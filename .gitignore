@@ -52,6 +52,8 @@ __pycache__/
 slam/slam/backends/orb_slam3/ORBvoc.txt
 slam/slam/backends/multicam_slam/ORBvoc.txt
 
-# local tool state -- never commit (ruff writes its own inner .gitignore, .superpowers only has a nested one)
+# local tool state -- never commit (ruff writes its own inner .gitignore; .superpowers/.claude only ever hold a
+# nested ignore of their own)
 .superpowers/
+.claude/
 .ruff_cache/

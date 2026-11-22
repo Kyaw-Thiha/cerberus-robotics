@@ -36,7 +36,7 @@ Scene assets are pod-only: they are downloaded, preprocessed and read on the pod
 | 4 | Continual learning + world model | Not started |
 
 Interface layer (`LocoCommand` / `ArmCommand` / `BodyCommand` messages, `PolicyBackend` in `common/cerberus_policies/`): `docs/interfaces.md`.
-Full audit: `docs/status_report_2026-11-06.md`.
+Full audit: `docs/reports/status_report_2026-11-06.md`.
 
 **Honest claims:** locomotion uses a simulator-provided, noisy height scan (235-D observation: 48 proprioceptive/command + 187 scan cells); an estimated-map variant is a planned ablation. The flat policy is blind (48-D). Neither policy is claimed robust: the candidate failed the Phase 0.5 gate, and the report records the cause.
 
@@ -72,18 +72,20 @@ Current backends, levels and targets: [`docs/backend_support.md`](docs/backend_s
 ## Key docs
 
 - `docs/cerberus_project_context.md`: motivation, mission, phases, open decisions
+- `docs/platform_config.md`, `docs/interfaces.md`: platform and embodiment selection, the three command boundaries
 - `docs/project_structure.md`: repo layout and conventions
 - `docs/interfaces.md`, `docs/backend_support.md`: the three command boundaries and per-backend support levels
 - `docs/modular_stack_options.md`: locomotion / manipulation / whole-body options and the three boundaries
 - `docs/worlds.md`, `docs/arena_integration_log.md`: scene sources and the Arena gate log
-- `docs/isaac_lab_workflow.md`, `docs/archive.md`, `docs/artifact_storage.md`: remote GPU workflow
+- `docs/isaac_lab_workflow.md`, `docs/artifact_storage.md`: local/remote split and permanent artifact storage
+- `docs/sensor_setup.md`, `docs/slam_design.md`, `docs/worlds_integration_spec.md`, `docs/adversarial_gate_method.md`: rigs, SLAM, scenes, the robustness gate
+- `docs/archive.md`: what was removed, which tag holds it, how to restore it
 
 ## Git workflow
 
-- **Local handoffs** (no pod, no GPU) work directly on `main`.
-- **Remote/pod handoffs** use a short-lived branch cut from a fresh `origin/main` clone, so a pod never drifts from `main`.
+- Work that needs a GPU host runs on a short-lived branch cut from a fresh `origin/main` clone, so the host never drifts from `main`.
 - Start every session with `git fetch && git pull --ff-only`; stop and report if it cannot fast-forward.
-- One commit per work package, each passing `pixi run pytest -q`, `pixi run lint` and the backend-table freshness check; push after each package.
+- Each commit passes `pixi run pytest -q`, `pixi run lint` and the backend-table freshness check.
 - Never force-push, never rewrite history.
 
 ## Quick start

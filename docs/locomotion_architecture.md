@@ -42,7 +42,7 @@ Adopting a more sophisticated configuration later (realistic noise synthesis, te
 
 ## Recommendation
 
-Don't build Shape C support (onboard encoder, real depth-sensor integration) now — no checkpoint needs it and it's separate engineering. Do design the `locomotion_policy` node's interface generically: what a checkpoint needs (which observation terms, in what order, whether it needs a sensor tensor at all) should be a declared property read at launch, not assumed in code. See `docs/superpowers/specs/2026-09-09-multi-platform-config-design.md`'s Part B for where that declaration lives.
+Don't build Shape C support (onboard encoder, real depth-sensor integration) now — no checkpoint needs it and it's separate engineering. Do design the `locomotion_policy` node's interface generically: what a checkpoint needs (which observation terms, in what order, whether it needs a sensor tensor at all) should be a declared property read at launch, not assumed in code. See `docs/platform_config.md` for where that declaration lives and how the launch flow reads it. The design that originally specified it is summarised there.
 
 ## Known verification gaps
 

@@ -166,7 +166,7 @@ cerberus/
 │   │   ├── core/                      # platform registry (core/platforms), env cfgs, push events, tests
 │   │   ├── eval/                      # push-recovery robustness curve (standard tests)
 │   │   ├── runs/                      # RUN_*.md notes; clips/events are gitignored
-│   │   ├── adversarial_robustness/    # (planned, not yet created) Phase 0.5 gate — sibling to eval/
+│   │   ├── adversarial_robustness/    # Phase 0.5 gate — sibling to eval/ (method: docs/adversarial_gate_method.md)
 │   │   │   ├── train_adversary.py       # trains adversary policy vs. frozen candidate checkpoint
 │   │   │   ├── attack_env.py            # wrapper env: frozen locomotion policy in the loop
 │   │   │   └── eval/                    # adversarial vulnerability report, robustify/reattack results
@@ -199,13 +199,12 @@ cerberus/
 │   ├── scripts/                       # (planned, not yet created)
 │   └── systemd/                       # (planned, not yet created)
 │
-├── plans/                            # handoff docs (phase 0, 0.5, arena, slam, sensor setup, H1)
 ├── docs/                             # this file, interfaces.md,
 │                                       # backend_support.md (generated), worlds.md, arena_integration_log.md, status reports,
-│                                       # modular_stack_options.md, archive/ + superpowers/ (history);
-│                                       # architecture.svg (planned, not yet created)
+│                                       # modular_stack_options.md, platform_config.md, sensor_setup.md, slam_design.md,
+│                                       # worlds_integration_spec.md, adversarial_gate_method.md, archive.md (removed paths +
+│                                       # restore commands), storage_audit.md; architecture.svg (planned, not yet created)
 ├── docker/
-│   ├── remote/                       # LEGACY stack image (Sim 5.1 / Lab 2.3.2 / Py 3.11): Dockerfile, start.sh
 │   ├── remote_v6/                    # ACTIVE stack image (Sim 6.2 / Lab v3.0.0 GA / Py 3.12 + Arena main
 │   │                                    # + pixi sim-ros2 + rclone 1.75.1)
 │   └── slam/                         # one SLAM backend image per subdirectory
@@ -217,7 +216,8 @@ cerberus/
 │   ├── build_go2_arx5_urdf.py          # merge sim Go2 + patched X5A arm -> go2_arx5 URDF (offline)
 │   ├── convert_go2_arx5_urdf_to_usd.py # UrdfConverter -> flattened USD + checks (pod)
 │   ├── compare_go2_urdf_to_usd.py      # URDF vs USD mass/CoM/inertia/limits (offline)
-│   ├── run_ga_smoke_pod.sh             # one-session GA-stack smoke: train, play+video, Arena spike
+│   ├── preflight_local.sh              # local checks before paying for a GPU host
+│   ├── pod_driver_gate.py / pod_launch_probe.py / kit_retry.py   # host checks and resilient launches
 │   └── tests/                          # colocated tests for the scripts above
 ├── data/                             # gitignored — demos, trajectories, scenes, reports
 ├── outputs/                          # gitignored — checkpoints, logs, videos, wandb runs

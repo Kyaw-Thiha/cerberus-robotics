@@ -9,13 +9,12 @@ a claim of physical deployment.
 
 ## Status (2026-11-22)
 
-Tier **T0** of the first-scene run: the host tooling, doctor, bootstrap, session plan and Brev wrappers are on `main`,
-tested, and were used for real. **T1-T3 are blocked by Brev, not by this repo:** four instances on three providers
-(massedcompute L40, scaleway L4, hyperstack L40) reached `RUNNING`/`READY`/`HEALTHY`, but Brev's SSH relay accepted the
-TCP connection and never delivered a shell ("banner exchange" timeout), so no Kit launch or scene run was possible.
-Spend was ~1.50 USD of the 12 USD cap; every instance was deleted and no timer remains. Expect to fix the SSH path
-first (support ticket with the timestamps in the report, or try another network); the run itself is ready to execute.
-Details: [`docs/reports/first_scene_session.md`](docs/reports/first_scene_session.md).
+Tier **T0** still. Brev's SSH relay remains broken for this account (banner timeout on every instance), so a
+bucket-based command channel was built instead (`scripts/host/r2_channel.*`, tested locally). On three live attempts
+the Brev startup script did not start that channel — no heartbeat, no startup log — although a minimal startup-script
+canary had worked earlier, so the mechanism is unreliable here. No Kit launch or scene run was possible. Spend for the
+day is about 0.25 USD; every instance was deleted and no timer remains. Next: get a shell or a reliable startup
+script (support ticket with `docs/reports/brev_ssh_issue.md`), or run the same commands on any host with SSH.
 
 ## Platform
 

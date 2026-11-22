@@ -107,6 +107,15 @@ work. Only the SSH relay/tunnel path fails, which is consistent with the missing
 the instance. A startup script is therefore a viable way to run a **short, non-interactive** job on a Brev instance
 today; it is not a substitute for a shell for interactive or long-lived work.
 
+## 2026-11-22 14:00-15:00: bucket command channel attempted instead of SSH
+
+With SSH unusable, a command channel over the bucket was built and tested locally (see `docs/dev_machine.md`). Three
+instances were created with the channel as the Brev startup script (two `m8g.medium`, one `massedcompute_L40`); none
+produced a heartbeat or a `state/startup.log`, i.e. the startup script did not complete on those instances, although a
+minimal canary script had reached R2 33 s after RUNNING on 2026-11-22 12:32. `brev reset` is unsupported for these
+types, so a failed startup script cannot be retried in place. The bootstrap now retries the rclone install and the
+channel fetch and logs each step; unconfirmed on a live instance.
+
 ## Working hypothesis
 
 The CLI generates an SSH config that points at Brev's relay, but nothing on this laptop establishes the client half of

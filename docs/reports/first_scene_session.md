@@ -109,6 +109,32 @@ attempted, on any GPU.
 - Stop at #4: three consecutive same-class failures on different instances is the handoff's stop condition.
 - Do not exceed the 1.50 USD/h, 3.5 h, 4-creation or one-live limits at any point; all four were honoured.
 
+## 2026-11-22 14:00-15:00: R2 command channel (no SSH) - still no T1
+
+Because Brev's SSH relay is broken, a bucket-based command channel was built: `scripts/host/r2_channel.sh` (instance
+loop: polls `jobs/<job>/cmd/`, runs each command with bash under a timeout, uploads stdout/stderr/rc, heartbeat every
+30 s) and `scripts/host/r2_channel.py` (bundle the startup script, `exec`, `put`/`get`, `wait`). Nine tests drive the
+real loop against a fake bucket, plus an end-to-end local bootstrap test (startup script -> heartbeat -> exec with a
+non-zero exit status).
+
+Three live attempts, all with the channel bundled into the startup script:
+
+| # | type | USD/h | outcome |
+|---|---|---|---|
+| 1 | m8g.medium | 0.0385 | RUNNING for 84 min, no heartbeat, no objects; deleted |
+| 2 | m8g.medium | 0.0385 | same after fixing the script's `unzip` dependency and its systemd-only start; deleted |
+| 3 | massedcompute L40 | 1.056 | same with the minimal bootstrap (fetches the channel from R2, nohup fallback); deleted |
+
+No `state/startup.log` was ever uploaded, so the startup script either did not run on these instances or ran before
+the network was usable. An earlier minimal canary on the same account did run and reached R2 in 33 s, so the mechanism
+exists but is not reliable here. The bootstrap now retries the rclone install and the channel fetch (~3 min each) and
+logs every step; that change is tested locally but has not been confirmed on a live instance. `brev reset` is not
+supported for these types, so a failed startup script cannot be retried on the same instance.
+
+Tier remains **T0**. The GPU instance (L40, 24 GB, RT cores, driver unknown) never became usable.
+
+Spend for this attempt: about 0.23 USD (70 min + 13 min CPU at 0.0385/h, 15 min L40 at 1.056/h); 3 of 3 creations used.
+
 ## Spend
 
 | item | amount |

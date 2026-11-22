@@ -158,6 +158,38 @@ scripts/host/run_session.sh --scene MV7J6NIKTKJZ2AABAAAAADQ8_usd --out-dir /work
 Put the credentials file on the instance over `brev copy`, `chmod 600` it, and delete it before deleting the instance
 (see the report for the rotation advice that follows any token copy).
 
+## Running without SSH: the R2 command channel
+
+When a host gives no shell (see the Brev SSH issue), `scripts/host/r2_channel.*` turns a bucket prefix into a job
+runner. The instance side is started by the Brev startup script; the laptop side writes commands and reads results.
+
+```bash
+# 1. put the channel where the bootstrap will fetch it, then build a startup script (mode 600, contains credentials)
+python3 scripts/host/r2_channel.py put --job scene1 --src scripts/host/r2_channel.sh --key input/r2_channel.sh
+python3 scripts/host/r2_channel.py bundle --job scene1 --out /tmp/scene1-start.sh
+
+# 2. create the instance with it
+brev create NAME --type TYPE --startup-script @/tmp/scene1-start.sh --detached
+
+# 3. wait for the channel, then run commands; large files move R2 <-> instance, never through the laptop
+python3 scripts/host/r2_channel.py wait --job scene1 --timeout 600
+python3 scripts/host/r2_channel.py exec --job scene1 --cmd 'nvidia-smi; df -h' --timeout 120
+python3 scripts/host/r2_channel.py put --job scene1 --src ./scene.tar --key input/scene.tar
+python3 scripts/host/r2_channel.py get --job scene1 --key out/0007.out --dst ./out.txt
+```
+
+Layout: `jobs/<job>/cmd/<seq>_<timeout>.cmd`, `out/<seq>.{out,err,rc}`, `heartbeat.json` every 30 s,
+`state/channel.json`, `state/startup.log`. The loop runs only commands under its own job prefix, with bash, in
+`/tmp/cerberus/work/<job>`, under `timeout`; a long job should `nohup` itself and log to a file for a later command to
+upload. Only the bucket-scoped token is used, passed to rclone as environment variables inside a 0600 file.
+
+**Measured limitation (2026-11-22):** on this Brev account the startup script did not start the channel on three
+attempts (two CPU, one GPU), although a minimal startup-script canary had run in an earlier session. No heartbeat and
+no `state/startup.log` appeared, which points at the script running before the network is usable or not running at all
+on those instances. The bootstrap now retries the rclone install and the channel fetch for up to ~3 minutes each and
+uploads its log, but that has not yet been confirmed on a live instance. Treat the channel as implemented and tested
+locally, not yet proven on Brev.
+
 ## Cost control
 
 - The wrappers refuse to exceed 1.50 USD/h, 3.5 h, 4 creations and one live instance.

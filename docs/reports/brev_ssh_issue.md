@@ -82,6 +82,31 @@ No `ProxyCommand` line. `brev.pem` is a valid RSA key (`ssh-keygen -y` reads it)
 - `brev register` (requires sudo; run by the owner at 12:05) — no ProxyCommand, no tunnel process, no service.
 - A different instance/provider (earlier run: three providers, same result).
 
+## 2026-11-22 12:26-12:37: two further checks
+
+**Check 1 - newer CLI.** The latest release is **v0.6.337**, byte-identical to the installed binary
+(`sha256 e4b1d0f9…075d` for both). Downloaded the official `brev-cli_0.6.337_linux_amd64.tar.gz` to a task-only
+`/tmp/brev-task/bin` placed first on `PATH`, verified `brev --version`, created a fresh CPU instance, ran `brev refresh`:
+**no `ProxyCommand` in `~/.brev/ssh_config`**, and both `brev exec ... 'echo ok'` and `brev shell` still failed with
+`Connection timed out during banner exchange`. There is no newer release to try, so this is not a "fixed in a later
+CLI" situation.
+
+**Check 2 - startup-script canary (no SSH).** A `m8g.medium` instance was created with
+`--startup-script @setup.sh` (a `chmod 600` local file, deleted immediately after creation). The script wrote
+`/tmp/canary`, downloaded rclone (arch-aware), and uploaded `canary/cerberus-ssh2-<ts>.txt` every 30 s for 10 minutes
+using the restricted R2 token passed as `RCLONE_CONFIG_*` environment variables inside the script.
+
+- **Startup scripts run:** yes.
+- **Outbound R2 access from the instance:** yes.
+- First object appeared at 12:32:46, **33 s after the instance reached RUNNING** (12:32:13); object name timestamp
+  `20261122T173215Z`.
+- Object deleted afterwards; prefix `canary/` is empty again (verified with `rclone lsf`).
+
+This isolates the fault: provisioning, cloud-init/startup scripts, credentials and the instance's outbound network all
+work. Only the SSH relay/tunnel path fails, which is consistent with the missing client tunnel rather than anything on
+the instance. A startup script is therefore a viable way to run a **short, non-interactive** job on a Brev instance
+today; it is not a substitute for a shell for interactive or long-lived work.
+
 ## Working hypothesis
 
 The CLI generates an SSH config that points at Brev's relay, but nothing on this laptop establishes the client half of
@@ -116,6 +141,12 @@ does not spawn cloudflared either. `cloudflared access ssh --hostname global.prd
 
 Reproduced on four instances across three providers (AWS m8g.medium at 2026-11-22 11:44-12:17 EST; and L40/L4-class
 instances on massedcompute, scaleway and hyperstack earlier the same day).
+
+Additional evidence, 2026-11-22 12:26-12:37 EST:
+- The latest release is v0.6.337, identical to the installed binary (same sha256); with it first on PATH, a fresh
+  instance still produced an ssh_config with no ProxyCommand and the same banner timeout.
+- A startup script on a fresh instance ran, downloaded rclone and uploaded to R2 within 33 s of the instance reaching
+  RUNNING, so provisioning, cloud-init and the instance's outbound network all work. Only the SSH path fails.
 
 Questions:
 1. For this org, should the SSH config contain a cloudflared ProxyCommand (Brev tunnel), and what starts that tunnel?

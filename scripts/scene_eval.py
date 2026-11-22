@@ -24,7 +24,7 @@ import argparse
 import json
 import sys
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 _REPO_ROOT = Path(__file__).resolve().parents[1]
@@ -51,6 +51,13 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-video", dest="video", action="store_false")
     parser.add_argument("--video-steps", type=int, default=300)
     parser.add_argument("--video-downscale", type=int, default=2)
+    parser.add_argument("--video-fps", type=int, default=30, help="clip frame rate; 50 matches the 50 Hz control rate")
+    parser.add_argument("--video-resolution", default=None, metavar="WxH",
+                        help="viewport resolution for the clip, e.g. 1920x1080")
+    parser.add_argument("--clip-name", default=None, help="clip filename (default <scene>_<seed>_scripted.mp4)")
+    parser.add_argument("--demo-seconds", type=float, default=0.0,
+                        help="repeat the seeded tour until it covers this much sim time (showcase clip)")
+    parser.add_argument("--demo-speed", type=float, default=0.3, help="linear speed of the repeated demo tour")
     parser.add_argument("--no-resume", dest="resume", action="store_false", default=True,
                         help="rerun the stand test even if assertions.json already passed")
     parser.add_argument("--dry-run", action="store_true", help="resolve paths and print the plan; no Isaac")
@@ -58,7 +65,7 @@ def build_parser() -> argparse.ArgumentParser:
 
 
 def default_out_dir() -> Path:
-    stamp = datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
+    stamp = datetime.now(UTC).strftime("%Y%m%dT%H%M%SZ")
     return _REPO_ROOT / "outputs" / "scene_eval" / stamp
 
 
@@ -132,9 +139,18 @@ def run(args) -> int:
     scene = se.resolve_scene(args.scene)
     proxy = ensure_scan_proxy(scene, spawns[0][3])
 
+    resolution = None
+    if args.video_resolution:
+        try:
+            width, height = (int(v) for v in args.video_resolution.lower().split("x"))
+        except ValueError:
+            raise SystemExit("--video-resolution must look like 1920x1080") from None
+        resolution = (width, height)
     env, scene = se.build_loco_env(
-        args.scene, spawns, task=task, episode_length_s=max(120.0, args.steps * 0.02 + 30.0),
+        args.scene, spawns, task=task,
+        episode_length_s=max(120.0, args.steps * 0.02 + args.demo_seconds + 30.0),
         seed=args.seed, scan_proxy=proxy, timings_path=out_dir / "build_timings.json",
+        with_cameras=bool(args.record_clip), camera_resolution=resolution,
     )
     hook = se.VelocityCommandHook(env)
     policy = se.load_policy(env, task=task, checkpoint=args.checkpoint)
@@ -206,10 +222,16 @@ def run(args) -> int:
     summary: dict = {"assertions_passed": report.passed, "stand_steps": len(rows)}
     if args.scripted and report.passed:
         start = (spawns[0][0], spawns[0][1], spawns[0][2])
-        path = scripted_path_for_seed(args.seed, start_pose=start, dt=0.02)
-        clip = ClipRecorder(out_dir / "clips", enabled=args.video and args.record_clip,
-                            downscale=args.video_downscale)
-        name = f"{args.scene.split(':', 1)[-1]}_{args.seed}_scripted.mp4"
+        from common.cerberus_eval.scripted_path import demo_path
+
+        if args.demo_seconds > 0:
+            path = demo_path(args.seed, start_pose=start, duration_s=args.demo_seconds,
+                             dt=0.02, speed=args.demo_speed)
+        else:
+            path = scripted_path_for_seed(args.seed, start_pose=start, dt=0.02)
+        clip = ClipRecorder(out_dir / "clips", fps=args.video_fps,
+                            enabled=args.video and args.record_clip, downscale=args.video_downscale)
+        name = args.clip_name or f"{args.scene.split(':', 1)[-1]}_{args.seed}_scripted.mp4"
         clip.begin(name)
         se.reset_envs_to(env, spawns)
         t0 = time.perf_counter()
@@ -230,6 +252,9 @@ def run(args) -> int:
             "seed": args.seed,
             "outcome": "scripted",
             "steps": steps,
+            "sim_seconds": round(steps * path.dt, 3),
+            "video_fps": args.video_fps,
+            "video_resolution": list(resolution) if resolution else None,
             "wall_s": elapsed,
             "start_pose": start,
             "end_pose": [float(v) for v in poses[0].detach().cpu()],

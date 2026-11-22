@@ -154,3 +154,18 @@ def scripted_path_for_seed(seed: int, start_pose: Pose = (0.0, 0.0, 0.0), **kwar
     """Convenience for the smoke test: a seeded random polyline from ``start_pose`` as a command schedule."""
     wps = random_waypoints(seed, start=(start_pose[0], start_pose[1]), start_yaw=start_pose[2])
     return waypoints_to_commands(start_pose, wps, **kwargs)
+
+
+def demo_path(seed: int, start_pose: Pose = (0.0, 0.0, 0.0), duration_s: float = 90.0,
+              dt: float = 0.02, speed: float = 0.3) -> ScriptedPath:
+    """A seeded tour repeated until it covers ``duration_s`` of sim time (the showcase clip).
+
+    Each loop retraces the same short polyline from the start, which keeps a 90 s demo inside the room the spawn was
+    admitted for. The commands still come from :func:`waypoints_to_commands`, so every ramp passes the slew limiter.
+    """
+    if duration_s <= 0:
+        raise ValueError("duration_s must be positive")
+    base = random_waypoints(seed, start=(start_pose[0], start_pose[1]), start_yaw=start_pose[2])
+    one = waypoints_to_commands(start_pose, base, dt=dt, speed=speed)
+    loops = max(1, math.ceil(duration_s / one.duration_s))
+    return waypoints_to_commands(start_pose, base * loops, dt=dt, speed=speed)

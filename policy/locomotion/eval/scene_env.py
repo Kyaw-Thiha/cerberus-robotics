@@ -153,6 +153,7 @@ def build_loco_env(
     scan_proxy: str | Path | None = None,
     timings_path: str | Path | None = None,
     with_cameras: bool = False,
+    camera_resolution: tuple[int, int] | None = None,
 ) -> tuple[Any, dict[str, Any]]:
     """``gym.make`` the Play task in the scene and teleport every env to its ``(x, y, yaw[, floor_z])`` spawn.
 
@@ -191,6 +192,11 @@ def build_loco_env(
         from policy.locomotion.core.script_utils import ensure_capture_visualizer
 
         ensure_capture_visualizer(env_cfg)
+        if camera_resolution is not None:
+            width, height = (int(v) for v in camera_resolution)
+            if width <= 0 or height <= 0:
+                raise ValueError("camera resolution must be positive")
+            env_cfg.viewer.resolution = (width, height)
     t_apply = time.perf_counter()
 
     # gym.make is where the scene USD stage loads, the scan-proxy mesh is built and the articulation is

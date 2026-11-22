@@ -60,7 +60,7 @@ aws ec2 stop-instances --instance-ids <id>
 The Deep Learning AMI's driver is not guaranteed to be in the allowlist — run the doctor and, if it fails, either pick
 a newer AMI or install 580.95.05+ from NVIDIA's `.run` installer (a full VM with sudo can do this; a container cannot).
 
-## 3. Brev
+## 3. Brev (legacy relay)
 
 Brev is the route this repository's cloud sessions used. The CLI is `brev` (v0.6.337 at the time of writing).
 
@@ -145,6 +145,46 @@ was unchanged and no tunnel appeared. `brev refresh`/`brev enable-ssh`, clearing
 So: check `grep ProxyCommand ~/.brev/ssh_config` and `pgrep -a cloudflared` first. If both are empty, this is the
 client-side tunnel, not the instance — do not spend money creating another instance. Full evidence, timeline and a
 ready-to-send support message: `docs/reports/brev_ssh_issue.md`.
+
+## 4. Hyperstack (plain SSH, no relay)
+
+Hyperstack gives a normal `ubuntu@<floating-ip>` shell, which is why the cloud session moved here after the Brev relay
+failed (see `docs/reports/first_scene_session.md`). The API base is `https://infrahub-api.nexgencloud.com/v1` and
+authentication is the `api_key` header; the wrappers read `HYPERSTACK_API_KEY` from `.env` inside a subshell for each
+call and never print it.
+
+Prices below are the live `GET /pricebook` values read on **2026-11-22** (GPU + Cloud-SSD disk + public IP), not a
+quote:
+
+| flavor | GPU | VRAM | root disk | all-in USD/h |
+|---|---|---|---|---|
+| `n3-RTX-A6000x1` | RTX A6000 | 48 GB | 100 GB | 0.516 |
+| `n3-L40x1-bigroot` | L40 | 48 GB | 825 GB | 1.087 |
+| `n3-RTX-A4000x1` (NORWAY-1, no stock) | RTX A4000 | 16 GB | 100 GB | 0.166 |
+
+`pick-image` chooses the Ubuntu image with the highest driver build in the region; on CANADA-1 that is
+`Ubuntu Server 24.04 LTS R595 CUDA 13.2 with Docker`. The driver rule still applies: check `nvidia-smi` and run
+`host_doctor`; if the image is on a rejected 595 build, install 580.95.05+ from NVIDIA's runfile (a full VM has sudo).
+
+```bash
+# one-time key (public half is uploaded; the private half never leaves the laptop)
+ssh-keygen -t ed25519 -f ~/.ssh/cerberus_hyperstack -N '' -C cerberus-hyperstack
+
+scripts/host/hyperstack_up.sh --name cerberus-canary --flavor n3-RTX-A6000x1 --hours 1
+scripts/host/hyperstack_status.sh                  # state, spend, caps, armed timers
+scripts/host/hyperstack_ssh.sh cerberus-canary 'nvidia-smi; docker info'
+scripts/host/hyperstack_down.sh cerberus-canary    # DELETE, verify gone, cancel timer
+```
+
+The wrappers enforce the run's caps before creation: **1.20 USD/h**, **3 h per VM**, **3 creations**, **one live VM**,
+**6.00 USD** and **5 h** total. A `systemd-run --user` timer is armed for creation + 3 h **before** the POST (keyed by
+name) and re-armed on the real VM id straight after it, so a lost response cannot leave an untracked VM billing.
+`hyperstack_kill.sh <id>` is the switch itself: DELETE, poll until gone, cancel the timers. `--check` is a harmless
+GET. Down/kill/ssh refuse a VM this run did not create (ledger plus the `cerberus-` name prefix).
+
+The SSH ingress rule is created with the VM: TCP 22, `remote_ip_prefix` set to the current public IP as `/32`
+(`curl -s ifconfig.me`, or `--cidr`). On carrier-grade NAT the address can change mid-session; if SSH stops answering,
+re-read the IP and re-create the rule. Use `--dry-run` to see the payload without spending anything.
 
 ## On the instance
 

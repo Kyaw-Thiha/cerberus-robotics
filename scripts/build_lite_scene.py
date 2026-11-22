@@ -24,7 +24,7 @@ if str(_REPO) not in sys.path:
 if str(_REPO / "scripts") not in sys.path:
     sys.path.insert(0, str(_REPO / "scripts"))
 
-from scene_id import folder_name  # noqa: E402
+from scene_id import folder_name
 
 
 def grid_iou(a, b) -> float:
@@ -111,7 +111,12 @@ def write_mesh(points, faces, path: Path) -> None:
 def build(scene_usd: Path, out_dir: Path, scene_id: str, budget_s: float = 1800.0,
           thresholds=(0.000001, 0.000002, 0.000005, 0.00001, 0.00002, 0.00005, 0.0001, 0.0005),
           light_mb: float = 20.0, min_iou: float = 0.98) -> dict:
-    from planning.occupancy import OccupancyConfig, build_grid, save_npz, scene_triangles_m
+    from planning.occupancy import (
+        OccupancyConfig,
+        build_grid,
+        save_npz,
+        scene_triangles_m,
+    )
 
     sid = folder_name(scene_id)
     exact_dir = out_dir / "exact"

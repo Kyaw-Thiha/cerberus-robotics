@@ -106,18 +106,21 @@ simulation_app = app_launcher.app
 """Rest everything follows."""
 
 import gymnasium as gym
-
-from isaaclab.utils.assets import retrieve_file_path
-
-from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper
-
 import isaaclab_tasks  # noqa: F401
-import policy.locomotion  # noqa: F401  -- registers the Cerberus Go2 tasks
+from isaaclab.utils.assets import retrieve_file_path
+from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper
 from isaaclab_tasks.utils import get_checkpoint_path
 
+import policy.locomotion  # noqa: F401  -- registers the Cerberus Go2 tasks
 from policy.cli_common import resolve_task_id
-from policy.locomotion.core.script_utils import checkpoints_root, ensure_capture_visualizer
-from policy.locomotion.core.terrain_pinning import pin_terrain, sub_terrain_column_for_type
+from policy.locomotion.core.script_utils import (
+    checkpoints_root,
+    ensure_capture_visualizer,
+)
+from policy.locomotion.core.terrain_pinning import (
+    pin_terrain,
+    sub_terrain_column_for_type,
+)
 from policy.locomotion.core.video_capture import record_condition_clips
 
 # now that policy.locomotion has registered every platform's gym tasks, resolve

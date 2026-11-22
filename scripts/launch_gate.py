@@ -51,7 +51,7 @@ def main(argv: list[str] | None = None) -> int:
         if not result.started:
             path = REPO / "outputs" / "launch_hygiene.log"
             subprocess.run(["bash", str(REPO / "scripts" / "launch_hygiene.sh"), str(path)],
-                           capture_output=True, text=True)
+                           capture_output=True, text=True, check=False)
             hygiene = str(path.relative_to(REPO))
         if result.started:
             started_total += 1

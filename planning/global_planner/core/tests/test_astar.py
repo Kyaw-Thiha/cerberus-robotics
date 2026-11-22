@@ -12,8 +12,7 @@ from planning.global_planner.core.astar import (
     shortcut_cells,
     traversable_mask,
 )
-from planning.occupancy import BLOCKED, FREE, OccupancyGrid
-from planning.occupancy import OccupancyConfig
+from planning.occupancy import BLOCKED, FREE, OccupancyConfig, OccupancyGrid
 
 
 def make_grid(mask, *, res=0.1, inflate=False, radius_m=0.1):

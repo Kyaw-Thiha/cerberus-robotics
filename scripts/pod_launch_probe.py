@@ -79,7 +79,7 @@ def main(argv: list[str] | None = None) -> int:
     try:
         with STDOUT_LOG.open("w", encoding="utf-8") as log:
             proc = subprocess.run(cmd, stdout=log, stderr=subprocess.STDOUT, text=True,
-                                  timeout=LAUNCH_CAP_S + args.window * args.max_launches, env=env)
+                                  timeout=LAUNCH_CAP_S + args.window * args.max_launches, env=env, check=False)
         rc = proc.returncode
         output = STDOUT_LOG.read_text(encoding="utf-8", errors="replace")
     except subprocess.TimeoutExpired:

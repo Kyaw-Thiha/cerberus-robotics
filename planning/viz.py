@@ -5,8 +5,8 @@ Pure Python + matplotlib (Agg). Used by ``scripts/plan_preview.py`` to commit a 
 
 from __future__ import annotations
 
+from collections.abc import Iterable, Sequence
 from pathlib import Path
-from typing import Iterable, Sequence
 
 import numpy as np
 

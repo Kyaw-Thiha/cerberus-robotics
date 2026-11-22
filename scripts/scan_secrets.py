@@ -14,7 +14,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 
-from redact import mask_text  # noqa: E402
+from redact import mask_text
 
 PATTERNS = {
     "r2_secret": re.compile(r"(?i)R2_(?:SECRET_ACCESS_KEY|ACCESS_KEY_ID)\s*[=:]\s*[\"']?[A-Za-z0-9/+=]{16,}"),

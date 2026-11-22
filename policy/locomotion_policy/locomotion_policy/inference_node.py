@@ -27,7 +27,12 @@ from geometry_msgs.msg import Twist
 from rclpy.node import Node
 from sensor_msgs.msg import Imu, JointState
 
-from locomotion_policy.core import LocomotionCore, PolicySpec, build_limiter, zero_loco_command
+from locomotion_policy.core import (
+    LocomotionCore,
+    PolicySpec,
+    build_limiter,
+    zero_loco_command,
+)
 from locomotion_policy.observation_assembly import _build_permutation
 
 

@@ -161,7 +161,7 @@ def test_imports_with_no_heavy_deps():
         "bad = [m for m in ('torch', 'numpy', 'rclpy', 'isaaclab', 'isaacsim', 'omni', 'cerberus_msgs') if m in sys.modules]\n"
         "print('BAD:' + ','.join(bad))\n"
     )
-    out = subprocess.run([sys.executable, "-c", script], cwd=root, env={"PYTHONPATH": str(root), "PATH": ""}, capture_output=True, text=True)
+    out = subprocess.run([sys.executable, "-c", script], cwd=root, env={"PYTHONPATH": str(root), "PATH": ""}, capture_output=True, text=True, check=False)
     assert out.returncode == 0, out.stderr
     assert out.stdout.strip().endswith("BAD:"), out.stdout
 

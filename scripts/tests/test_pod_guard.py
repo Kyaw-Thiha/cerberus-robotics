@@ -9,7 +9,6 @@ import sys
 from pathlib import Path
 
 import pytest
-
 from pod_guard import POD_ENV_VAR, is_pod, require_pod
 
 SCRIPTS_DIR = Path(__file__).resolve().parents[1]
@@ -42,7 +41,7 @@ def _run(script: str, *args: str) -> subprocess.CompletedProcess:
     env = {k: v for k, v in os.environ.items() if k != POD_ENV_VAR}
     return subprocess.run(
         [sys.executable, str(SCRIPTS_DIR / script), *args],
-        env=env, capture_output=True, text=True, timeout=120,
+        env=env, capture_output=True, text=True, timeout=120, check=False,
     )
 
 

@@ -12,7 +12,7 @@ from planning.local_planner.core.pure_pursuit import (
     _closest_on_polyline,
     _point_at_arclength,
 )
-from planning.occupancy import BLOCKED, FREE, OccupancyGrid, OccupancyConfig
+from planning.occupancy import BLOCKED, FREE, OccupancyConfig, OccupancyGrid
 from planning.sampling import StartGoalPair
 
 

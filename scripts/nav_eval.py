@@ -27,22 +27,27 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-from common.cerberus_eval.nav_metrics import (  # noqa: E402
+from common.cerberus_eval.nav_loop import (
+    MockBackend,
+    NavConfig,
+    run_navigation,
+    run_pairs_resumable,
+)
+from common.cerberus_eval.nav_metrics import (
     aggregate,
     aggregate_by_scene,
     write_aggregate_csv,
     write_run_json,
 )
-from common.cerberus_eval.nav_loop import MockBackend, NavConfig, run_navigation, run_pairs_resumable  # noqa: E402
-from common.cerberus_eval.video_clips import (  # noqa: E402
+from common.cerberus_eval.video_clips import (
     ClipRecorder,
     clip_filename,
     metrics_filename,
 )
-from planning.local_planner.core.pure_pursuit import PurePursuitConfig  # noqa: E402
-from planning.occupancy import from_usd, load_npz  # noqa: E402
-from planning.sampling import sample_pairs  # noqa: E402
-from planning.viz import save_plan_png  # noqa: E402
+from planning.local_planner.core.pure_pursuit import PurePursuitConfig
+from planning.occupancy import from_usd, load_npz
+from planning.sampling import sample_pairs
+from planning.viz import save_plan_png
 
 DEFAULT_SCENES = "grscenes:MV7J6NIKTKJZ2AABAAAAADQ8_usd,grscenes:MV7J6NIKTKJZ2AABAAAAADY8_usd,MVUCSQAKTKJ5EAABAAAAAAI8_usd"
 
@@ -212,8 +217,8 @@ def run(args) -> int:
 
     for scene_id in scenes:
         if args.mock and args.grid_dir is None and not scene_id.startswith("grscenes:"):
-            from scripts.plan_preview import synthetic_flat
             from planning.occupancy import OccupancyConfig, build_grid
+            from scripts.plan_preview import synthetic_flat
 
             grid = build_grid(*synthetic_flat(), config=OccupancyConfig.from_yaml(), scene_id="synthetic_flat", floor_z=0.0)
         else:

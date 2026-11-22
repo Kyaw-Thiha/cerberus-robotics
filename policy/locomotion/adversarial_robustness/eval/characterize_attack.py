@@ -143,7 +143,7 @@ def main(argv=None) -> int:
     from isaaclab.app import AppLauncher
 
     app_launcher = AppLauncher(args)
-    simulation_app = app_launcher.app  # noqa: F841
+    simulation_app = app_launcher.app
     try:
         return _run(args)
     except Exception:  # noqa: BLE001 -- SimulationApp.close() exits 0; a traceback is the only evidence

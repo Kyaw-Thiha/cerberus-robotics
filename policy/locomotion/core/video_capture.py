@@ -32,13 +32,16 @@ each condition's own window (local_step 0 is that env's first recorded step).
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
-from typing import Callable
 
 import imageio
 import torch
 
-from policy.locomotion.core.script_utils import capture_viewport_frame, point_viewport_at_env
+from policy.locomotion.core.script_utils import (
+    capture_viewport_frame,
+    point_viewport_at_env,
+)
 
 
 def record_condition_clips(

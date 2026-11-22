@@ -21,7 +21,10 @@ from pathlib import Path
 import yaml
 
 from common.cerberus_eval.kinematics import Pose, integrate, wrap_angle
-from common.cerberus_policies.command_limiter import DEFAULT_CONFIG_PATH, CommandRateLimiter
+from common.cerberus_policies.command_limiter import (
+    DEFAULT_CONFIG_PATH,
+    CommandRateLimiter,
+)
 
 CONTRACT_PATH = Path(__file__).resolve().parents[1] / "cerberus_policies" / "contracts" / "heightscan_ppo_v1.yaml"
 ZERO_COMMAND = {

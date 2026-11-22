@@ -87,7 +87,7 @@ def parse_cuda_version(nvidia_smi_text: str) -> str:
 
 def _run(cmd: list[str]) -> str:
     try:
-        return subprocess.run(cmd, capture_output=True, text=True, timeout=30).stdout.strip()
+        return subprocess.run(cmd, capture_output=True, text=True, timeout=30, check=False).stdout.strip()
     except (OSError, subprocess.SubprocessError):
         return ""
 

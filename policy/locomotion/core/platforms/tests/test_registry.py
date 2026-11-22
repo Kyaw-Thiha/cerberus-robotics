@@ -4,7 +4,7 @@ import pytest
 pytest.importorskip("gymnasium", reason="gymnasium not installed in this environment")
 pytest.importorskip("isaaclab_tasks", reason="policy/locomotion/__init__.py imports isaaclab_tasks (pod-only)")
 
-import gymnasium as gym  # noqa: E402
+import gymnasium as gym
 
 # NOTE on local test execution: importing this module via its normal dotted path
 # (policy.locomotion.core.platforms.registry) forces Python to first import every
@@ -18,7 +18,7 @@ import gymnasium as gym  # noqa: E402
 # pytest there -- verified working this way when this file was written. On a pod
 # with isaaclab_tasks installed, this file runs as-is, in place, no workaround
 # needed.
-from policy.locomotion.core.platforms.registry import (  # noqa: E402
+from policy.locomotion.core.platforms.registry import (
     PlatformCfg,
     available_platforms,
     get_platform,

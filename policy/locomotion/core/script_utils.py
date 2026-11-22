@@ -45,7 +45,10 @@ def configure_video_recorders(env_cfg, args_cli, log_dir: str, phase: str, check
     if not args_cli.video:
         return False
     try:
-        from isaaclab_rl.entrypoints.common import apply_video_recording, pre_launch_video_config
+        from isaaclab_rl.entrypoints.common import (
+            apply_video_recording,
+            pre_launch_video_config,
+        )
     except ImportError:
         return False
     pre_launch_video_config(env_cfg, args_cli)
@@ -120,9 +123,9 @@ def maybe_record_video(env, args_cli, log_dir: str, phase: str, native: bool = F
     from isaaclab.utils.dict import print_dict
 
     if phase == "train":
-        step_trigger = lambda step: step % args_cli.video_interval == 0  # noqa: E731
+        step_trigger = lambda step: step % args_cli.video_interval == 0
     elif phase == "play":
-        step_trigger = lambda step: step == 0  # noqa: E731
+        step_trigger = lambda step: step == 0
     else:
         raise ValueError(f"Unknown phase: {phase!r}, expected 'train' or 'play'")
 

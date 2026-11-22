@@ -377,7 +377,7 @@ def _finish(simulation_app, exit_code: int) -> None:
     try:
         sys.stdout.flush()
         sys.stderr.flush()
-    except Exception:  # noqa: BLE001, S110 - nothing sensible to do if flushing fails while exiting
+    except Exception:  # noqa: BLE001 - nothing sensible to do if flushing fails while exiting
         pass
     os._exit(exit_code)
 

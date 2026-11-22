@@ -13,7 +13,7 @@ def run(out: Path, *, crash_after: int) -> subprocess.CompletedProcess:
         ["bash", str(REPO / "scripts" / "run_resilient.sh"), "--name", "toy", "--max-restarts", "3", "--",
          sys.executable, str(REPO / "scripts" / "tests" / "fixtures_resumable_job.py"),
          "--out", str(out), "--pairs", "6", "--crash-after", str(crash_after)],
-        cwd=str(REPO), capture_output=True, text=True, timeout=120)
+        cwd=str(REPO), capture_output=True, text=True, timeout=120, check=False)
 
 
 def test_crash_and_relaunch_loses_and_duplicates_nothing(tmp_path):

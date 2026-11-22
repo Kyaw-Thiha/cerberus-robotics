@@ -30,8 +30,9 @@ from __future__ import annotations
 
 import json
 import time
+from collections.abc import Sequence
 from pathlib import Path
-from typing import Any, Sequence
+from typing import Any
 
 from common.cerberus_eval.scene_assertions import check_spawn_separation
 from common.cerberus_worlds.scene_geometry import scan_proxy_path
@@ -158,9 +159,9 @@ def build_loco_env(
     Returns ``(wrapped_env, scene)`` where ``wrapped_env`` is the ``RslRlVecEnvWrapper`` the runner and the policy
     expect (same wrapper ``attack_env.build_attack_env`` uses). Call AFTER AppLauncher has started.
     """
-    import gymnasium as gym
     import importlib
 
+    import gymnasium as gym
     import isaaclab_tasks  # noqa: F401  (registers the tasks)
     from isaaclab_rl.rsl_rl import RslRlVecEnvWrapper
 
@@ -297,7 +298,10 @@ def load_policy(env: Any, task: str = LOCO_TASK, checkpoint: str | None = None, 
     and the policy is put in eval mode.
     """
     from common.cerberus_compat.cfg_registry import load_agent_cfg
-    from common.cerberus_compat.rsl_rl_compat import check_checkpoint_format, make_runner
+    from common.cerberus_compat.rsl_rl_compat import (
+        check_checkpoint_format,
+        make_runner,
+    )
 
     if checkpoint is None:
         raise ValueError("a checkpoint path is required")

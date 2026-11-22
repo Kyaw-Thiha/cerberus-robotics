@@ -73,7 +73,7 @@ class Go2Arx5StackMimicEnv(ManagerBasedRLMimicEnv):
         Returns:
             Action tensor of shape (7,), compatible with `env.step()`.
         """
-        eef_name = list(self.cfg.subtask_configs.keys())[0]
+        eef_name = next(iter(self.cfg.subtask_configs.keys()))
 
         # target position and rotation
         (target_eef_pose,) = target_eef_pose_dict.values()
@@ -112,7 +112,7 @@ class Go2Arx5StackMimicEnv(ManagerBasedRLMimicEnv):
         Returns:
             {eef_name: 4x4 target pose tensor}.
         """
-        eef_name = list(self.cfg.subtask_configs.keys())[0]
+        eef_name = next(iter(self.cfg.subtask_configs.keys()))
 
         delta_position = action[:, :3]
         delta_rotation = action[:, 3:6]
@@ -156,7 +156,7 @@ class Go2Arx5StackMimicEnv(ManagerBasedRLMimicEnv):
         Returns:
             {eef_name: tensor of shape (num_envs, num steps, 1)}.
         """
-        return {list(self.cfg.subtask_configs.keys())[0]: actions[:, -1:]}
+        return {next(iter(self.cfg.subtask_configs.keys())): actions[:, -1:]}
 
     def get_subtask_term_signals(
         self, env_ids: Sequence[int] | None = None
@@ -168,7 +168,7 @@ class Go2Arx5StackMimicEnv(ManagerBasedRLMimicEnv):
         if env_ids is None:
             env_ids = slice(None)
 
-        signals = dict()
+        signals = {}
         subtask_terms = self.obs_buf["subtask_terms"]
         signals[SUBTASK_GRASP_SIGNAL] = subtask_terms[SUBTASK_GRASP_SIGNAL][env_ids]
         return signals

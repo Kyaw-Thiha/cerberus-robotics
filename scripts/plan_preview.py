@@ -21,12 +21,15 @@ _REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
-import numpy as np  # noqa: E402
+import numpy as np
 
-from planning.global_planner.core.astar import astar, path_is_collision_free  # noqa: E402
-from planning.occupancy import OccupancyConfig, build_grid  # noqa: E402
-from planning.sampling import sample_pairs  # noqa: E402
-from planning.viz import save_grid_png, save_plan_png, summarise_pairs  # noqa: E402
+from planning.global_planner.core.astar import (
+    astar,
+    path_is_collision_free,
+)
+from planning.occupancy import OccupancyConfig, build_grid
+from planning.sampling import sample_pairs
+from planning.viz import save_grid_png, save_plan_png, summarise_pairs
 
 
 def quad(x0, x1, y0, y1, z):

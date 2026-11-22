@@ -264,7 +264,7 @@ def _run_in_sim(args: argparse.Namespace, plan: RunPlan) -> int:
         try:
             sys.stdout.flush()
             sys.stderr.flush()
-        except Exception:  # noqa: BLE001, S110 -- nothing sensible to do if flushing fails while exiting
+        except Exception:  # noqa: BLE001 -- nothing sensible to do if flushing fails while exiting
             pass
         # never simulation_app.close(): it exits 0 whatever happened and has hung >10 min at shutdown
         os._exit(exit_code)
@@ -273,7 +273,6 @@ def _run_in_sim(args: argparse.Namespace, plan: RunPlan) -> int:
 
 def _simulate(args: argparse.Namespace, plan: RunPlan, report: dict) -> None:
     from common.cerberus_compat.rsl_rl_compat import hydra_task_config
-
     from slam.slam.eval.sim_env_cfg import register_slam_eval_tasks
 
     register_slam_eval_tasks()

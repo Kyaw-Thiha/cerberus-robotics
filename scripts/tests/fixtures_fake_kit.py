@@ -1,5 +1,8 @@
 """Fake Kit launcher for kit_retry tests: fails N times, or hangs, then reports Startup Complete."""
-import os, pathlib, sys, time
+import os
+import pathlib
+import sys
+import time
 
 state = pathlib.Path(os.environ["FAKE_STATE"])
 n = int(state.read_text()) if state.exists() else 0

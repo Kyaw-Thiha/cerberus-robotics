@@ -30,8 +30,8 @@ from common.cerberus_description.embodiment import EmbodimentCfg
 from common.cerberus_worlds.arena_assets import (
     discover_scenes,
     ensure_mdl_system_path,
-    sim_usd_path,
     find_scene,
+    sim_usd_path,
 )
 from common.cerberus_worlds.base import SceneInfo, WorldBackend
 
@@ -224,7 +224,10 @@ class ArenaBackend(WorldBackend):
 
         Anything else raises ValueError. Needs the Isaac app running (Arena imports pxr/Kit modules).
         """
-        from common.cerberus_worlds.arena_assets.go2_embodiment import GO2_ARX5_ARENA_NAME, register_embodiment_cfg
+        from common.cerberus_worlds.arena_assets.go2_embodiment import (
+            GO2_ARX5_ARENA_NAME,
+            register_embodiment_cfg,
+        )
 
         self._arena_names[cfg.name] = register_embodiment_cfg(cfg)
         if cfg.name == "go2_arx5":
@@ -241,7 +244,9 @@ class ArenaBackend(WorldBackend):
         from isaaclab_arena.assets.registries import AssetRegistry
         from isaaclab_arena.environments.arena_env_builder import ArenaEnvBuilder
         from isaaclab_arena.environments.arena_env_builder_cfg import ArenaEnvBuilderCfg
-        from isaaclab_arena.environments.isaaclab_arena_environment import IsaacLabArenaEnvironment
+        from isaaclab_arena.environments.isaaclab_arena_environment import (
+            IsaacLabArenaEnvironment,
+        )
         from isaaclab_arena.utils.pose import Pose
 
         from common.cerberus_worlds.arena_assets.go2_embodiment import get_arena_classes

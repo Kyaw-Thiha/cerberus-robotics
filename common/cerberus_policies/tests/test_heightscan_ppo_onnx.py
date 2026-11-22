@@ -164,7 +164,7 @@ def test_backend_module_imports_without_torch_or_ros():
         "bad = [m for m in ('torch', 'rclpy', 'cerberus_msgs', 'onnxruntime', 'numpy', 'isaaclab', 'isaacsim', 'omni') if m in sys.modules]\n"
         "print('BAD:' + ','.join(bad))\n"
     )
-    out = subprocess.run([sys.executable, "-c", script], cwd=REPO_ROOT, env={"PYTHONPATH": str(REPO_ROOT), "PATH": ""}, capture_output=True, text=True)
+    out = subprocess.run([sys.executable, "-c", script], cwd=REPO_ROOT, env={"PYTHONPATH": str(REPO_ROOT), "PATH": ""}, capture_output=True, text=True, check=False)
     assert out.returncode == 0, out.stderr
     assert out.stdout.strip().endswith("BAD:"), out.stdout
 

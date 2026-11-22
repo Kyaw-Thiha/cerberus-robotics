@@ -4,9 +4,14 @@ import numpy as np
 import pytest
 
 from planning.global_planner.core.astar import astar
-from planning.occupancy import BLOCKED, FREE, OccupancyGrid, OccupancyConfig
+from planning.occupancy import BLOCKED, FREE, OccupancyConfig, OccupancyGrid
 from planning.sampling import sample_pairs
-from planning.sources import GroundTruthMapSource, GroundTruthPoseSource, MapSource, PoseSource
+from planning.sources import (
+    GroundTruthMapSource,
+    GroundTruthPoseSource,
+    MapSource,
+    PoseSource,
+)
 from planning.viz import grid_rgb, save_plan_png, summarise_pairs
 
 

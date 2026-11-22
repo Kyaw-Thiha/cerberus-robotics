@@ -3,7 +3,12 @@
 import numpy as np
 import pytest
 
-from common.cerberus_eval.nav_loop import MockBackend, NavConfig, run_navigation, run_pairs_resumable
+from common.cerberus_eval.nav_loop import (
+    MockBackend,
+    NavConfig,
+    run_navigation,
+    run_pairs_resumable,
+)
 from planning.occupancy import BLOCKED, FREE, OccupancyConfig, OccupancyGrid
 from planning.sampling import StartGoalPair
 

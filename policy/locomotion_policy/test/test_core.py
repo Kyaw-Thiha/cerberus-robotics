@@ -6,10 +6,15 @@ from pathlib import Path
 
 import numpy as np
 import pytest
+from locomotion_policy.core import (
+    LocomotionCore,
+    PolicySpec,
+    build_limiter,
+    zero_loco_command,
+)
+from locomotion_policy.observation_assembly import SHAPE_BLIND, SHAPE_PERCEPTIVE
 
 from common.cerberus_policies.command_limiter import CommandRateLimiter
-from locomotion_policy.core import LocomotionCore, PolicySpec, build_limiter, zero_loco_command
-from locomotion_policy.observation_assembly import SHAPE_BLIND, SHAPE_PERCEPTIVE
 
 REPO_ROOT = next(p for p in Path(__file__).resolve().parents if (p / "pixi.toml").exists())
 NAMES = (
@@ -30,15 +35,15 @@ def constant_policy(value=0.4):
 
 
 def step_kwargs(shape=SHAPE_PERCEPTIVE, positions=None):
-    return dict(
-        base_lin_vel=np.zeros(3),
-        base_ang_vel=np.array([0.0, 0.0, 0.1]),
-        projected_gravity=np.array([0.0, 0.0, -1.0]),
-        joint_positions=dict(zip(NAMES, DEFAULTS)) if positions is None else positions,
-        joint_velocities={n: 0.0 for n in NAMES},
-        height_scan=np.zeros(187) if shape == SHAPE_PERCEPTIVE else None,
-        command=zero_loco_command(),
-    )
+    return {
+        "base_lin_vel": np.zeros(3),
+        "base_ang_vel": np.array([0.0, 0.0, 0.1]),
+        "projected_gravity": np.array([0.0, 0.0, -1.0]),
+        "joint_positions": dict(zip(NAMES, DEFAULTS)) if positions is None else positions,
+        "joint_velocities": {n: 0.0 for n in NAMES},
+        "height_scan": np.zeros(187) if shape == SHAPE_PERCEPTIVE else None,
+        "command": zero_loco_command(),
+    }
 
 
 def test_perceptive_step_assembles_235_and_maps_targets_by_name():
@@ -146,6 +151,7 @@ def test_core_imports_without_ros():
         env={"PYTHONPATH": f"{REPO_ROOT}:{REPO_ROOT}/policy/locomotion_policy", "PATH": ""},
         capture_output=True,
         text=True,
+        check=False,
     )
     assert out.returncode == 0, out.stderr
     assert out.stdout.strip().endswith("BAD:"), out.stdout

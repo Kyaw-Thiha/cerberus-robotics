@@ -22,16 +22,21 @@ if str(_REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(_REPO_ROOT))
 
 
-from common.cerberus_eval.nav_metrics import (  # noqa: E402
+from common.cerberus_eval.nav_metrics import (
     aggregate,
     write_aggregate_csv,
     write_run_json,
 )
-from planning.kinematic_sim import KinematicConfig, run_episode  # noqa: E402
-from planning.local_planner.core.pure_pursuit import PurePursuitConfig  # noqa: E402
-from planning.occupancy import OccupancyConfig, OccupancyGrid, build_grid, load_npz  # noqa: E402
-from planning.sampling import sample_pairs  # noqa: E402
-from planning.viz import save_plan_png  # noqa: E402
+from planning.kinematic_sim import KinematicConfig, run_episode
+from planning.local_planner.core.pure_pursuit import PurePursuitConfig
+from planning.occupancy import (
+    OccupancyConfig,
+    OccupancyGrid,
+    build_grid,
+    load_npz,
+)
+from planning.sampling import sample_pairs
+from planning.viz import save_plan_png
 
 
 def synthetic_grid() -> OccupancyGrid:

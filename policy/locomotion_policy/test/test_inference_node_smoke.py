@@ -42,12 +42,11 @@ def _messages_available() -> bool:
 def test_rclpy_round_trip_publishes_name_keyed_joint_targets():
     import numpy as np
     from cerberus_msgs.msg import HeightScan, LocoCommand
+    from locomotion_policy.inference_node import InferenceNode
     from rclpy.executors import MultiThreadedExecutor
     from rclpy.node import Node
     from rclpy.parameter import Parameter
     from sensor_msgs.msg import Imu, JointState
-
-    from locomotion_policy.inference_node import InferenceNode
 
     os.environ.setdefault("ROS_DOMAIN_ID", "93")
     rclpy.init()

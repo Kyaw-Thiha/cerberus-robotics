@@ -5,7 +5,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from pod_driver_gate import (
     CSV_COLUMNS,
     TIER_A,

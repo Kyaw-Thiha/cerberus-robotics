@@ -5,7 +5,11 @@ import pytest
 import yaml
 
 from common.cerberus_policies import backend_card
-from common.cerberus_policies.backend_card import CardValidationError, load_card, validate_card
+from common.cerberus_policies.backend_card import (
+    CardValidationError,
+    load_card,
+    validate_card,
+)
 
 GOOD_L0 = {
     "name": "some_backend",

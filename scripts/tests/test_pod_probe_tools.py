@@ -4,7 +4,6 @@
 import kit_logs
 from nav_eval import select_replay_indices
 
-
 # --- Kit log capture ---------------------------------------------------------------------------
 
 SAMPLE_LOG = """\
@@ -36,7 +35,7 @@ def test_copy_kit_log_finds_and_copies_the_newest(tmp_path):
     assert timeline["kit_log_source"] == str(new)
     copied = list(out.rglob("kit_new.log"))
     assert copied and copied[0].read_text() == SAMPLE_LOG
-    assert (list(out.glob("*/launch_timeline.json"))[0]).is_file()
+    assert next(iter(out.glob("*/launch_timeline.json"))).is_file()
     assert timeline["markers"]
 
 

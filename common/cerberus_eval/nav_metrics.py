@@ -23,9 +23,10 @@ from __future__ import annotations
 import csv
 import json
 import math
+from collections.abc import Iterable, Sequence
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
-from typing import Any, Iterable, Sequence
+from typing import Any
 
 OUTCOMES = ("success", "fall", "nan", "timeout", "planner_failure", "collision")
 """``collision`` is the kinematic upper-bound outcome: the simulated base centre entered a BLOCKED cell. Physics runs

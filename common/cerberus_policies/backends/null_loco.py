@@ -6,7 +6,12 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from common.cerberus_policies.base import Boundary, PolicyBackend, Role, make_loco_command
+from common.cerberus_policies.base import (
+    Boundary,
+    PolicyBackend,
+    Role,
+    make_loco_command,
+)
 
 
 class NullLocoBackend(PolicyBackend):

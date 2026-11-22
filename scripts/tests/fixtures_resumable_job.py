@@ -7,8 +7,8 @@ from pathlib import Path
 REPO = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(REPO))
 
-from common.cerberus_eval.nav_loop import run_pairs_resumable  # noqa: E402
-from planning.sampling import StartGoalPair  # noqa: E402
+from common.cerberus_eval.nav_loop import run_pairs_resumable
+from planning.sampling import StartGoalPair
 
 
 def main() -> int:

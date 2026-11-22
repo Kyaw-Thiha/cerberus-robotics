@@ -17,9 +17,10 @@ from __future__ import annotations
 
 import json
 import math
+from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Callable, Protocol, Sequence
+from typing import Any, Protocol
 
 from common.cerberus_eval.kinematics import step_pose
 from common.cerberus_eval.nav_metrics import StepState, evaluate_episode

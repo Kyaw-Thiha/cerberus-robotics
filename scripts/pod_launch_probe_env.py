@@ -49,9 +49,8 @@ def main(argv: list[str] | None = None) -> int:
         import importlib
 
         import gymnasium as gym
-        import torch
-
         import isaaclab_tasks  # noqa: F401
+        import torch
 
         importlib.import_module("policy.locomotion")
         from common.cerberus_compat.cfg_registry import load_env_cfg

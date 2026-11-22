@@ -72,9 +72,14 @@ def classify_window(*, elapsed_s: float, silent_s: float, cpu_pct: float | None,
     The liveness rule is the only early kill: the log must have been silent for ``liveness_s`` **and** the CPU below
     5% **and** the GPU idle. A probe that cannot answer counts as "not idle", so a launch is never killed on a guess.
     """
-    if silent_s >= liveness_s and cpu_pct is not None and gpu_idle is not None:
-        if cpu_pct < CPU_IDLE_PCT and gpu_idle:
-            return "liveness"
+    if (
+        silent_s >= liveness_s
+        and cpu_pct is not None
+        and gpu_idle is not None
+        and cpu_pct < CPU_IDLE_PCT
+        and gpu_idle
+    ):
+        return "liveness"
     if elapsed_s >= max_wait_s:
         return "5min-cap"
     return None
@@ -83,7 +88,7 @@ def classify_window(*, elapsed_s: float, silent_s: float, cpu_pct: float | None,
 def _group_cpu(pgid: int) -> float | None:
     try:
         out = subprocess.run(["ps", "-o", "pcpu=", "--pgid", str(pgid)], capture_output=True, text=True,
-                             timeout=5).stdout
+                             timeout=5, check=False).stdout
         values = [float(v) for v in out.split() if v.strip()]
         return sum(values) if values else None
     except (OSError, ValueError, subprocess.SubprocessError):
@@ -93,7 +98,7 @@ def _group_cpu(pgid: int) -> float | None:
 def _gpu_idle() -> bool | None:
     try:
         out = subprocess.run(["nvidia-smi", "--query-gpu=utilization.gpu", "--format=csv,noheader,nounits"],
-                             capture_output=True, text=True, timeout=5).stdout
+                             capture_output=True, text=True, timeout=5, check=False).stdout
         values = [float(v) for v in out.replace("%", "").split() if v.strip()]
         return max(values) < GPU_IDLE_PCT if values else None
     except (OSError, ValueError, subprocess.SubprocessError):

@@ -16,9 +16,10 @@ clip and its numbers cannot drift apart.
 from __future__ import annotations
 
 import re
+from collections.abc import Iterable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Iterable, Mapping, Self, Sequence
+from typing import Any, Self
 
 DEFAULT_MAX_CLIPS = 3
 DEFAULT_FPS = 30
@@ -113,7 +114,10 @@ class ClipRecorder:
         """Capture one viewport frame of ``env_index`` (Isaac required)."""
         if self._writer is None:
             return
-        from policy.locomotion.core.script_utils import capture_viewport_frame, point_viewport_at_env
+        from policy.locomotion.core.script_utils import (
+            capture_viewport_frame,
+            point_viewport_at_env,
+        )
 
         point_viewport_at_env(raw_env, env_index)
         frame = capture_viewport_frame(raw_env)

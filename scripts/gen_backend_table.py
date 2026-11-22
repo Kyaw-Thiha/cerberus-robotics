@@ -15,7 +15,11 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 if str(REPO_ROOT) not in sys.path:
     sys.path.insert(0, str(REPO_ROOT))
 
-from common.cerberus_policies.backend_card import CARDS_DIR, BackendCard, load_all_cards  # noqa: E402
+from common.cerberus_policies.backend_card import (
+    CARDS_DIR,
+    BackendCard,
+    load_all_cards,
+)
 
 OUTPUT = REPO_ROOT / "docs" / "backend_support.md"
 

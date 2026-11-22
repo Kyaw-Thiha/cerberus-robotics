@@ -53,4 +53,4 @@ def test_import_does_not_pull_in_isaac():
         "bad = [m for m in sys.modules if m.split('.')[0] in ('isaaclab', 'omni', 'isaacsim')]\n"
         "sys.exit(1 if bad else 0)\n"
     )
-    assert subprocess.run([sys.executable, "-c", code]).returncode == 0
+    assert subprocess.run([sys.executable, "-c", code], check=False).returncode == 0

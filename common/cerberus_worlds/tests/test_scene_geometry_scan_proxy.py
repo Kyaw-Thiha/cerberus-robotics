@@ -4,9 +4,9 @@ import numpy as np
 import pytest
 
 pytest.importorskip("pxr")
-from pxr import Usd, UsdGeom, Vt  # noqa: E402
+from pxr import Usd, UsdGeom, Vt
 
-from common.cerberus_worlds.scene_geometry import (  # noqa: E402
+from common.cerberus_worlds.scene_geometry import (
     SCAN_PROXY_MESH_PRIM,
     SCAN_PROXY_ROOT_PRIM,
     SCAN_PROXY_SIDECAR_NAME,

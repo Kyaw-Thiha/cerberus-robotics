@@ -106,3 +106,23 @@ def test_wrap_angle_is_in_the_half_open_pi_range():
     assert wrap_angle(math.pi) == pytest.approx(math.pi)
     assert wrap_angle(3 * math.pi) == pytest.approx(math.pi)
     assert wrap_angle(-math.pi - 0.1) == pytest.approx(math.pi - 0.1)
+
+
+def test_demo_path_covers_the_requested_sim_time_and_stays_limited():
+    from common.cerberus_eval.scripted_path import demo_path
+
+    path = demo_path(0, start_pose=(0.0, 0.0, 0.0), duration_s=90.0, dt=0.02, speed=0.3)
+    assert path.duration_s >= 90.0
+    limits = contract_command_limits()
+    for command in path.commands:
+        assert abs(command["vx"]) <= limits["vx"] + 1e-12
+        assert abs(command["wz"]) <= limits["wz"] + 1e-12
+
+
+def test_demo_path_repeats_the_same_seeded_tour():
+    from common.cerberus_eval.scripted_path import demo_path
+
+    a = demo_path(4, duration_s=30.0)
+    b = demo_path(4, duration_s=30.0)
+    assert a.waypoints == b.waypoints
+    assert len(a.commands) == len(b.commands)

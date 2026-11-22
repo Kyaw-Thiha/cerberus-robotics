@@ -20,8 +20,9 @@ config file.
 | `jobs/<job-id>/` | per-job logs, status and outputs, written by the job runner as it runs | 90 days after upload; keep anything cited in a report |
 | `spike/` | temporary bundles and staged inputs used to bootstrap a spike pod | 30 days |
 | `slam/<backend>/<run>/` | SLAM evaluation runs: mission bag, video, `latest.json` | keep; the bags are the raw evidence |
-| `scene_admission/` | per-scene launch logs from an admission run | 30 days; the verdict lives in `worlds/grscenes/admission.json` |
-| `cache/` | Kit startup-cache bundles (experiment closed; the code is gone) | 30 days, and nothing writes here any more |
+| `scene_admission/` | per-scene launch logs from an admission run. Cleaned on 2026-11-21: 61 of 68 objects removed, the seven the Arena log cites kept | 30 days; the verdict lives in `worlds/grscenes/admission.json` |
+| `cache/` | Kit startup-cache bundles. **Empty since 2026-11-21**, and nothing writes here any more (the code is gone) | retired |
+| `worlds/rehearsal/` | the tiny rehearsal scene fixture. **Removed on 2026-11-21** with the rehearsal driver that fetched it | retired |
 | `backups/` | git bundles, one per cleanup | keep; the newest is the backup of record |
 
 ## Rules
@@ -43,6 +44,6 @@ config file.
 |---|---|
 | `jobs/` | expire 90 days after upload, except the Newton phase-5 job directories a report cites |
 | `spike/` | expire 30 days |
-| `cache/` | expire 30 days |
+| `cache/` | not needed: empty and unwritten |
 | `scene_admission/` | expire 90 days |
 | `worlds/`, `locomotion/`, `migration/`, `slam/`, `backups/` | no expiry |

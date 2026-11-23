@@ -32,6 +32,7 @@ from pathlib import Path
 
 SCENES_DIR_ENV = "CERBERUS_SCENES_DIR"
 MDL_SYSTEM_PATH_ENV = "MDL_SYSTEM_PATH"
+SCENE_USD_OVERRIDE_ENV = "CERBERUS_SCENE_USD_OVERRIDE"
 NAV_USD = "start_result_navigation.usd"
 RAW_USD = "start_result_raw.usd"
 SCENE_USD_NAMES: tuple[str, ...] = (NAV_USD, RAW_USD)  # preference order
@@ -109,6 +110,15 @@ def sim_usd_path(files: SceneFiles) -> Path:
     be opened raises ``RuntimeError`` instead of silently falling back to the wrong scale.
     """
     from common.cerberus_worlds import scene_geometry
+
+    # An explicit override wins: scripts/scene_materials_to_preview.py writes a metre-scale wrapper whose visual
+    # layer replaces the scene's MDL materials with UsdPreviewSurface ones (the render-unblock route).
+    override = os.environ.get(SCENE_USD_OVERRIDE_ENV)
+    if override:
+        path = Path(override)
+        if not path.is_file():
+            raise RuntimeError(f"{SCENE_USD_OVERRIDE_ENV}={override} does not exist")
+        return path
 
     cached = scene_geometry.cached_metric_scene_usd(files.usd_path)
     if cached is not None:

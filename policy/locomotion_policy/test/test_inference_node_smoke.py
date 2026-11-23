@@ -29,11 +29,14 @@ def test_wrapper_imports_under_ros():
 
 
 def _messages_available() -> bool:
+    # `common/` puts the unbuilt ROS package source on sys.path in some invocations, which imports
+    # `cerberus_msgs.msg` as an EMPTY namespace package (no generated message classes). Only a colcon
+    # build produces the modules, so check the attribute, not just the import.
     try:
-        importlib.import_module("cerberus_msgs.msg")
+        msg_module = importlib.import_module("cerberus_msgs.msg")
     except ImportError:
         return False
-    return True
+    return hasattr(msg_module, "HeightScan") and hasattr(msg_module, "LocoCommand")
 
 
 @pytest.mark.skipif(not _messages_available(), reason="cerberus_msgs not built/on PYTHONPATH (source install/setup.bash)")

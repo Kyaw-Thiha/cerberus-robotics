@@ -1,6 +1,13 @@
 import pytest
 
-pytest.importorskip("cerberus_msgs", reason="cerberus_msgs (colcon-built ROS package) not available")
+# The source tree ships `common/cerberus_msgs/` (a ROS package with no python modules until a colcon build).
+# Importing it can therefore succeed as an empty namespace package, so check for a generated class by name;
+# skip cleanly when the package has not been built.
+_cerberus_msgs = pytest.importorskip(
+    "cerberus_msgs.msg", reason="cerberus_msgs (colcon-built ROS package) not available")
+if not hasattr(_cerberus_msgs, "TaggedMap"):
+    pytest.skip("cerberus_msgs has no built message modules (colcon build + source install/setup.bash)",
+                allow_module_level=True)
 
 import rclpy
 from geometry_msgs.msg import Point, Pose, Quaternion

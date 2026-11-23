@@ -66,6 +66,7 @@ export CERBERUS_ALLOW_BAD_DRIVER_RENDER="${CERBERUS_ALLOW_BAD_DRIVER_RENDER:-1}"
 export CERBERUS_SKIP_MDL_PATH="${CERBERUS_SKIP_MDL_PATH:-1}"
 # This Lab build does not print "Simulation App Startup Complete"; the env build is the real start marker.
 export CERBERUS_STARTED_MARKER="${CERBERUS_STARTED_MARKER:-[scene_env] build timings}"
+export CERBERUS_MAX_LAUNCHES="${CERBERUS_MAX_LAUNCHES:-30}"
 cerberus_say "scene $SCENE, stages $STAGES, out $OUT_DIR"
 
 if [[ $SKIP_GATE -eq 0 ]]; then
@@ -129,6 +130,7 @@ if [[ -n "$INTERNAL_STAGE" ]]; then
 export CERBERUS_SKIP_MDL_PATH="${CERBERUS_SKIP_MDL_PATH:-1}"
 # This Lab build does not print "Simulation App Startup Complete"; the env build is the real start marker.
 export CERBERUS_STARTED_MARKER="${CERBERUS_STARTED_MARKER:-[scene_env] build timings}"
+export CERBERUS_MAX_LAUNCHES="${CERBERUS_MAX_LAUNCHES:-30}"
     "stage_$INTERNAL_STAGE"
     exit $?
 fi

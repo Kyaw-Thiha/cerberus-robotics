@@ -40,8 +40,7 @@ GPU_IDLE_PCT = float(os.environ.get("CERBERUS_GPU_IDLE_PCT", "5"))
 MAX_LAUNCHES = int(os.environ.get("CERBERUS_MAX_LAUNCHES", "10"))
 POLL_S = float(os.environ.get("CERBERUS_LAUNCH_POLL_S", "0.5"))
 NO_START_EXIT = 75
-CRASH_PATTERNS = ("libcarb.tasking", "make_fcontext", "A crash has occurred",
-                  "Crash report files for upload", "terminating this process with exit code 139")
+CRASH_PATTERNS = ("libcarb.tasking", "make_fcontext", "A crash has occurred")
 
 
 @dataclass

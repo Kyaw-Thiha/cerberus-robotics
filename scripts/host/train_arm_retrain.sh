@@ -13,7 +13,7 @@ cd "$REPO_ROOT" || exit 1
 
 ITERATIONS=1500; ENVS=4096; SEED=42; MAX_LAUNCHES="${CERBERUS_MAX_LAUNCHES:-20}"
 RUN_NAME="${CERBERUS_RUN_NAME:-go2_arx5_ga_v1}"
-LOG_ROOT="${CERBERUS_LOG_ROOT:-$REPO_ROOT/policy/locomotion/runs}"
+LOG_ROOT="${CERBERUS_LOG_ROOT:-$REPO_ROOT/policy/locomotion/checkpoints}"
 while [ $# -gt 0 ]; do
   case "$1" in
     --iterations) ITERATIONS="$2"; shift 2 ;;
@@ -29,8 +29,10 @@ LAB="${ISAACLAB_PATH:-/workspace/isaaclab}/isaaclab.sh"
 python_bin() { if [ -x "$LAB" ]; then echo "$LAB -p"; else echo python3; fi; }
 
 final_marker() {
-  # newest run dir that holds the final checkpoint
-  find "$LOG_ROOT" -maxdepth 2 -name "model_${ITERATIONS}.pt" -print -quit 2>/dev/null
+  # the runner writes <log_root>/<task>/<timestamp>_<run_name>/model_<iter>.pt, and iterations are 0-based
+  # (1500 iterations end at model_1499.pt), so accept either name.
+  find "$LOG_ROOT" -maxdepth 3 \( -name "model_${ITERATIONS}.pt" -o -name "model_$((ITERATIONS - 1)).pt" \) \
+    -print -quit 2>/dev/null
 }
 
 for launch in $(seq 1 "$MAX_LAUNCHES"); do
@@ -40,7 +42,7 @@ for launch in $(seq 1 "$MAX_LAUNCHES"); do
     exit 0
   fi
   resume_args=""
-  latest_run="$(ls -1dt "$LOG_ROOT"/*/ 2>/dev/null | head -1)"
+  latest_run="$(ls -1dt "$LOG_ROOT"/*/*/ 2>/dev/null | head -1)"
   if [ "$launch" -gt 1 ] && [ -n "$latest_run" ]; then
     ckpt="$(ls -1t "$latest_run"model_*.pt 2>/dev/null | head -1)"
     if [ -n "$ckpt" ]; then

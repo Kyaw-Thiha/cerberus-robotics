@@ -333,6 +333,11 @@ def load_policy(env: Any, task: str = LOCO_TASK, checkpoint: str | None = None, 
     return policy
 
 
+def fresh_observations(env: Any):
+    """Recompute the observation after a command write; ``get_observations()`` can return the cached reset value."""
+    return env.unwrapped.observation_manager.compute()
+
+
 def read_poses(env: Any):
     """``(num_envs, 3)`` tensor of ``(x, y, yaw)`` in the world frame."""
     import torch

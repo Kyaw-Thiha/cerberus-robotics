@@ -48,8 +48,8 @@ def test_platforms_yaml_exists_and_parses():
 
 def test_discover_python_platform_names_finds_go2():
     # Regression guard on the directory-walk logic itself: today, exactly
-    # {"go2"} should be found under policy/locomotion/core/platforms/.
-    assert _discover_python_platform_names() == {"go2"}
+    # {"go2", "go2_arx5"} should be found under policy/locomotion/core/platforms/.
+    assert _discover_python_platform_names() == {"go2", "go2_arx5"}
 
 
 def test_every_yaml_key_matches_a_known_python_platform_name():

@@ -8,8 +8,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 import pytest  # noqa: F401  (kept for the runner's fixture discovery)
-
-from scene_clip import arm_demo_targets  # noqa: E402
+from scene_clip import arm_demo_targets
 
 STOWED = {"joint1": 0.0, "joint2": 0.0, "joint3": 0.0, "joint4": 0.0, "joint5": 0.0, "joint6": 0.0,
           "joint7": 0.044, "joint8": 0.044}

@@ -47,7 +47,7 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--enable_cameras", action="store_true", default=True)
     parser.add_argument("--headless", action="store_true", default=True)
-    parser.add_argument("--device", default=None)
+    parser.add_argument("--device", default="cuda:0")
     return parser.parse_args(argv)
 
 

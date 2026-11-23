@@ -12,6 +12,8 @@ Arm robustness during the retrain (docs/cerberus_project_context.md): per-episod
 (the arm's position target is stowed + offset, and the joints are reset to it) and a randomised torso payload mass.
 """
 
+import os
+
 from isaaclab.managers import EventTermCfg as EventTerm
 from isaaclab.managers import SceneEntityCfg
 from isaaclab.utils import configclass
@@ -78,6 +80,30 @@ def _apply_arm_embodiment(env_cfg) -> None:
                 term.params = {"asset_cfg": _leg_asset_cfg()}
 
 
+def _add_arm_events(env_cfg) -> None:
+    """Per-episode arm offsets and a one-off payload draw; ``CERBERUS_ARM_EVENTS=0`` is the bisect switch."""
+    if os.environ.get("CERBERUS_ARM_EVENTS") == "0":
+        env_cfg.events.arm_hold_offset = None
+        env_cfg.events.payload_mass = None
+        return
+    robot = SceneEntityCfg("robot", joint_names=list(ARM_JOINT_NAMES))
+    env_cfg.events.arm_hold_offset = EventTerm(
+        func=randomize_arm_hold,
+        mode="reset",
+        params={"asset_cfg": robot, "max_offset_rad": ARM_OFFSET_RAD,
+                "stowed": [STOWED_ARM_TARGET_RAD[j] for j in ARM_JOINT_NAMES]},
+    )
+    if os.environ.get("CERBERUS_PAYLOAD_EVENTS", "1") == "1":
+        env_cfg.events.payload_mass = EventTerm(
+            func=randomize_payload_mass,
+            mode="startup",
+            params={"asset_cfg": SceneEntityCfg("robot", body_names=["base"]),
+                    "mass_range_kg": PAYLOAD_KG},
+        )
+    else:
+        env_cfg.events.payload_mass = None
+
+
 @configclass
 class UnitreeGo2Arx5RoughCerberusEnvCfg(UnitreeGo2RoughCerberusEnvCfg):
     """Training cfg: rough terrain, push curriculum, arm stowed with per-episode offsets and payload."""
@@ -85,19 +111,7 @@ class UnitreeGo2Arx5RoughCerberusEnvCfg(UnitreeGo2RoughCerberusEnvCfg):
     def __post_init__(self):
         super().__post_init__()
         _apply_arm_embodiment(self)
-        robot = SceneEntityCfg("robot", joint_names=list(ARM_JOINT_NAMES))
-        self.events.arm_hold_offset = EventTerm(
-            func=randomize_arm_hold,
-            mode="reset",
-            params={"asset_cfg": robot, "max_offset_rad": ARM_OFFSET_RAD,
-                    "stowed": [STOWED_ARM_TARGET_RAD[j] for j in ARM_JOINT_NAMES]},
-        )
-        self.events.payload_mass = EventTerm(
-            func=randomize_payload_mass,
-            mode="startup",
-            params={"asset_cfg": SceneEntityCfg("robot", body_names=["base"]),
-                    "mass_range_kg": PAYLOAD_KG},
-        )
+        _add_arm_events(self)
 
 
 @configclass
@@ -116,19 +130,7 @@ class UnitreeGo2Arx5FlatCerberusEnvCfg(UnitreeGo2FlatCerberusEnvCfg):
     def __post_init__(self):
         super().__post_init__()
         _apply_arm_embodiment(self)
-        robot = SceneEntityCfg("robot", joint_names=list(ARM_JOINT_NAMES))
-        self.events.arm_hold_offset = EventTerm(
-            func=randomize_arm_hold,
-            mode="reset",
-            params={"asset_cfg": robot, "max_offset_rad": ARM_OFFSET_RAD,
-                    "stowed": [STOWED_ARM_TARGET_RAD[j] for j in ARM_JOINT_NAMES]},
-        )
-        self.events.payload_mass = EventTerm(
-            func=randomize_payload_mass,
-            mode="startup",
-            params={"asset_cfg": SceneEntityCfg("robot", body_names=["base"]),
-                    "mass_range_kg": PAYLOAD_KG},
-        )
+        _add_arm_events(self)
 
 
 @configclass

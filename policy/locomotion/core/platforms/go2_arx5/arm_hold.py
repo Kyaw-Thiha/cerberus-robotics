@@ -87,8 +87,22 @@ def randomize_payload_mass(env: Any, env_ids: Any, asset_cfg: Any,
     env_ids = _env_id_tensor(env_ids, asset)
     low, high = float(mass_range_kg[0]), float(mass_range_kg[1])
     count = len(env_ids)
-    masses = torch.rand((count, len(asset_cfg.body_ids)), device=asset.device) * (high - low) + low
-    asset.set_masses(masses, body_ids=asset_cfg.body_ids, env_ids=env_ids)
+    extra = torch.rand((count, len(asset_cfg.body_ids)), device=asset.device) * (high - low) + low
+    # add the payload to the body's own mass: setting an absolute mass near zero makes PhysX assert
+    body_ids = torch.tensor(list(asset_cfg.body_ids), device=asset.device, dtype=torch.long)
+    try:
+        # same source Isaac Lab's own mass event uses; the PhysX view returns a warp array that refuses tensor keys
+        masses = asset.data.body_mass.torch.to(asset.device)
+        inertias = asset.data.body_inertia.torch.to(asset.device)
+        current = masses[env_ids][:, body_ids]
+        new_mass = current + extra
+        # mass and inertia must stay consistent, or PhysX asserts on the next step (found the hard way)
+        ratio = (new_mass / current.clamp(min=1e-6)).unsqueeze(-1)
+        new_inertia = inertias[env_ids][:, body_ids] * ratio
+        asset.set_masses_index(masses=new_mass, body_ids=body_ids, env_ids=env_ids)
+        asset.set_inertias_index(inertias=new_inertia, body_ids=body_ids, env_ids=env_ids)
+    except Exception as exc:  # noqa: BLE001 - a missing payload draw must not stop a 70-minute retrain
+        print(f"[arm_hold] payload mass randomisation skipped: {type(exc).__name__}: {exc}", flush=True)
 
 
 def finite_or_none(value: float) -> float | None:

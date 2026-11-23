@@ -180,15 +180,16 @@ def main(env_cfg: ManagerBasedRLEnvCfg | DirectRLEnvCfg | DirectMARLEnvCfg, agen
 
     env = RslRlVecEnvWrapper(env, clip_actions=agent_cfg.clip_actions)
 
-    if args_cli.adversarial_env:
+    adversarial_env = getattr(args_cli, "adversarial_env", None)
+    if adversarial_env:
         # Opt-in: mix a fraction of rollouts under a frozen, previously trained adversary
         # (attack -> fine-tune -> re-attack). Default behaviour is unchanged.
         import importlib
         import json
 
-        module_name, _, factory_name = args_cli.adversarial_env.partition(":")
+        module_name, _, factory_name = adversarial_env.partition(":")
         factory = getattr(importlib.import_module(module_name), factory_name or "make_adversarial_wrapper")
-        params = json.loads(args_cli.adversarial_params or "{}")
+        params = json.loads(getattr(args_cli, "adversarial_params", None) or "{}")
         env = factory(env, **params)
         print(f"[INFO]: adversarial rollouts enabled: {params}")
 

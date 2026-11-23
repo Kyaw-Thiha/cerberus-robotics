@@ -13,7 +13,13 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from planning.kinematic_mission import KinematicSkillWorld, mission_summary
 from planning.props import build_props
-from planning.skills import ArmModel, PickSkill, PlaceSkill, differential_ik, pick_waypoints, place_waypoints
+from planning.skills import (
+    ArmModel,
+    PickSkill,
+    PlaceSkill,
+    differential_ik,
+    pick_waypoints,
+)
 from planning.task_orchestrator import Mission, MissionConfig
 
 
@@ -73,7 +79,7 @@ def test_place_rejects_a_cube_far_from_the_target():
 
 
 def test_mission_succeeds_end_to_end_on_a_free_grid():
-    from planning.occupancy import FREE, OccupancyGrid, OccupancyConfig
+    from planning.occupancy import FREE, OccupancyConfig, OccupancyGrid
 
     grid = OccupancyGrid(grid=np.full((80, 80), FREE, dtype=np.int8), origin_xy=(-2.0, -2.0),
                          resolution_m=0.1, floor_z=0.0, config=OccupancyConfig(), scene_id="synthetic")

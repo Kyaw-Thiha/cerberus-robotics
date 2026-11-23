@@ -62,3 +62,39 @@ go2:
       sensor_requirements: {imu: required}
       requires_implemented: [terrain_perception]
   default_locomotion_mode: blind
+
+go2_arx5:
+  # The fused Go2 + ARX5 body. The locomotion policy still observes and acts on the 12 leg joints only; the arm is
+  # held stowed by its own actuators and never enters the action vector. Joint order is the policy contract's
+  # (per part), pinned by name with preserve_order=True -- the fused USD's own order is per leg.
+  urdf_relative_path: urdf_go2_arx5
+  joint_names:
+    - FL_hip_joint
+    - FR_hip_joint
+    - RL_hip_joint
+    - RR_hip_joint
+    - FL_thigh_joint
+    - FR_thigh_joint
+    - RL_thigh_joint
+    - RR_thigh_joint
+    - FL_calf_joint
+    - FR_calf_joint
+    - RL_calf_joint
+    - RR_calf_joint
+  default_joint_pos:
+    - 0.1
+    - -0.1
+    - 0.1
+    - -0.1
+    - 0.8
+    - 0.8
+    - 1.0
+    - 1.0
+    - -1.5
+    - -1.5
+    - -1.5
+    - -1.5
+  embodied_arm: arx5
+  note: >-
+    Arm joints joint1..joint6 + joint7/joint8 (gripper) exist on the articulation but are excluded from the 235-D
+    observation and the 12-D action. See docs/reports/arm_bringup.md.

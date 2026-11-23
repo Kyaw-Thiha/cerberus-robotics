@@ -11,7 +11,7 @@ from pathlib import Path
 import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
-from common.cerberus_eval import camera_rig as cr  # noqa: E402
+from common.cerberus_eval import camera_rig as cr
 
 
 def test_camera_axes_are_right_handed_and_look_forward():

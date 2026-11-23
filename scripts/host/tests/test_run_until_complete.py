@@ -18,6 +18,7 @@ FAKE = HOST / "tests" / "fake_crashing_job.py"
 sys.path.insert(0, str(HOST))
 sys.path.insert(0, str(HOST.parents[1]))
 import run_until_complete as ruc
+
 from common.cerberus_eval import atomic_io
 
 
@@ -109,7 +110,8 @@ def test_resume_uses_the_newest_checkpoint(tmp_path):
 def test_newest_checkpoint_by_mtime(tmp_path):
     units = tmp_path / "ckpt"
     units.mkdir()
-    import os, time
+    import os
+    import time
     (units / "model_10.pt").write_bytes(b"x")
     (units / "model_20.pt").write_bytes(b"y")
     os.utime(units / "model_10.pt", (1000, 1000))

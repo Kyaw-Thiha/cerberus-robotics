@@ -389,6 +389,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--min-duration", type=float, default=1.0)
     parser.add_argument("--max-duration", type=float, default=None)
     parser.add_argument("--no-robot-visibility", dest="robot_visibility", action="store_false", default=True)
+    parser.add_argument("--media-only", action="store_true",
+                        help="only the ffprobe checks (schematic animations: a 2D map is not a rendered photo)")
     args = parser.parse_args(argv)
 
     if args.stills:
@@ -415,6 +417,26 @@ def main(argv: list[str] | None = None) -> int:
         print(f"clip_qa: {clip} is not a file", file=sys.stderr)
         return 2
     try:
+        if args.media_only:
+            info = ffprobe_info(clip)
+            problems = []
+            if info["width"] <= 0 or info["height"] <= 0:
+                problems.append("no video stream")
+            if info["duration_s"] < args.min_duration:
+                problems.append(f"duration {info['duration_s']}s < {args.min_duration}s")
+            if info["height"] < 720:
+                problems.append(f"resolution {info['width']}x{info['height']} below 720p")
+            if not 20.0 <= info["fps"] <= 65.0:
+                problems.append(f"fps {info['fps']} outside 20-65")
+            report = {"clip": str(clip), "media": info, "problems": problems, "passed": not problems,
+                      "mode": "media-only (schematic animation)"}
+            print(f"{clip.name}: {info['width']}x{info['height']} {info['fps']} fps {info['duration_s']}s")
+            print(("PASS " if report["passed"] else "FAIL ") + str(clip))
+            for problem in problems:
+                print(f"  problem: {problem}")
+            if args.json_out:
+                Path(args.json_out).write_text(json.dumps(report, indent=2) + "\n")
+            return 0 if report["passed"] else 1
         report = run_gate(clip, camera=args.camera, poses_path=Path(args.poses) if args.poses else None,
                           frames_dir=Path(args.frames_dir) if args.frames_dir else None,
                           min_duration_s=args.min_duration, max_duration_s=args.max_duration,

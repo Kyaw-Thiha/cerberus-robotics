@@ -317,6 +317,8 @@ def run(args, app=None) -> int:
         se.reset_envs_to(env, spawns)
         t0 = time.perf_counter()
         steps = min(args.video_steps, len(path.commands))
+        if args.demo_seconds > 0:
+            steps = min(steps, int(args.demo_seconds / path.dt))  # never overshoot the requested 90 s
         with torch.inference_mode():
             for i in range(steps):
                 cmd = path.commands[i]
@@ -326,6 +328,7 @@ def run(args, app=None) -> int:
                 if args.video and args.record_clip:
                     clip.frame(env.unwrapped, 0)
         clip.end()
+        print("[scene_eval] CLIP_CLOSED", flush=True)
         elapsed = time.perf_counter() - t0
         poses = se.read_poses(env)
         record = {
@@ -344,6 +347,7 @@ def run(args, app=None) -> int:
             "min_base_minus_foot_z": min_base_minus_foot,
         }
         write_run_json(out_dir / "clips" / metrics_filename(name), record)
+        print("[scene_eval] METRICS_WRITTEN", flush=True)
         summary["scripted"] = record
         summary["clip"] = name
         print(f"[scene_eval] scripted path: {json.dumps(record, default=str)}")

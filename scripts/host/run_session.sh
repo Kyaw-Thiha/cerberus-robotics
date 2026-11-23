@@ -90,7 +90,7 @@ stage_stand() {
 stage_demo() {
     local out="$REPORT_DIR/demo"
     isaac "$REPO_ROOT/scripts/scene_eval.py" --scene "grscenes:$SCENE" --num_envs 1 --steps 200 \
-        --scripted --record-clip --video --video-steps 10000 --video-fps 50 \
+        --scripted --record-clip --video --video-steps 10000 --video-fps 50 --video-downscale 1 \
         --demo-seconds 90 --demo-speed 0.3 --video-resolution 1920x1080 \
         --clip-name demo_scene1.mp4 --out-dir "$out"
 }

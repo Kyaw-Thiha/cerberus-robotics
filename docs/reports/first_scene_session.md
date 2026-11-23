@@ -233,3 +233,18 @@ N=10, seed 0:
 This is the **ceiling**, not a policy result: the unicycle has no dynamics, no slip and no fall. It confirms the
 planner and controller still work on the real grid with the current code; the physics number is still absent.
 Artifacts: `~/cerberus-results/2026-11-23/kinematic_n10/` (per-pair JSON, PNG, CSV, `summary.json`).
+
+### Second host (third and last creation): same boundary
+
+A fresh L40 (`cerberus-scene1b`, id 1176656, 595.58.03, image + scene + checkpoints) reproduced the failure exactly:
+
+- `run_session --stages smoke`: stand completed, `assert_inputs.json` written, exit 0 at 214 s before the scripted block.
+- `--scripted-only` (build → scripted loop → metrics, no stand): exit 0 after the policy load, before the first
+  `reset_envs_to`; no `clips/*.json`.
+
+So the native exit is not one bad node. Every remaining stage needs a Python call after a long sim block, and Kit
+terminates there. Smoke metrics and replay are therefore **BLOCKED on this image/host class**, not on our code.
+The in-loop metrics writer is implemented and unit-tested; it will produce the JSON on a host that survives the
+scripted block.
+
+Final spend: about **5.95 USD of 18**. No VMs, no timers, no secret files, no sleep inhibitor.

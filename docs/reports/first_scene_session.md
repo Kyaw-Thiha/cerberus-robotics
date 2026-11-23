@@ -147,3 +147,49 @@ Spend for this attempt: about 0.23 USD (70 min + 13 min CPU at 0.0385/h, 15 min 
 
 The final billing could differ slightly if the provider bills boot time differently; the ledger estimate is the upper
 bound of what the four instances could have cost at their listed prices.
+
+## 2026-11-23: Hyperstack plain-SSH session (T1 reached)
+
+The Brev relay is gone; this pass used a plain `ubuntu@<floating-ip>` VM on Hyperstack.
+
+| item | value |
+|---|---|
+| host | Hyperstack CANADA-1, `cerberus-scene1`, id 1176254, L40 48 GB, 825 GB root |
+| price | 1.0866 USD/h all-in (GPU + disk + public IP), read from `GET /pricebook` |
+| driver | 580.196.07, then 580.95.05, then 595.58.03; only 595.58.03 survives camera runs |
+| canary | A6000 unavailable (stock race), L40 24 GB: SSH yes, driver 570.195.03, Docker + nvidia runtime OK, cost 0.06 USD |
+| image | `Ubuntu Server 24.04 LTS R570 CUDA 12.8 with Docker` (the R595 image is B300-only) |
+| bootstrap | 35 GB image, 25 GB GRScenes home, GA checkpoints, admission manifest; 22 min wall |
+| host_doctor | PASS on the host (OS, GPU, driver, RAM, Docker, container GPU, disk) |
+
+### Stand test (T1): PASS
+
+`run_session.sh --stages stand` on scene `MV7J6NIKTKJZ2AABAAAAADQ8_usd`, 1 env, 200 zero-command steps.
+`assertions.json`: **8/8 PASS** — joint order, 235-D term layout, command slice, finite stand, stand length,
+no fall, robot stands (min base-minus-foot 0.30 m).
+
+### Bugs found and fixed (all in our code, none tuned)
+
+1. `scan_proxy.usd` was built on Kit's thread after `AppLauncher`; the 13 s `pxr` pass blocked the app loop and
+   Kit exited 0 at ~50 s. It is now built in a child interpreter **before** Kit.
+2. `CERBERUS_SCENES_DIR` pointed at the fetch destination, not the discovery root; admission was never found.
+   `session_lib` now exports `<data>/scenes` and the manifest is fetched to `<root>/grscenes/admission.json`.
+3. `env.get_observations()` is a TensorDict; the code recorded `{policy: [...]}` and `obs_dim=1`. The policy
+   tensor is now taken from `obs["policy"]`.
+4. The contract's joint order was per-leg; Isaac Lab preserves the asset order (hips, thighs, calves). Confirmed
+   live on this run and corrected in the contract and `platforms.yaml`.
+5. The observation was the cached reset value after a command write; it is recomputed via
+   `observation_manager.compute()`. `command_slice` now passes.
+6. Kit's native layer exits the process when the pure-Python assertion report runs on the app thread. The report is
+   built in a child process from `assert_inputs.json`.
+7. `kit_retry` treated the missing `Simulation App Startup Complete` marker as a failed launch and waited 300 s on
+   each loader crash. It now accepts a configurable start marker (`[scene_env] build timings`) and fails fast on
+   `libcarb.tasking`/`make_fcontext`.
+
+### Host stability
+
+Kit starts about 1 launch in 10 on this L40 (probe: 6/63). With the build marker and 30 retries a scene run gets
+through; camera runs are the fragile part (`carb.windowing-glfw` fails headless). The demo clip was produced with the
+RTX viewport at 960x540 (downscale 2); a 1080p re-run is in progress.
+
+Cost so far: about 5 USD of 18. The VM kill timer is armed at creation + 10 h 15 m.

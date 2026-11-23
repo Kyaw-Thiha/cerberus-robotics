@@ -172,7 +172,7 @@ def render(args, out_dir: Path, width: int, height: int) -> int:
         sim.render()
         frame = rig.capture(spec.name)
         png = out_dir / f"still_{spec.name}.png"
-        Image.fromarray(frame).save(png)
+        Image.fromarray(np.ascontiguousarray(frame)).save(str(png))
         cam_pos, cam_quat = rig.world_pose(spec.name)
         results.append({"camera": spec.name, "kind": spec.kind, "png": str(png),
                         "cam_pos": cam_pos.tolist(), "cam_quat_wxyz": list(cam_quat),

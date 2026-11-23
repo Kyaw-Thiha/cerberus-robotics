@@ -319,6 +319,7 @@ def rgb_from_annotator_data(data) -> np.ndarray:
     rgb = np.asarray(data)
     if rgb.ndim == 3 and rgb.shape[2] == 4:
         rgb = rgb[..., :3]
+    rgb = np.ascontiguousarray(rgb)
     if rgb.dtype != np.uint8:
         rgb = rgb.astype(np.uint8)
     return rgb

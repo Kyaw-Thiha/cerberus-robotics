@@ -64,6 +64,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--dry-run", action="store_true", help="resolve paths and print the plan; no Isaac")
     parser.add_argument("--build-proxy-only", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--assert-only", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--scripted-only", action="store_true", help="build, run the scripted path, write metrics, exit")
     return parser
 
 
@@ -225,83 +226,80 @@ def run(args, app=None) -> int:
     )
     hook = se.VelocityCommandHook(env)
     policy = se.load_policy(env, task=task, checkpoint=args.checkpoint)
-    print("[scene_eval] POLICY_OK", flush=True)
     device = env.unwrapped.device
     n = env.unwrapped.num_envs
 
-    joint_names = list(env.unwrapped.scene["robot"].joint_names)
-    print(f"[scene_eval] JOINTS {len(joint_names)}", flush=True)
-    hook.zero()
-    print("[scene_eval] HOOK_ZERO", flush=True)
-    obs = fresh_observations(env)
-    print("[scene_eval] OBS_OK", flush=True)
-    flat = policy_observation(obs)
-    obs_row = flat[0].detach().cpu().tolist()
-    obs_dim = int(flat.shape[-1])
-    command = {"vx": 0.0, "vy": 0.0, "wz": 0.0}
-
-    print("[scene_eval] STAND_METRICS", flush=True)
-    stand = se.stand_metrics(env)
-    print("[scene_eval] STAND_METRICS_OK", flush=True)
-    base_height = None
-    if stand is not None:
-        base_height = float(stand["base_minus_foot_z"].mean().item())
-    scan_start, scan_stop = term_offsets(contract_terms())["height_scan"]
-    scan = obs_row[scan_start:scan_stop] if obs_dim == 235 else None
-    scan_report = height_scan_report(scan, base_height_m=base_height) if scan else None
-
-    zero = torch.zeros((n, 3), device=device)
-    rows: list[list[float]] = []
-    fell = torch.zeros(n, dtype=torch.bool, device=device)
-    first_step_s = None
-    for step_index in range(args.steps):
-        hook.apply(zero)
+    if getattr(args, "scripted_only", False):
+        rows = []
+        fell = torch.zeros(n, dtype=torch.bool, device=device)
+        min_base_minus_foot = None
+        obs_row = None
+        obs_dim = 235
+        command = {"vx": 0.0, "vy": 0.0, "wz": 0.0}
+        scan = None
+        scan_report = None
+        base_height = None
+    else:
+        joint_names = list(env.unwrapped.scene["robot"].joint_names)
+        hook.zero()
         obs = fresh_observations(env)
-        rows.append(policy_observation(obs)[0].detach().cpu().tolist())
-        t_step = time.perf_counter()
-        print(f"[scene_eval] STEP {step_index}", flush=True)
-        obs, _, _, _ = env.step(policy(obs))
-        if step_index == 0:
-            first_step_s = time.perf_counter() - t_step
-        fell |= se.read_fall_flags(env)
-        if bool(fell.any()):
-            break
-    print("[scene_eval] LOOP_DONE", flush=True)
-    print("[scene_eval] WRITE_TIMINGS", flush=True)
-    if first_step_s is not None:
-        se.write_timings(out_dir / "build_timings.json", {"first_step_s": first_step_s})
-    print("[scene_eval] FINAL_STAND", flush=True)
-    final_stand = se.stand_metrics(env)
-    print("[scene_eval] FINAL_STAND_OK", flush=True)
-    min_base_minus_foot = None
-    if final_stand is not None:
-        min_base_minus_foot = float(final_stand["base_minus_foot_z"].min().item())
+        flat = policy_observation(obs)
+        obs_row = flat[0].detach().cpu().tolist()
+        obs_dim = int(flat.shape[-1])
+        command = {"vx": 0.0, "vy": 0.0, "wz": 0.0}
 
-    # Kit's native layer exits the process when the pure-Python report runs on the app thread. Dump the inputs and
-    # build the report in a child interpreter instead; no assertion code ever runs inside the sim process.
-    inputs = {
-        "joint_names": joint_names,
-        "obs_dim": obs_dim,
-        "obs_row": obs_row,
-        "command": command,
-        "scan": scan,
-        "base_height_m": base_height,
-        "stand_rows": rows,
-        "stand_steps_expected": args.steps,
-        "scan_report": scan_report,
-        "fell_envs": torch.nonzero(fell).flatten().tolist(),
-        "min_base_minus_foot": min_base_minus_foot,
-        "scene": {"scene_id": args.scene, "usd_path": scene.get("usd_path"), "num_envs": n,
-                  "spawn_poses": spawns, "task": task, "checkpoint": args.checkpoint},
-    }
-    (out_dir / "assert_inputs.json").write_text(json.dumps(inputs, default=str), encoding="utf-8")
-    assert_rc = subprocess.run([sys.executable, str(Path(__file__)), "--assert-only", "--out-dir", str(out_dir)],
-                               check=False).returncode
-    assertions_passed = assert_rc == 0
+        stand = se.stand_metrics(env)
+        base_height = None
+        if stand is not None:
+            base_height = float(stand["base_minus_foot_z"].mean().item())
+        scan_start, scan_stop = term_offsets(contract_terms())["height_scan"]
+        scan = obs_row[scan_start:scan_stop] if obs_dim == 235 else None
+        scan_report = height_scan_report(scan, base_height_m=base_height) if scan else None
+
+        zero = torch.zeros((n, 3), device=device)
+        rows: list[list[float]] = []
+        fell = torch.zeros(n, dtype=torch.bool, device=device)
+        first_step_s = None
+        for step_index in range(args.steps):
+            hook.apply(zero)
+            obs = fresh_observations(env)
+            rows.append(policy_observation(obs)[0].detach().cpu().tolist())
+            t_step = time.perf_counter()
+            obs, _, _, _ = env.step(policy(obs))
+            if step_index == 0:
+                first_step_s = time.perf_counter() - t_step
+            fell |= se.read_fall_flags(env)
+            if bool(fell.any()):
+                break
+        if first_step_s is not None:
+            se.write_timings(out_dir / "build_timings.json", {"first_step_s": first_step_s})
+        final_stand = se.stand_metrics(env)
+        min_base_minus_foot = None
+        if final_stand is not None:
+            min_base_minus_foot = float(final_stand["base_minus_foot_z"].min().item())
+
+        # Kit's native layer exits the process when the pure-Python report runs on the app thread. Dump the inputs and
+        # build the report in a child interpreter instead; no assertion code ever runs inside the sim process.
+        inputs = {
+            "joint_names": joint_names,
+            "obs_dim": obs_dim,
+            "obs_row": obs_row,
+            "command": command,
+            "scan": scan,
+            "base_height_m": base_height,
+            "stand_rows": rows,
+            "stand_steps_expected": args.steps,
+            "scan_report": scan_report,
+            "fell_envs": torch.nonzero(fell).flatten().tolist(),
+            "min_base_minus_foot": min_base_minus_foot,
+            "scene": {"scene_id": args.scene, "usd_path": scene.get("usd_path"), "num_envs": n,
+                      "spawn_poses": spawns, "task": task, "checkpoint": args.checkpoint},
+        }
+        (out_dir / "assert_inputs.json").write_text(json.dumps(inputs, default=str), encoding="utf-8")
 
     # --- optional scripted path (command hook + policy + video helper) --------------------------------------
-    summary: dict = {"assertions_passed": assertions_passed, "stand_steps": len(rows)}
-    if args.scripted and assertions_passed:
+    summary: dict = {"assertions_passed": None, "stand_steps": len(rows)}
+    if args.scripted:
         start = (spawns[0][0], spawns[0][1], spawns[0][2])
         from common.cerberus_eval.scripted_path import demo_path
 
@@ -319,6 +317,7 @@ def run(args, app=None) -> int:
         steps = min(args.video_steps, len(path.commands))
         if args.demo_seconds > 0:
             steps = min(steps, int(args.demo_seconds / path.dt))  # never overshoot the requested 90 s
+        last_pose = None
         with torch.inference_mode():
             for i in range(steps):
                 cmd = path.commands[i]
@@ -327,10 +326,12 @@ def run(args, app=None) -> int:
                 obs, _, _, _ = env.step(policy(obs))
                 if args.video and args.record_clip:
                     clip.frame(env.unwrapped, 0)
+                if i == steps - 1:
+                    # read the pose while the sim is still stepping; after the loop Kit can exit on any data read
+                    last_pose = se.read_poses(env)
         clip.end()
-        print("[scene_eval] CLIP_CLOSED", flush=True)
         elapsed = time.perf_counter() - t0
-        poses = se.read_poses(env)
+        poses = last_pose
         record = {
             "scene": args.scene,
             "seed": args.seed,
@@ -341,18 +342,22 @@ def run(args, app=None) -> int:
             "video_resolution": list(resolution) if resolution else None,
             "wall_s": elapsed,
             "start_pose": start,
-            "end_pose": [float(v) for v in poses[0].detach().cpu()],
+            "end_pose": [float(v) for v in poses[0].detach().cpu()] if poses is not None else None,
             "expected_end_pose": list(path.expected_end_pose),
-            "fell": bool(se.read_fall_flags(env).any()),
+            "fell": bool(fell.any()),
             "min_base_minus_foot_z": min_base_minus_foot,
         }
         write_run_json(out_dir / "clips" / metrics_filename(name), record)
-        print("[scene_eval] METRICS_WRITTEN", flush=True)
         summary["scripted"] = record
         summary["clip"] = name
         print(f"[scene_eval] scripted path: {json.dumps(record, default=str)}")
 
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2, default=str) + "\n", encoding="utf-8")
+    if getattr(args, "scripted_only", False):
+        return 0
+    assert_rc = subprocess.run([sys.executable, str(Path(__file__)), "--assert-only", "--out-dir", str(out_dir)],
+                               check=False).returncode
+    assertions_passed = assert_rc == 0
     if not assertions_passed:
         print("[scene_eval] FAIL: see assertions.json", file=sys.stderr)
         return 1

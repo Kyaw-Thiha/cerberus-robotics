@@ -100,13 +100,13 @@ stage_smoke() {
         --scripted --no-video --out-dir "$out"
 }
 stage_nav() {
-    local out="$REPORT_DIR/nav"
-    isaac "$REPO_ROOT/scripts/nav_eval.py" --scenes "grscenes:$SCENE" --pairs "$PAIRS" --num_envs 4 \
+    local out="$REPORT_DIR/nav" envs="${CERBERUS_NAV_ENVS:-4}"
+    isaac "$REPO_ROOT/scripts/nav_eval.py" --scenes "grscenes:$SCENE" --pairs "$PAIRS" --num_envs "$envs" \
         --no-video --out-dir "$out"
 }
 stage_replay() {
-    local out="$REPORT_DIR/replay"
-    isaac "$REPO_ROOT/scripts/nav_eval.py" --scenes "grscenes:$SCENE" --pairs "$PAIRS" --num_envs 4 \
+    local out="$REPORT_DIR/replay" envs="${CERBERUS_NAV_ENVS:-4}"
+    isaac "$REPO_ROOT/scripts/nav_eval.py" --scenes "grscenes:$SCENE" --pairs "$PAIRS" --num_envs "$envs" \
         --replay-only --replay-outcomes success,failure --video --out-dir "$out"
 }
 

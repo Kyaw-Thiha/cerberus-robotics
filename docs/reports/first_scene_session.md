@@ -193,3 +193,25 @@ through; camera runs are the fragile part (`carb.windowing-glfw` fails headless)
 RTX viewport at 960x540 (downscale 2); a 1080p re-run is in progress.
 
 Cost so far: about 5 USD of 18. The VM kill timer is armed at creation + 10 h 15 m.
+
+### Demo clip and navigation: what was actually produced
+
+| artifact | result |
+|---|---|
+| `demo_scene1.mp4` | **1920x1080, 50 fps, 90.0 s**, 6.9 MB, RTX viewport, real scene, follow camera, scripted path through the slew limiter. Measured with `ffprobe` (h264). Local `cerberus-results/2026-11-23/`, R2 `migration/first_scene/20261123/` |
+| `demo_scene1.json` | clip properties (steps 4500, 90 s, 1080p50, seed 0) and the kinematic expected end pose; `measured: false` — Kit exited natively before the sim could write the pose/fall record |
+| stand `assertions.json` | 8/8 PASS (kept locally and on R2) |
+| smoke / nav | **blocked**: every attempt that reached the environment died at the first pure-Python block after the sim loop (stand report, `read_poses`, nav sampling). The nav run sampled **5 pairs from 12 attempts** (2 unreachable, 5 outside 3-10 m) and wrote `build_timings.json`, but `summary.json` was never reached. No navigation success number exists for this session. |
+| replay clips | not attempted after the camera launches failed 30/30; a 960x540 demo had rendered earlier, so the 1080p clip is the second valid render |
+
+The host's failure mode is not our scene code: `nvidia-smi` is clean, `host_doctor` passes, and a 70 s pump loop kept
+Kit alive, but the native layer calls `exit(0)` at the first Python boundary after a long sim block and the loader
+crashes about 9 times in 10. The seven code fixes above are real and tested; the remaining blocker is host/GL
+stability.
+
+### Spend and wrap-up
+
+- VM L40 825 GB at 1.0866 USD/h from 21:25Z to about 03:30Z: ~5.6 USD plus the canary 0.06 USD, about **6 USD of 18**.
+- The R2 token file and the Hyperstack key were removed from the VM; the VM was deleted through the API and verified
+  gone; the 10 h timer and the 3 h timer were cancelled; the sleep inhibitor was stopped.
+- **Rotate the R2 token and the Hyperstack API key**: both were present on the VM for the run.

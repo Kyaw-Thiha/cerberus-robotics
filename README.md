@@ -7,14 +7,21 @@ in as swappable backends behind three command boundaries, and every backend carr
 **Caveat: simulation only.** There is no real hardware. "Real-world demo" here means a well-instrumented simulation demo, not
 a claim of physical deployment.
 
-## Status (2026-11-22)
+## Status (2026-11-23)
 
-Tier **T0** still. Brev's SSH relay remains broken for this account (banner timeout on every instance), so a
-bucket-based command channel was built instead (`scripts/host/r2_channel.*`, tested locally). On three live attempts
-the Brev startup script did not start that channel — no heartbeat, no startup log — although a minimal startup-script
-canary had worked earlier, so the mechanism is unreliable here. No Kit launch or scene run was possible. Spend for the
-day is about 0.25 USD; every instance was deleted and no timer remains. Next: get a shell or a reliable startup
-script (support ticket with `docs/reports/brev_ssh_issue.md`), or run the same commands on any host with SSH.
+Tier **T1** reached on a plain-SSH Hyperstack VM (L40 48 GB, 825 GB, 1.087 USD/h all-in): the host contract
+passes, Kit starts, and the scene-1 stand test at 1 env passes **all 8 contract assertions** (joint order, 235-D
+layout, command slice, finite 200-step stand, no fall, standing). A **1920x1080, 50 fps, 90.0 s** RTX clip of the
+GA policy walking a scripted path through the slew limiter in the real GRScenes home is at
+`cerberus-results/2026-11-23/demo_scene1.mp4` (also `migration/first_scene/20261123/` on R2); its metrics JSON
+records the measured clip properties but not pose/fall (Kit exits natively before the post-loop record).
+
+T2 is **partial** and T3 is **not reached**: the host starts Kit only about 1 launch in 10 and its native layer
+exits the process at every post-sim Python boundary, so the navigation summary was not written (5 pairs were
+sampled; the kinematic upper bound is still 20/20, SPL 1.0). Every launch was retried up to 30 times and all seven
+code bugs found on the way are fixed (see `docs/reports/first_scene_session.md`). Spend about 6 USD of the 18 USD
+cap; the VM and its secret file were removed and no timer remains. Next: a host whose Kit starts reliably (or a
+container with a working headless GL context), then the same `run_session.sh` command for demo, smoke, nav, replay.
 
 ## Platform
 

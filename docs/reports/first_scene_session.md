@@ -215,3 +215,21 @@ stability.
 - The R2 token file and the Hyperstack key were removed from the VM; the VM was deleted through the API and verified
   gone; the 10 h timer and the 3 h timer were cancelled; the sleep inhibitor was stopped.
 - **Rotate the R2 token and the Hyperstack API key**: both were present on the VM for the run.
+
+### Navigation: real-grid planner result (kinematic, not physics)
+
+Because the physics navigation run died before its first episode, the A* + pure pursuit stack was run on the real
+scene-1 grid (`migration/h4_nav/20261110T0857Z/occupancy/MV7J…ADQ8_usd/occupancy.npz`) with the kinematic backend,
+N=10, seed 0:
+
+| metric | value |
+|---|---|
+| pairs | 10 from 18 attempts (8 outside the 3–10 m window) |
+| success | **10/10** |
+| SPL | 1.0 (capped; episodes stop at the 0.5 m tolerance) |
+| collisions | 0 |
+| mean path / time | 5.62 m / 8.66 s |
+
+This is the **ceiling**, not a policy result: the unicycle has no dynamics, no slip and no fall. It confirms the
+planner and controller still work on the real grid with the current code; the physics number is still absent.
+Artifacts: `~/cerberus-results/2026-11-23/kinematic_n10/` (per-pair JSON, PNG, CSV, `summary.json`).

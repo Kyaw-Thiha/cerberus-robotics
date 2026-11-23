@@ -327,8 +327,27 @@ def run(args, app=None) -> int:
                 if args.video and args.record_clip:
                     clip.frame(env.unwrapped, 0)
                 if i == steps - 1:
-                    # read the pose while the sim is still stepping; after the loop Kit can exit on any data read
+                    # read the pose and write the metrics while the sim is still stepping; after the loop Kit can
+                    # exit on any data read or file write
                     last_pose = se.read_poses(env)
+                    elapsed_now = time.perf_counter() - t0
+                    early = {
+                        "scene": args.scene,
+                        "seed": args.seed,
+                        "outcome": "scripted",
+                        "steps": steps,
+                        "sim_seconds": round(steps * path.dt, 3),
+                        "video_fps": args.video_fps,
+                        "video_resolution": list(resolution) if resolution else None,
+                        "wall_s": elapsed_now,
+                        "start_pose": start,
+                        "end_pose": [float(v) for v in last_pose[0].detach().cpu()] if last_pose is not None else None,
+                        "expected_end_pose": list(path.expected_end_pose),
+                        "fell": bool(fell.any()),
+                        "min_base_minus_foot_z": min_base_minus_foot,
+                        "written_in_loop": True,
+                    }
+                    write_run_json(out_dir / "clips" / metrics_filename(name), early)
         clip.end()
         elapsed = time.perf_counter() - t0
         poses = last_pose

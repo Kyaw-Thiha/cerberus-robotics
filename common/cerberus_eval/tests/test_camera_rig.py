@@ -84,3 +84,19 @@ def test_rgb_from_annotator_data_accepts_both_shapes():
     rgba = np.zeros((2, 3, 4), dtype=np.uint8)
     assert rgb_from_annotator_data(rgba).shape == (2, 3, 3)
     assert rgb_from_annotator_data(rgba).dtype == np.uint8
+
+
+def test_rgb_from_annotator_data_handles_odd_layouts():
+    import numpy as np
+
+    from common.cerberus_eval.camera_rig import rgb_from_annotator_data
+
+    chw = np.zeros((3, 16, 20), dtype=np.uint8)
+    assert rgb_from_annotator_data(chw).shape == (16, 20, 3)
+    gray = np.zeros((8, 9), dtype=np.uint8)
+    assert rgb_from_annotator_data(gray).shape == (8, 9, 3)
+    one = np.zeros((8, 9, 1), dtype=np.uint8)
+    assert rgb_from_annotator_data(one).shape == (8, 9, 3)
+    floats = np.full((4, 5, 3), 0.5, dtype=np.float32)
+    out = rgb_from_annotator_data(floats)
+    assert out.dtype == np.uint8 and out.max() in (127, 128)

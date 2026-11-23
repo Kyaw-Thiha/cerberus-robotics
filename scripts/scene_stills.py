@@ -170,6 +170,7 @@ def render(args, out_dir: Path, width: int, height: int) -> int:
         rig.update()
         sim.render()
         frame = rig.capture(spec.name)
+        print(f"[stills] {spec.name} frame {frame.shape} {frame.dtype}", flush=True)
         png = out_dir / f"still_{spec.name}.png"
         # imageio, not PIL: the PIL shipped inside Sim 6.2 fails on these frames with
         # `AttributeError: '_idat' object has no attribute 'fileno'` (measured 2026-11-23).

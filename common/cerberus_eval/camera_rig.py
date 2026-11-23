@@ -315,10 +315,20 @@ def rgb_from_annotator_data(data) -> np.ndarray:
     import numpy as np
 
     if isinstance(data, dict):
-        data = data.get("data")
+        data = data.get("data", data)
     rgb = np.asarray(data)
-    if rgb.ndim == 3 and rgb.shape[2] == 4:
-        rgb = rgb[..., :3]
+    if rgb.dtype.kind == "f":
+        scale = 255.0 if float(np.nanmax(rgb, initial=0.0)) <= 1.5 else 1.0
+        rgb = np.clip(rgb * scale, 0, 255).round().astype(np.uint8)
+    if rgb.ndim == 3 and rgb.shape[0] in (3, 4) and rgb.shape[1] > 8 and rgb.shape[2] > 8:
+        rgb = np.moveaxis(rgb, 0, -1)  # channels-first layouts
+    if rgb.ndim == 3:
+        if rgb.shape[2] > 3:
+            rgb = rgb[..., :3]
+        elif rgb.shape[2] < 3:
+            rgb = rgb[..., 0]
+    if rgb.ndim == 2:
+        rgb = np.repeat(rgb[..., None], 3, axis=-1)
     rgb = np.ascontiguousarray(rgb)
     if rgb.dtype != np.uint8:
         rgb = rgb.astype(np.uint8)

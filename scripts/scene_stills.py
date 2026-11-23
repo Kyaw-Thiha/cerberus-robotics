@@ -44,6 +44,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--mdl", action="store_true", help="set MDL_SYSTEM_PATH before the app launches")
     parser.add_argument("--steps", type=int, default=60, help="settle steps before the first still")
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--spawn", default="0,0,0", help="x,y,yaw_rad of the robot in the scene (default 0,0,0)")
+    parser.add_argument("--chase-distance", type=float, default=1.6)
+    parser.add_argument("--chase-height", type=float, default=0.9)
+    parser.add_argument("--chase-pitch", type=float, default=12.0)
+    parser.add_argument("--ego-offset", default="0.30,0.0,0.08")
+    parser.add_argument("--ego-pitch", type=float, default=17.0)
     parser.add_argument("--enable_cameras", action="store_true", default=True)
     # AppLauncher-compatible extras
     parser.add_argument("--headless", action="store_true", default=True)
@@ -116,7 +122,8 @@ def render(args, out_dir: Path, width: int, height: int) -> int:
     from policy.locomotion.eval import scene_env as se
 
     task = se.task_for_embodiment(args.embodiment)
-    spawns = [(0.0, 0.0, 0.0, 0.0)]
+    x, y, yaw0 = (float(v) for v in args.spawn.split(","))
+    spawns = [(x, y, yaw0, 0.0)]
     env, scene = se.build_loco_env(args.scene, spawns, task=task, num_envs=1, episode_length_s=120.0,
                                   seed=args.seed, with_cameras=False)
     if args.dome_intensity is not None:
@@ -151,9 +158,11 @@ def render(args, out_dir: Path, width: int, height: int) -> int:
         else "/World/envs/env_0/Robot/base"
 
     specs = [
-        cr.CameraSpec("ego", "ego", (width, height), hfov_deg=90.0, offset=(0.30, 0.0, 0.08), pitch_down_deg=17.0),
-        cr.CameraSpec("chase", "chase", (width, height), hfov_deg=70.0, distance=1.6, height=0.9,
-                      pitch_down_deg=12.0),
+        cr.CameraSpec("ego", "ego", (width, height), hfov_deg=90.0,
+                      offset=tuple(float(v) for v in args.ego_offset.split(",")),
+                      pitch_down_deg=args.ego_pitch),
+        cr.CameraSpec("chase", "chase", (width, height), hfov_deg=70.0, distance=args.chase_distance,
+                      height=args.chase_height, pitch_down_deg=args.chase_pitch),
     ]
     for name, pose in inspect_views(base_pose, yaw)[: max(args.views, 0)]:
         specs.append(cr.CameraSpec(name, "overview", (width, height), hfov_deg=80.0, world_pose=pose))

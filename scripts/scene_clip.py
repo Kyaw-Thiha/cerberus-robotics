@@ -51,6 +51,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
                         help="global step offset: keeps the scripted path and the arm clock continuous across segments")
     parser.add_argument("--mdl", action="store_true")
     parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--spawn", default="0,0,0", help="x,y,yaw_rad of the robot in the scene (default 0,0,0)")
+    parser.add_argument("--chase-distance", type=float, default=1.6)
+    parser.add_argument("--chase-height", type=float, default=0.9)
+    parser.add_argument("--chase-pitch", type=float, default=12.0)
+    parser.add_argument("--ego-offset", default="0.30,0.0,0.08")
+    parser.add_argument("--ego-pitch", type=float, default=17.0)
     parser.add_argument("--enable_cameras", action="store_true", default=True)
     parser.add_argument("--headless", action="store_true", default=True)
     parser.add_argument("--device", default="cuda:0")
@@ -184,7 +190,8 @@ def record(args) -> int:
     poses_path = out_dir / f"{name}.poses.json"
 
     task = se.task_for_embodiment(args.embodiment)
-    env, scene = se.build_loco_env(args.scene, [(0.0, 0.0, 0.0, 0.0)], task=task, num_envs=1,
+    x, y, yaw0 = (float(v) for v in args.spawn.split(","))
+    env, scene = se.build_loco_env(args.scene, [(x, y, yaw0, 0.0)], task=task, num_envs=1,
                                    episode_length_s=max(120.0, args.seconds + 30.0), seed=args.seed,
                                    with_cameras=False)
     policy = se.load_policy(env, task=task, checkpoint=args.checkpoint)
@@ -210,11 +217,12 @@ def record(args) -> int:
     yaw = float(np.arctan2(2 * (quat[0] * quat[3] + quat[1] * quat[2]), 1 - 2 * (quat[2] ** 2 + quat[3] ** 2)))
 
     if args.camera == "ego":
-        spec = cr.CameraSpec("ego", "ego", (width, height), hfov_deg=90.0, offset=(0.30, 0.0, 0.08),
-                             pitch_down_deg=17.0)
+        ego_offset = tuple(float(v) for v in args.ego_offset.split(","))
+        spec = cr.CameraSpec("ego", "ego", (width, height), hfov_deg=90.0, offset=ego_offset,
+                             pitch_down_deg=args.ego_pitch)
     elif args.camera == "chase":
-        spec = cr.CameraSpec("chase", "chase", (width, height), hfov_deg=70.0, distance=1.6, height=0.9,
-                             pitch_down_deg=12.0)
+        spec = cr.CameraSpec("chase", "chase", (width, height), hfov_deg=70.0, distance=args.chase_distance,
+                             height=args.chase_height, pitch_down_deg=args.chase_pitch)
     elif args.camera == "closeup":
         # to the robot's front-right at arm height, looking at the arm's workspace
         fwd = np.array([math.cos(yaw), math.sin(yaw), 0.0])

@@ -363,9 +363,24 @@ def run_gate(clip: Path, *, camera: str = "none", poses_path: Path | None = None
     return report
 
 
+def still_gate(paths: list[Path]) -> dict[str, Any]:
+    """Apply the still checks to PNGs (the P0 look gate, before any clip exists)."""
+    from PIL import Image
+
+    results = []
+    for path in paths:
+        rgb = np.asarray(Image.open(path).convert("RGB"), dtype=np.uint8)
+        checks = still_checks(rgb)
+        checks["png"] = str(path)
+        results.append(checks)
+    return {"stills": results, "passed": bool(results) and all(r["passed"] for r in results)}
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Clip QA gate (see the module docstring)")
-    parser.add_argument("clip")
+    parser.add_argument("clip", nargs="?")
+    parser.add_argument("--stills", nargs="+", default=None,
+                        help="apply the still checks to PNG files instead of a clip")
     parser.add_argument("--camera", default="none",
                         choices=["ego", "chase", "overview", "closeup", "none"])
     parser.add_argument("--poses", default=None, help="pose JSON written by the recorder")
@@ -376,6 +391,25 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--no-robot-visibility", dest="robot_visibility", action="store_false", default=True)
     args = parser.parse_args(argv)
 
+    if args.stills:
+        paths = [Path(p) for p in args.stills]
+        missing = [str(p) for p in paths if not p.is_file()]
+        if missing:
+            print(f"clip_qa: missing stills {missing}", file=sys.stderr)
+            return 2
+        report = still_gate(paths)
+        for still in report["stills"]:
+            print(f"{Path(still['png']).name}: lum={still['mean_luminance']:6.1f} "
+                  f"clipped={still['clipped_fraction']:.3f} hue_bins={still['hue_bins_over_5pct']} -> "
+                  f"{'ok' if still['passed'] else 'FAIL'}")
+        print(("PASS " if report["passed"] else "FAIL ") + f"{len(paths)} stills")
+        if args.json_out:
+            Path(args.json_out).write_text(json.dumps(report, indent=2) + "\n")
+        return 0 if report["passed"] else 1
+
+    if not args.clip:
+        print("clip_qa: give a clip path or --stills", file=sys.stderr)
+        return 2
     clip = Path(args.clip)
     if not clip.is_file():
         print(f"clip_qa: {clip} is not a file", file=sys.stderr)

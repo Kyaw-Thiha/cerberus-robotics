@@ -138,3 +138,16 @@ def test_project_point_puts_a_point_straight_ahead_at_the_centre():
     u, v, inside = clip_qa.project_point(np.array([0.0, 0.0, -2.0]), np.array([0.0, 0.0, 0.0]),
                                          np.array([0.0, 0.0, 0.0, 1.0]), 90.0, 1920, 1080)
     assert inside and abs(u - 960) <= 2 and abs(v - 540) <= 2
+
+
+def test_still_gate_reads_pngs(tmp_path):
+    from PIL import Image
+
+    good = tmp_path / "good.png"
+    bad = tmp_path / "bad.png"
+    Image.fromarray(varied_frame()).save(good)
+    Image.fromarray(flat_red_frame()).save(bad)
+    ok = clip_qa.still_gate([good])
+    assert ok["passed"]
+    both = clip_qa.still_gate([good, bad])
+    assert not both["passed"]

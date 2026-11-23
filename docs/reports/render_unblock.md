@@ -46,3 +46,17 @@ above the original scene. The dataset itself is opened read-only.
 `common/cerberus_worlds/arena_assets.sim_usd_path` (tested).
 
 _(results of the still runs are appended below as they finish)_
+
+## The host state after a crash storm (measured 2026-11-23)
+
+Repeated failed launches leave the L40 unusable for CUDA even though `nvidia-smi` reports an idle card:
+
+```
+[omni.physx.tensors.plugin] CUDA error: CUDA-capable device(s) is/are busy or unavailable
+[omni.physx.tensors.plugin] Failed to create primary CUDA context
+```
+
+and, before that, `torch.cuda.init()` raising `RuntimeError: No CUDA GPUs are available` inside a container whose
+`nvidia-smi -L` lists the GPU. No Xid appears in `dmesg`, no process holds `/dev/nvidia*`, and a fresh container
+still fails. `sudo shutdown -r now` clears it; the next launch then runs normally. Practical rule adopted here: a burst
+of three identical GPU-context failures means reboot the VM, do not retry.

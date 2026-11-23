@@ -69,3 +69,18 @@ def test_pose_log_schema_is_what_clip_qa_reads(tmp_path):
 def test_focal_length_matches_the_horizontal_fov():
     # focal = (aperture/2)/tan(hfov/2); 90 degrees on a 20.955 mm aperture is 10.4775 mm
     assert abs(cr.focal_length_for(90.0) - 10.4775) < 1e-6
+
+
+def test_rgb_from_annotator_data_accepts_both_shapes():
+    """Replicator 1.13 returns the array; older releases wrap it in {'data': array}."""
+    import numpy as np
+
+    from common.cerberus_eval.camera_rig import rgb_from_annotator_data
+
+    rgb = np.zeros((4, 5, 3), dtype=np.uint8)
+    assert rgb_from_annotator_data(rgb).shape == (4, 5, 3)
+    assert rgb_from_annotator_data({"data": rgb}).shape == (4, 5, 3)
+
+    rgba = np.zeros((2, 3, 4), dtype=np.uint8)
+    assert rgb_from_annotator_data(rgba).shape == (2, 3, 3)
+    assert rgb_from_annotator_data(rgba).dtype == np.uint8

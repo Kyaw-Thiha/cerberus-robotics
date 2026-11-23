@@ -294,13 +294,7 @@ class CameraRig:
     def capture(self, name: str) -> np.ndarray:
         """One RGB frame (H, W, 3) uint8; requires a render step after the camera moved."""
         self._ensure_products()
-        data = self._annotators[name].get_data()
-        rgb = np.asarray(data["data"], dtype=np.uint8)
-        if rgb.ndim == 3 and rgb.shape[2] == 4:
-            return rgb[..., :3]
-        if rgb.ndim == 3 and rgb.shape[2] == 3:
-            return rgb
-        return rgb.reshape(rgb.shape[0], rgb.shape[1], -1)[..., :3]
+        return rgb_from_annotator_data(self._annotators[name].get_data())
 
     def close(self) -> None:
         for rp in self._render_products.values():
@@ -310,6 +304,24 @@ class CameraRig:
                 pass
         self._render_products.clear()
         self._annotators.clear()
+
+
+def rgb_from_annotator_data(data) -> np.ndarray:
+    """Normalise what a Replicator RGB annotator returns to (H, W, 3) uint8.
+
+    Replicator 1.13 (Sim 6.2) hands back the array itself; older versions wrap it as ``{"data": array}``.
+    Measured 2026-11-23: ``data["data"]`` on an ndarray raised ``IndexError: only integers ... are valid indices``.
+    """
+    import numpy as np
+
+    if isinstance(data, dict):
+        data = data.get("data")
+    rgb = np.asarray(data)
+    if rgb.ndim == 3 and rgb.shape[2] == 4:
+        rgb = rgb[..., :3]
+    if rgb.dtype != np.uint8:
+        rgb = rgb.astype(np.uint8)
+    return rgb
 
 
 def pose_log_for(spec: CameraSpec) -> PoseLog:

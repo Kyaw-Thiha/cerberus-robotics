@@ -58,7 +58,7 @@ KEY_JSON="$(hs_api ensure-keypair --region "$REGION" --name "$KEY_NAME" --public
 hs_say "key pair $KEY_NAME (created: $(printf '%s' "$KEY_JSON" | hs_json_field created))"
 
 if [[ -z "$IMAGE" ]]; then
-    IMAGE_JSON="$(hs_api pick-image --region "$REGION")" || { hs_say "cannot pick an image" >&2; exit 3; }
+    IMAGE_JSON="$(hs_api pick-image --region "$REGION" --flavor "$FLAVOR")" || { hs_say "cannot pick an image" >&2; exit 3; }
     IMAGE="$(printf '%s' "$IMAGE_JSON" | hs_json_field name)"
 fi
 [[ -n "$IMAGE" ]] || { hs_say "no image selected" >&2; exit 3; }

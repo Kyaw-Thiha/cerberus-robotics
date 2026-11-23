@@ -1,0 +1,238 @@
+#!/usr/bin/env python3
+"""Record one camera clip of the real scene with the Go2 + ARX5 (EGO, CHASE, OVERVIEW or a robot close-up).
+
+Every frame writes the base and camera world poses next to the video (``*.poses.json``), so
+``scripts/host/clip_qa.py`` can prove the camera is rigidly attached (EGO), yaw-only and behind the robot (CHASE), or
+fixed (OVERVIEW) instead of trusting the label.
+
+Two motions are scripted here (no tuning, no learning):
+* ``--walk``  -- a seeded open-loop velocity path (the same scripted path the scene demo uses);
+* ``--arm-demo`` -- the arm's own joint targets: reach forward, wrist turn, gripper open and close, back to stowed.
+
+Usage (inside the Isaac container)::
+
+    /workspace/isaaclab/isaaclab.sh -p scripts/scene_clip.py --camera chase --seconds 20 \
+        --out-dir ~/cerberus-results/clips --scene grscenes:MV7J... --embodiment go2_arx5 --arm-demo
+"""
+
+from __future__ import annotations
+
+import argparse
+import math
+import os
+import sys
+import time
+from pathlib import Path
+
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+
+def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
+    parser.add_argument("--scene", default="grscenes:MV7J6NIKTKJZ2AABAAAAADQ8_usd")
+    parser.add_argument("--embodiment", default="go2_arx5", choices=["go2", "go2_arx5"])
+    parser.add_argument("--checkpoint", default="policy/locomotion/checkpoints/go2_locomotion_ga_v1_candidate.pt")
+    parser.add_argument("--camera", default="chase", choices=["ego", "chase", "overview", "closeup"])
+    parser.add_argument("--seconds", type=float, default=20.0)
+    parser.add_argument("--fps", type=int, default=30)
+    parser.add_argument("--resolution", default="1920x1080")
+    parser.add_argument("--out-dir", default=None)
+    parser.add_argument("--name", default=None, help="clip base name (default <camera>_<embodiment>)")
+    parser.add_argument("--walk", action="store_true", help="drive the scripted velocity path")
+    parser.add_argument("--arm-demo", action="store_true", help="play the arm reach/turn/grip script")
+    parser.add_argument("--label", default="", help="label written into the clip JSON (e.g. policy not yet retrained)")
+    parser.add_argument("--mdl", action="store_true")
+    parser.add_argument("--seed", type=int, default=0)
+    parser.add_argument("--enable_cameras", action="store_true", default=True)
+    parser.add_argument("--headless", action="store_true", default=True)
+    parser.add_argument("--device", default=None)
+    return parser.parse_args(argv)
+
+
+# ---- scripted arm motion ---------------------------------------------------------------------------------------
+
+def arm_demo_targets(t: float, *, stowed: dict[str, float], span: float = 4.0) -> dict[str, float]:
+    """Arm joint targets over time (rad / m): reach forward, wrist turn, grip, return to stowed.
+
+    Pure and deterministic; the same function is unit-tested off-pod. Phases (seconds, cycling over ``span``):
+    0.0-0.15 stow, 0.15-0.45 reach+turn, 0.45-0.55 close, 0.55-0.7 open, 0.7-1.0 return.
+    """
+    phase = (t % span) / span
+    target = dict(stowed)
+    if phase < 0.15 or phase >= 0.7:
+        return target
+    if phase < 0.45:
+        a = (phase - 0.15) / 0.30
+        ease = 0.5 - 0.5 * math.cos(math.pi * a)
+        target["joint1"] = stowed["joint1"] + 0.45 * ease     # shoulder swing forward
+        target["joint2"] = stowed["joint2"] - 0.60 * ease     # lift
+        target["joint3"] = stowed["joint3"] + 0.35 * ease
+        target["joint5"] = stowed["joint5"] + 0.8 * ease      # wrist turn
+        return target
+    if phase < 0.55:  # close
+        target["joint1"] = stowed["joint1"] + 0.45
+        target["joint2"] = stowed["joint2"] - 0.60
+        target["joint3"] = stowed["joint3"] + 0.35
+        target["joint5"] = stowed["joint5"] + 0.8
+        target["joint7"] = 0.0
+        target["joint8"] = 0.0
+        return target
+    if phase < 0.7:  # open again
+        target["joint1"] = stowed["joint1"] + 0.45
+        target["joint2"] = stowed["joint2"] - 0.60
+        target["joint3"] = stowed["joint3"] + 0.35
+        target["joint5"] = stowed["joint5"] + 0.8
+        target["joint7"] = stowed["joint7"]
+        target["joint8"] = stowed["joint8"]
+        return target
+    return target
+
+
+def main(argv: list[str] | None = None) -> int:
+    args = parse_args(argv)
+    if args.mdl:
+        os.environ["CERBERUS_SKIP_MDL_PATH"] = "0"
+
+    from common.cerberus_worlds.registry import get_backend
+
+    get_backend("plain_usd").prepare_scene_env(args.scene)
+    from isaaclab.app import AppLauncher
+
+    app_launcher = AppLauncher(args)
+    simulation_app = app_launcher.app
+    for _ in range(5):
+        simulation_app.update()
+    try:
+        return record(args)
+    finally:
+        simulation_app.close()
+
+
+def record(args) -> int:
+    import numpy as np
+    import torch
+
+    from common.cerberus_description.go2_arx5_spec import (
+        ARX5_ARM_JOINTS,
+        ARX5_STOWED_JOINT_POS,
+        GO2_ARX5_BASE_PRIM_REL_PATH,
+        GRIPPER_JOINT_NAMES,
+    )
+    from common.cerberus_eval import camera_rig as cr
+    from common.cerberus_eval.atomic_io import write_json_atomic
+    from common.cerberus_eval.scripted_path import scripted_path_for_seed
+    from policy.locomotion.eval import scene_env as se
+
+    out_dir = Path(args.out_dir) if args.out_dir else Path.home() / "cerberus-results" / f"clips-{int(time.time())}"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    width, height = (int(v) for v in args.resolution.lower().split("x"))
+    name = args.name or f"{args.camera}_{args.embodiment}"
+    clip_path = out_dir / f"{name}.mp4"
+    poses_path = out_dir / f"{name}.poses.json"
+
+    task = se.task_for_embodiment(args.embodiment)
+    env, scene = se.build_loco_env(args.scene, [(0.0, 0.0, 0.0, 0.0)], task=task, num_envs=1,
+                                   episode_length_s=max(120.0, args.seconds + 30.0), seed=args.seed,
+                                   with_cameras=False)
+    policy = se.load_policy(env, task=task, checkpoint=args.checkpoint)
+    hook = se.VelocityCommandHook(env)
+    device = env.unwrapped.device
+    robot = env.unwrapped.scene["robot"]
+
+    # settle, so the clip does not open on the spawn pose
+    zero = torch.zeros((1, 3), device=device)
+    for _ in range(90):
+        hook.apply(zero)
+        env.step(policy(se.fresh_observations(env)))
+
+    robot_prim = (f"/World/envs/env_0/Robot/{GO2_ARX5_BASE_PRIM_REL_PATH}" if args.embodiment == "go2_arx5"
+                  else "/World/envs/env_0/Robot/base")
+
+    base_pos = robot.data.root_pos_w[0].detach().cpu().numpy()
+    quat = robot.data.root_quat_w[0].detach().cpu().numpy()
+    yaw = float(np.arctan2(2 * (quat[0] * quat[3] + quat[1] * quat[2]), 1 - 2 * (quat[2] ** 2 + quat[3] ** 2)))
+
+    if args.camera == "ego":
+        spec = cr.CameraSpec("ego", "ego", (width, height), hfov_deg=90.0, offset=(0.30, 0.0, 0.08),
+                             pitch_down_deg=17.0)
+    elif args.camera == "chase":
+        spec = cr.CameraSpec("chase", "chase", (width, height), hfov_deg=70.0, distance=1.6, height=0.9,
+                             pitch_down_deg=12.0)
+    elif args.camera == "closeup":
+        # to the robot's front-right at arm height, looking at the arm's workspace
+        fwd = np.array([math.cos(yaw), math.sin(yaw), 0.0])
+        side = np.array([-math.sin(yaw), math.cos(yaw), 0.0])
+        eye = base_pos + 1.1 * fwd + 0.7 * side + np.array([0.0, 0.0, 0.75])
+        look_yaw = math.atan2(base_pos[1] - eye[1], base_pos[0] - eye[0])
+        spec = cr.CameraSpec("closeup", "overview", (width, height), hfov_deg=60.0,
+                             world_pose=(eye[0], eye[1], eye[2], look_yaw, 18.0))
+    else:
+        look_yaw = math.atan2(base_pos[1] - (base_pos[1] - 2.5), base_pos[0] - (base_pos[0] - 2.5))
+        spec = cr.CameraSpec("overview", "overview", (width, height), hfov_deg=80.0,
+                             world_pose=(base_pos[0] - 2.5, base_pos[1] - 2.5, base_pos[2] + 2.2, look_yaw, 35.0))
+
+    rig = cr.CameraRig(robot_prim_path=robot_prim, specs=[spec])
+    log = cr.pose_log_for(spec)
+
+    arm_ids = None
+    stowed = dict(ARX5_STOWED_JOINT_POS)
+    if args.arm_demo and args.embodiment == "go2_arx5":
+        names = list(ARX5_ARM_JOINTS) + list(GRIPPER_JOINT_NAMES)
+        arm_ids, _ = robot.find_joints(names, preserve_order=True)
+        arm_ids = torch.tensor(arm_ids, device=device)
+
+    path = scripted_path_for_seed(args.seed) if args.walk else None
+    steps = int(args.seconds * args.fps)
+    import imageio
+
+    writer = imageio.get_writer(str(clip_path), fps=args.fps, macro_block_size=None)
+    sim = env.unwrapped.sim
+    started = time.perf_counter()
+    try:
+        for step in range(steps):
+            sim_t = step / float(args.fps)
+            if path is not None:
+                idx = min(int(step * 1.0), len(path.commands) - 1)
+                cmd = torch.tensor([path.commands[idx]], device=device, dtype=torch.float32)
+            else:
+                cmd = zero
+            hook.apply(cmd)
+            if arm_ids is not None:
+                targets = arm_demo_targets(sim_t, stowed=stowed)
+                values = [targets[j] for j in list(ARX5_ARM_JOINTS) + list(GRIPPER_JOINT_NAMES)]
+                robot.set_joint_position_target(torch.tensor([values], device=device), joint_ids=arm_ids)
+            env.step(policy(se.fresh_observations(env)))
+            rig.update()
+            sim.render()
+            frame = rig.capture(spec.name)
+            writer.append_data(frame)
+            cam_pos, cam_quat = rig.world_pose(spec.name)
+            bpos = robot.data.root_pos_w[0].detach().cpu().numpy()
+            bquat = robot.data.root_quat_w[0].detach().cpu().numpy()
+            log.append(t=sim_t, base_pos=bpos, base_quat_wxyz=tuple(float(v) for v in bquat),
+                       cam_pos=cam_pos, cam_quat_wxyz=cam_quat)
+            if step % max(args.fps, 1) == 0:
+                print(f"[clip] {step}/{steps} t={sim_t:.1f}s fps={step / max(sim_t, 1e-6):.1f}", flush=True)
+    finally:
+        writer.close()
+        rig.close()
+
+    log.write(poses_path)
+    write_json_atomic(out_dir / f"{name}.json", {
+        "clip": str(clip_path), "poses": str(poses_path), "camera": args.camera, "kind": spec.kind,
+        "scene": args.scene, "embodiment": args.embodiment, "checkpoint": args.checkpoint,
+        "seconds": args.seconds, "fps": args.fps, "resolution": [width, height],
+        "walk": bool(args.walk), "arm_demo": bool(args.arm_demo), "label": args.label,
+        "mdl_system_path": os.environ.get("MDL_SYSTEM_PATH", ""),
+        "wall_clock_s": round(time.perf_counter() - started, 1),
+        "note": "camera poses are simulator ground truth logged per frame; motion is scripted or policy-driven "
+                "as stated by walk/arm_demo",
+    })
+    print(f"[clip] wrote {clip_path} and {poses_path}", flush=True)
+    return 0
+
+
+if __name__ == "__main__":
+    sys.exit(main())

@@ -38,6 +38,16 @@ from common.cerberus_eval.scene_assertions import check_spawn_separation
 from common.cerberus_worlds.scene_geometry import scan_proxy_path
 
 LOCO_TASK = "Isaac-Velocity-Rough-Unitree-Go2-Cerberus-Play-v0"
+ARM_LOCO_TASK = "Isaac-Velocity-Rough-Unitree-Go2-Arx5-Cerberus-Play-v0"
+
+
+def task_for_embodiment(embodiment: str | None) -> str:
+    """The Play task for an embodiment name. ``go2_arx5`` is the fused Go2 + ARX5 body (arm held stowed)."""
+    if embodiment in (None, "", "go2"):
+        return LOCO_TASK
+    if embodiment == "go2_arx5":
+        return ARM_LOCO_TASK
+    raise ValueError(f"unknown embodiment {embodiment!r}; expected 'go2' or 'go2_arx5'")
 SCAN_PROXY_PRIM_PATH = "/World/scan_proxy"
 GROUND_PRIM_PATH = "/World/ground"
 DEFAULT_EPISODE_S = 120.0

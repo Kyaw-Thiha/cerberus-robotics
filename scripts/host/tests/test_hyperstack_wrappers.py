@@ -60,7 +60,10 @@ class FakeHyperstack:
         if base == "/core/images":
             return 200, {"images": [{"region_name": "CANADA-1", "images": [
                 {"id": 175, "name": "Ubuntu Server 22.04 LTS R535 CUDA 12.2"},
-                {"id": 1624, "name": "Ubuntu Server 24.04 LTS R595 CUDA 13.2 with Docker"}]}]}
+                {"id": 517, "name": "Ubuntu Server 24.04 LTS R570 CUDA 12.8 with Docker"},
+                {"id": 1624, "name": "Ubuntu Server 24.04 LTS R595 CUDA 13.2 with Docker",
+                 "flavor_restrictions": {"has_flavor_restrictions": True, "restriction_type": "hard",
+                                         "compatible_flavors": [{"flavor_name": "n3-B300-SXM6x8"}]}}]}]}
         if base == "/pricebook":
             return 200, [
                 {"name": "L40", "value": "1.000000000"},
@@ -190,7 +193,8 @@ def test_up_arms_both_timers_and_posts_the_restricted_rule(hs):
     assert state.last_create["assign_floating_ip"] is True
     assert state.last_create["enable_port_randomization"] is False
     assert state.last_create["key_name"] == "cerberus-hyperstack"
-    assert state.last_create["image_name"].endswith("R595 CUDA 13.2 with Docker")
+    # 1624 (R595) is hard-restricted to B300-SXM, so the newest *compatible* image is R570.
+    assert state.last_create["image_name"].endswith("R570 CUDA 12.8 with Docker")
     assert state.keypair_body["public_key"].startswith("ssh-ed25519")
     assert "PRIVATE-KEY-MATERIAL" not in json.dumps(state.keypair_body)
     ledger = (Path(env["CERBERUS_HYPERSTACK_DIR"]) / "ledger.jsonl").read_text()

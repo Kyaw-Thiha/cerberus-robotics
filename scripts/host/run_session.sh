@@ -26,6 +26,7 @@ cd "$REPO_ROOT" || exit 1
 source "$REPO_ROOT/scripts/host/session_lib.sh"
 
 SCENE="${CERBERUS_SCENE:-MV7J6NIKTKJZ2AABAAAAADQ8_usd}"
+EMBODIMENT="${CERBERUS_EMBODIMENT:-go2}"
 PAIRS="${CERBERUS_NAV_PAIRS:-10}"
 STAGES="${CERBERUS_STAGES:-stand,demo,smoke,nav,replay}"
 OUT_DIR=""
@@ -38,6 +39,7 @@ INTERNAL_STAGE=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
         --scene) SCENE="$2"; shift 2 ;;
+        --embodiment) EMBODIMENT="$2"; shift 2 ;;
         --pairs) PAIRS="$2"; shift 2 ;;
         --stages) STAGES="$2"; shift 2 ;;
         --out-dir) OUT_DIR="$2"; shift 2 ;;
@@ -67,7 +69,7 @@ export CERBERUS_SKIP_MDL_PATH="${CERBERUS_SKIP_MDL_PATH:-1}"
 # This Lab build does not print "Simulation App Startup Complete"; the env build is the real start marker.
 export CERBERUS_STARTED_MARKER="${CERBERUS_STARTED_MARKER:-[scene_env] build timings}"
 export CERBERUS_MAX_LAUNCHES="${CERBERUS_MAX_LAUNCHES:-30}"
-cerberus_say "scene $SCENE, stages $STAGES, out $OUT_DIR"
+cerberus_say "scene $SCENE, embodiment $EMBODIMENT, stages $STAGES, out $OUT_DIR"
 
 if [[ $SKIP_GATE -eq 0 ]]; then
     if [[ $DRY -eq 1 ]]; then
@@ -85,19 +87,19 @@ isaac() { if [[ -x "$LAB" ]]; then bash "$REPO_ROOT/scripts/host/kit_retry.sh" -
 stage_stand() {
     local out="$REPORT_DIR/stand"
     isaac "$REPO_ROOT/scripts/scene_eval.py" --scene "grscenes:$SCENE" --num_envs 1 --steps 200 \
-        --no-video --out-dir "$out"
+        --embodiment "$EMBODIMENT" --no-video --out-dir "$out"
 }
 stage_demo() {
     local out="$REPORT_DIR/demo"
     isaac "$REPO_ROOT/scripts/scene_eval.py" --scene "grscenes:$SCENE" --num_envs 1 --steps 200 \
-        --scripted --record-clip --video --video-steps 10000 --video-fps 50 --video-downscale 1 \
+        --embodiment "$EMBODIMENT" --scripted --record-clip --video --video-steps 10000 --video-fps 50 --video-downscale 1 \
         --demo-seconds 90 --demo-speed 0.3 --video-resolution 1920x1080 \
         --clip-name demo_scene1.mp4 --out-dir "$out"
 }
 stage_smoke() {
     local out="$REPORT_DIR/smoke"
     isaac "$REPO_ROOT/scripts/scene_eval.py" --scene "grscenes:$SCENE" --num_envs 1 --steps 200 \
-        --scripted --no-video --out-dir "$out"
+        --embodiment "$EMBODIMENT" --scripted --no-video --out-dir "$out"
 }
 stage_nav() {
     local out="$REPORT_DIR/nav" envs="${CERBERUS_NAV_ENVS:-4}"
@@ -143,7 +145,7 @@ for stage in stand demo smoke nav replay; do
     start=$(date +%s)
     bash "$REPO_ROOT/scripts/host/run_resilient.sh" --name "$stage" --max-restarts 2 -- \
         bash "$0" --internal-stage "$stage" --scene "$SCENE" --pairs "$PAIRS" --out-dir "$REPORT_DIR" \
-        --env-file "$ENV_FILE" --skip-gate >> "$REPORT_DIR/$stage.log" 2>&1
+        --env-file "$ENV_FILE" --skip-gate --embodiment "$EMBODIMENT" >> "$REPORT_DIR/$stage.log" 2>&1
     rc=$?
     if [[ $rc -eq 0 ]] && artifact_ok "$stage" "$REPORT_DIR/$stage"; then
         cerberus_record "$stage" PASS "$(( $(date +%s) - start ))s $REPORT_DIR/$stage"

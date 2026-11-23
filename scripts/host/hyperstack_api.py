@@ -238,7 +238,26 @@ def driver_rank(name: str) -> tuple[int, int]:
     return (int(match.group(1)), int(match.group(2) or 0))
 
 
-def pick_image(region: str) -> dict:
+def _flavor_blocked(image: dict, flavor: str | None) -> bool:
+    """True when the image is pinned to another flavor family.
+
+    Hyperstack now marks e.g. the R595 image ``hard``-restricted to B300-SXM. Creating an L40 VM from it
+    fails with ``compatibility_blocked`` after the request, so the restriction has to be honoured here.
+    """
+    restrictions = image.get("flavor_restrictions") or {}
+    if not restrictions.get("has_flavor_restrictions"):
+        return False
+    if str(restrictions.get("restriction_type") or "").lower() != "hard":
+        return False
+    names = {
+        str(item.get("flavor_name") or "").lower()
+        for item in (restrictions.get("compatible_flavors") or [])
+        if isinstance(item, dict)
+    }
+    return flavor is None or flavor.lower() not in names
+
+
+def pick_image(region: str, flavor: str | None = None) -> dict:
     data = get("/core/images")
     candidates: list[dict] = []
     for group in _rows(data, "images"):
@@ -246,6 +265,8 @@ def pick_image(region: str) -> dict:
             continue
         for image in group.get("images", []) if isinstance(group.get("images"), list) else []:
             if not isinstance(image, dict) or not UBUNTU.search(str(image.get("name", ""))):
+                continue
+            if _flavor_blocked(image, flavor):
                 continue
             image = dict(image)
             image["driver_rank"] = list(driver_rank(str(image.get("name", ""))))
@@ -259,6 +280,7 @@ def pick_image(region: str) -> dict:
         "name": best.get("name"),
         "version": best.get("version"),
         "driver_rank": best["driver_rank"],
+        "flavor": flavor,
     }
 
 
@@ -337,6 +359,7 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser("pick-image")
     p.add_argument("--region", required=True)
+    p.add_argument("--flavor", help="skip images hard-restricted to other flavors")
 
     p = sub.add_parser("ensure-environment")
     p.add_argument("--region", required=True)
@@ -377,7 +400,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.cmd == "price":
             out = price_for(args.flavor, args.volume_gb, public_ip=not args.no_public_ip)
         elif args.cmd == "pick-image":
-            out = pick_image(args.region)
+            out = pick_image(args.region, args.flavor)
         elif args.cmd == "ensure-environment":
             out = ensure_environment(args.region, args.name)
         elif args.cmd == "ensure-keypair":

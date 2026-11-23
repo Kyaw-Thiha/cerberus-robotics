@@ -168,6 +168,33 @@ def check_joint_order(
     return problems
 
 
+ARM_JOINT_NAMES: tuple[str, ...] = (*(f"joint{i}" for i in range(1, 7)), "joint7", "joint8")
+
+
+def check_joint_order_embodiment(actual: Sequence[str], embodiment: str = "go2",
+                                 contract: Mapping[str, Any] | None = None) -> list[str]:
+    """Joint-order check for a given embodiment.
+
+    ``go2``: the articulation *is* the 12 contract joints, so equality is required.
+    ``go2_arx5``: the body has 20 DoF; the 12 contract joints must still appear as an ordered subsequence (the
+    policy is fed by name in that order) and all 8 arm/gripper joints must exist. Extra joints are only a problem
+    when they sit between contract joints, because that would reorder positional data.
+    """
+    contract_order = contract_joint_order(contract)
+    if embodiment in (None, "", "go2"):
+        return check_joint_order(actual, contract)
+    problems: list[str] = []
+    missing = [name for name in contract_order if name not in actual]
+    if missing:
+        problems.append(f"missing contract joints: {missing}")
+    # The articulation's own order need not be the contract's (the fused URDF merges per leg); the env cfg pins
+    # the policy order by name with preserve_order=True. Presence is what this check can honestly verify here.
+    missing_arm = [name for name in ARM_JOINT_NAMES if name not in actual]
+    if missing_arm:
+        problems.append(f"missing arm/gripper joints: {missing_arm}")
+    return problems
+
+
 def assert_joint_order(
     actual: Sequence[str],
     contract: Mapping[str, Any] | None = None,
@@ -309,15 +336,18 @@ def build_report(
     stand_steps_expected: int = STAND_STEPS,
     contract: Mapping[str, Any] | None = None,
     pump: Callable[[], None] | None = None,
+    embodiment: str = "go2",
 ) -> AssertionReport:
     """Run every check the driver has data for; missing inputs are reported as skipped soft entries."""
     pump = pump or (lambda: None)
     contract = contract or load_contract()
     report = AssertionReport()
 
-    report.add("joint_order", not check_joint_order(joint_names, contract), {
+    joint_problems = check_joint_order_embodiment(joint_names, embodiment, contract)
+    report.add("joint_order", not joint_problems, {
         "actual": list(joint_names),
-        "problems": check_joint_order(joint_names, contract),
+        "embodiment": embodiment,
+        "problems": joint_problems,
     })
 
     terms = contract_terms(contract)

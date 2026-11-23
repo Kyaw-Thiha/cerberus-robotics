@@ -42,6 +42,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--steps", type=int, default=200, help="zero-command stand length (the assertion window)")
     parser.add_argument("--task", default=None, help="Isaac task id (default: the Cerberus rough Play task)")
+    parser.add_argument("--embodiment", default="go2", choices=["go2", "go2_arx5"],
+                        help="robot spawned in the scene; go2_arx5 is the fused Go2 + ARX5 (arm held stowed)")
     parser.add_argument("--checkpoint", default="policy/locomotion/checkpoints/go2_locomotion_ga_v1_candidate.pt")
     parser.add_argument("--scripted", action="store_true", help="after the stand, walk a seeded scripted path (metrics only)")
     parser.add_argument("--record-clip", dest="record_clip", action="store_true",
@@ -137,6 +139,7 @@ def run_assert_only(out_dir: Path) -> int:
         base_height_m=data["base_height_m"],
         stand_rows=data["stand_rows"],
         stand_steps_expected=int(data["stand_steps_expected"]),
+        embodiment=str((data.get("scene") or {}).get("embodiment") or "go2"),
     )
     if data.get("scan_report") is not None:
         report.soft["height_scan_flat_ground"] = data["scan_report"]
@@ -180,7 +183,7 @@ def run(args, app=None) -> int:
     from common.cerberus_eval.video_clips import ClipRecorder, metrics_filename
     from policy.locomotion.eval import scene_env as se
 
-    task = args.task or se.LOCO_TASK
+    task = args.task or se.task_for_embodiment(getattr(args, "embodiment", "go2"))
     out_dir = Path(args.out_dir) if args.out_dir else default_out_dir()
     out_dir.mkdir(parents=True, exist_ok=True)
     if args.resume:
@@ -293,7 +296,8 @@ def run(args, app=None) -> int:
             "fell_envs": torch.nonzero(fell).flatten().tolist(),
             "min_base_minus_foot": min_base_minus_foot,
             "scene": {"scene_id": args.scene, "usd_path": scene.get("usd_path"), "num_envs": n,
-                      "spawn_poses": spawns, "task": task, "checkpoint": args.checkpoint},
+                      "spawn_poses": spawns, "task": task, "checkpoint": args.checkpoint,
+                      "embodiment": getattr(args, "embodiment", "go2")},
         }
         (out_dir / "assert_inputs.json").write_text(json.dumps(inputs, default=str), encoding="utf-8")
 
@@ -359,6 +363,7 @@ def run(args, app=None) -> int:
             "sim_seconds": round(steps * path.dt, 3),
             "video_fps": args.video_fps,
             "video_resolution": list(resolution) if resolution else None,
+            "embodiment": getattr(args, "embodiment", "go2"),
             "wall_s": elapsed,
             "start_pose": start,
             "end_pose": [float(v) for v in poses[0].detach().cpu()] if poses is not None else None,

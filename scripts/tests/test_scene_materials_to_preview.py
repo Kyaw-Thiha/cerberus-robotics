@@ -110,3 +110,48 @@ def test_preview_wrapper_sublayers_layer_above_scene(tmp_path):
     text = (tmp_path / "scene_preview.usda").read_text()
     # the override layer must compose ABOVE the scene, or the MDL materials win again
     assert text.index("materials_preview.usda") < text.index("start_result_navigation.usd")
+
+
+def test_mdl_source_supplies_textures_and_colour(tmp_path):
+    """GRScenes material instances name their maps inside the MDL, not in the USD shader inputs."""
+    mats = tmp_path / "Materials"
+    (mats / "textures" / "f2f").mkdir(parents=True)
+    (mats / "textures" / "f2f" / "wall.jpg").write_bytes(b"jpeg")
+    (mats / "textures" / "f2f" / "wall_n.png").write_bytes(b"png")
+    (mats / "MI_wall.mdl").write_text(
+        'mdl 1.7;\nimport ::KooPbr::KooMtl;\n'
+        'export material MI_wall(*) = KooPbr::KooMtl(\n'
+        '    diffuse: KooPbr_maps::KooPbr_bitmap(1, 0.f, 0.f, 1.f, 1.f, true, false, true, false, 0.f, 0.f, 0.f, 0, '
+        'texture_2d("./textures/f2f/wall.jpg", ::tex::gamma_srgb, ""), 0.f, 1.f),\n'
+        '    texmap_bump: ::unpack_normal_map(tex::lookup_float4(texture_2d("./textures/f2f/wall_n.png", '
+        '::tex::gamma_linear), state::texture_coordinate(0))),\n'
+        '    reflect: color(0.4f, 0.3f, 0.25f));\n'
+    )
+    scene = _make_scene(tmp_path)
+    # re-point the synthetic material's MDL source at the instance above (the scene file lives beside Materials/)
+    from pxr import Usd, UsdShade
+
+    stage = Usd.Stage.Open(str(scene))
+    shader = UsdShade.Shader(stage.GetPrimAtPath("/World/Materials/M_Wall/mdl_surface"))
+    for name in ("BaseColorTexture", "NormalTexture", "BaseColor"):
+        shader.GetPrim().RemoveProperty(f"inputs:{name}")
+    shader.GetPrim().GetAttribute("info:mdl:sourceAsset").Set(
+        __import__("pxr").Sdf.AssetPath("Materials/MI_wall.mdl"))
+    stage.GetRootLayer().Save()
+
+    report = conv.build_layer(scene, tmp_path / "materials_preview.usda")
+    assert report["materials_with_diffuse_texture"] == 1
+    assert report["materials_with_normal_texture"] == 1
+    sample = report["samples"][0]
+    assert sample["textures"]["diffuse"].endswith("wall.jpg")
+    assert sample["colours"]["diffuse"] == pytest.approx([0.4, 0.3, 0.25])
+
+
+def test_mdl_helpers():
+    text = ('diffuse: KooPbr::KooPbr_bitmap(1, 0.f, texture_2d("./textures/a/floor.jpg", ::tex::gamma_srgb, ""), 0.f)\n'
+            'texmap_bump: texture_2d("./textures/a/floor_n.png", ::tex::gamma_linear)\n'
+            'reflect: color(0.2f, 0.5f, 0.1f);\n')
+    slots = conv.mdl_texture_slots(text)
+    assert slots["diffuse"].endswith("floor.jpg")
+    assert slots["normal"].endswith("floor_n.png")
+    assert conv.mdl_colour(text) == (0.2, 0.5, 0.1)

@@ -33,6 +33,43 @@ import re
 import sys
 from pathlib import Path
 
+_TEXTURE_2D = re.compile(r'texture_2d\(\s*"([^"]+)"')
+_COLOR_CALL = re.compile(r"reflect\s*:\s*color\(([^)]*)\)")
+_DIFFUSE_CALL = re.compile(r"diffuse\s*:\s*color\(([^)]*)\)")
+
+
+def mdl_texture_slots(text: str) -> dict[str, str]:
+    """Texture paths a material instance MDL names, classified by filename: normal / roughness / metallic / diffuse.
+
+    GRScenes material instances are `KooPbr::KooMtl(...)` calls that name their maps inside the MDL source
+    (`texture_2d("./textures/....jpg", ::tex::gamma_srgb, "")`), not as USD shader inputs, so the USD alone shows no
+    textures. Measured 2026-11-23: 523 `texture_2d` references across the 812 modules.
+    """
+    slots: dict[str, str] = {}
+    for path in _TEXTURE_2D.findall(text):
+        name = path.lower()
+        if any(tag in name for tag in ("_n.", "_normal", "normal_", "_bump")):
+            slot = "normal"
+        elif any(tag in name for tag in ("_m.", "_mask", "rough", "metal", "_orm", "_rma")):
+            slot = "masks"
+        else:
+            slot = "diffuse"
+        slots.setdefault(slot, path)
+    return slots
+
+
+def mdl_colour(text: str) -> tuple[float, float, float] | None:
+    """The constant colour a KooPbr instance names for `reflect` (UE4's base colour), if it names one."""
+    match = _COLOR_CALL.search(text) or _DIFFUSE_CALL.search(text)
+    if not match:
+        return None
+    parts = [p.strip().rstrip("fF") for p in match.group(1).split(",")]
+    try:
+        values = [float(v) for v in parts[:3]]
+    except ValueError:
+        return None
+    return tuple(values) if len(values) == 3 else None
+
 PREVIEW_ROOT = "/PreviewMaterials"
 LAYER_NAME = "materials_preview.usda"
 WRAPPER_NAME = "scene_preview_metric.usd"
@@ -151,7 +188,7 @@ def _mdl_attributes(shader) -> dict:
     return found
 
 
-def material_description(material_prim) -> dict:
+def material_description(material_prim, base_dir: Path = Path('.')) -> dict:
     """Everything the converter needs from one MDL material: textures, colours, roughness/metallic, source module."""
     from pxr import UsdShade
 
@@ -172,23 +209,51 @@ def material_description(material_prim) -> dict:
         merged.update(shader["inputs"])
     surfaces = [s for s in shaders if s["shader_id"] == "mdl:surface"] or shaders
 
-    return {
+    described = {
         "prim_path": str(material_prim.GetPath()),
         "shaders": shaders,
         "surface_sources": [s["path"] for s in surfaces],
-        "textures": _texture_candidates(merged, Path(".")),
+        "textures": _texture_candidates(merged, base_dir),
         "colours": _colour_constants(merged),
         "mdl_source": next((v["asset"] for k, v in merged.items()
                             if isinstance(v, dict) and "mdl" in k.lower() and v.get("asset")), None),
     }
+    _fill_from_mdl(described, base_dir)
+    return described
 
 
-def collect(stage) -> tuple[list[dict], dict[str, str]]:
+def _fill_from_mdl(item: dict, base_dir: Path) -> None:
+    """Fill missing textures/colours from the material's own MDL source (KooPbr instances name them there)."""
+    source = item.get("mdl_source")
+    if not source:
+        return
+    path = Path(str(source))
+    if not path.is_absolute():
+        path = base_dir / path
+    try:
+        text = path.read_text(errors="ignore")
+    except OSError:
+        item["mdl_read"] = "missing"
+        return
+    item["mdl_read"] = "ok"
+    slots = mdl_texture_slots(text)
+    for slot, rel in slots.items():
+        if slot in item["textures"]:
+            continue
+        candidate = (path.parent / rel).resolve()
+        item["textures"][slot] = {"input": "mdl", "path": str(candidate), "exists": candidate.exists()}
+    if "diffuse" not in item["colours"]:
+        colour = mdl_colour(text)
+        if colour is not None:
+            item["colours"]["diffuse"] = colour
+
+
+def collect(stage, base_dir: Path = Path(".")) -> tuple[list[dict], dict[str, str]]:
     """All MDL-backed materials plus (prim_path -> bound material path) for every binding relationship."""
     from pxr import UsdShade
 
     materials = [UsdShade.Material(prim) for prim in stage.Traverse() if prim.IsA(UsdShade.Material)]
-    described = [material_description(m.GetPrim()) for m in materials]
+    described = [material_description(m.GetPrim(), base_dir) for m in materials]
     bindings: dict[str, str] = {}
     for prim in stage.Traverse():
         for rel in prim.GetRelationships():
@@ -221,7 +286,7 @@ def build_layer(usd_path: Path, out_layer: Path, *, rebind: bool = True) -> dict
     if stage is None:
         raise RuntimeError(f"cannot open {usd_path}")
     usd_dir = usd_path.parent
-    described, bindings = collect(stage)
+    described, bindings = collect(stage, usd_dir)
     uv_primvar = _primvar_name(stage)
     mpu = float(UsdGeom.GetStageMetersPerUnit(stage))
 
@@ -355,7 +420,13 @@ def write_preview_wrapper(scene_usd: Path, layer: Path) -> Path:
     xform = UsdGeom.Xform.Define(wrapper, "/Scene")
     if abs(mpu - 1.0) > 1e-9:
         xform.AddScaleOp().Set(Gf.Vec3d(mpu, mpu, mpu))
-    xform.GetPrim().GetReferences().AddReference(f"./{preview.name}")
+    # Reference the scene's own default prim by name: the preview layer is a bare subLayers list and has no
+    # defaultPrim of its own, so `@file@<defaultPrim>` would not resolve.
+    default_prim = stage.GetDefaultPrim()
+    if default_prim and default_prim.IsValid():
+        xform.GetPrim().GetReferences().AddReference(f"./{preview.name}", default_prim.GetPath())
+    else:
+        xform.GetPrim().GetReferences().AddReference(f"./{preview.name}")
     wrapper.GetRootLayer().defaultPrim = "Scene"
     wrapper.Save()
     return out_path

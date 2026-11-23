@@ -11,7 +11,7 @@ Status legend: **done** (gated and shipped), **pending** (build in this session)
 | artifact | what it shows | what is simulated / ground truth / scripted | status |
 |---|---|---|---|
 | `mission_kinematic.mp4` (1920x1080, 30 fps, 4 s) | top-down map of the full household mission: navigate to the table, pick with scripted IK, navigate to the place surface, place | **kinematic simulation, scripted IK skills**: A* + pure pursuit on a unicycle (no physics, no slip, no falls) on the scene-1 occupancy grid; the arm solves IK waypoints; the robot/cube poses are the simulator's own state | done |
-| arm clips `ego_arm.mp4`, `chase_arm.mp4`, `closeup_arm.mp4`, `overview_arm.mp4` | the Go2 **with the ARX5** standing in the real GRScenes home while the arm reaches, turns the wrist and opens/closes the gripper | RTX render of the physics sim; the legs are driven by the frozen locomotion checkpoint, the arm by scripted joint targets; camera poses logged per frame and checked by the clip QA gate | pending (see notes) |
+| arm clips `ego_arm.mp4`, `chase_arm.mp4`, `closeup_arm.mp4`, `overview_arm.mp4` | the Go2 **with the ARX5** standing in the real GRScenes home while the arm reaches, turns the wrist and opens/closes the gripper | RTX render of the physics sim; the legs driven by a locomotion checkpoint, the arm by scripted joint targets; camera poses logged per frame and checked by the clip QA gate | **missing**: no camera launch survived on this host (see 'Rendering' below) |
 | `demo_scene1.mp4` (previous session) | 90 s of the legs-only robot walking a scripted path | **rejected**: the scene rendered as one flat colour (MDL materials unresolved) and the camera was fixed, not following | not shown |
 
 ## Scene look: what was wrong and what was fixed
@@ -21,6 +21,20 @@ run loads (`start_result_navigation.usd`): **3,282 MDL shader prims**, 5,013 ass
 `MDL_SYSTEM_PATH` empty -- because `run_session.sh` sets `CERBERUS_SKIP_MDL_PATH=1`. The flat colour is an
 unresolved MDL material, not a broken USD. The fix is to point Kit at the scene's `Materials` root (810 MDL files,
 including `KooPbr.mdl`, which 280 of them import) **before** the app launches.
+
+## Rendering: what did not work, and why
+
+Two independent problems, both evidenced in `docs/reports/first_scene_session.md`:
+
+1. **MDL materials do not compile.** The scene USD binds 3,282 MDL shader nodes and every referenced file exists,
+   but the renderer reports `MdlModule is NOT in the DB` and `USD_MDL: ... is Invalid` for 29 modules in one launch,
+   so each material falls back to a default colour -- the flat look. Setting `MDL_SYSTEM_PATH` (which
+   `run_session.sh` had been skipping) is necessary but not sufficient: the modules themselves fail to compile.
+2. **Camera/RTX launches do not survive.** 159 of 164 launch attempts failed (14-20 s), `carb.windowing-glfw` fails
+   headless, and the launches that reached the scene build exited 0 without their outputs. No clip from this host
+   passed the gate; nothing is claimed.
+
+The kinematic mission animation above is produced by matplotlib + ffmpeg, not by RTX, which is why it exists.
 
 ## Metrics
 

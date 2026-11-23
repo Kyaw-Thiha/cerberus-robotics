@@ -57,6 +57,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--chase-pitch", type=float, default=12.0)
     parser.add_argument("--ego-offset", default="0.30,0.0,0.08")
     parser.add_argument("--ego-pitch", type=float, default=17.0)
+    parser.add_argument("--dome-intensity", type=float, default=None,
+                        help="override the env dome light intensity (the scene carries its own lights)")
     parser.add_argument("--enable_cameras", action="store_true", default=True)
     parser.add_argument("--headless", action="store_true", default=True)
     parser.add_argument("--device", default="cuda:0")
@@ -194,6 +196,17 @@ def record(args) -> int:
     env, scene = se.build_loco_env(args.scene, [(x, y, yaw0, 0.0)], task=task, num_envs=1,
                                    episode_length_s=max(120.0, args.seconds + 30.0), seed=args.seed,
                                    with_cameras=False)
+    if args.dome_intensity is not None:
+        import omni.usd
+
+        stage = omni.usd.get_context().get_stage()
+        prim = stage.GetPrimAtPath("/World/skyLight")
+        if prim and prim.IsValid():
+            attr = prim.GetAttribute("inputs:intensity")
+            if attr:
+                attr.Set(float(args.dome_intensity))
+                print(f"[clip] dome intensity -> {args.dome_intensity}", flush=True)
+
     policy = se.load_policy(env, task=task, checkpoint=args.checkpoint)
     hook = se.VelocityCommandHook(env)
     device = env.unwrapped.device

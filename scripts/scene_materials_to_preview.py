@@ -356,6 +356,19 @@ def build_layer(usd_path: Path, out_layer: Path, *, rebind: bool = True) -> dict
             "colours": {k: list(v) for k, v in item["colours"].items()},
         })
 
+    deactivated = 0
+    if rebind:
+        # Deactivate the MDL material prims themselves. Re-binding alone leaves them in the stage, and the renderer
+        # then tries to compile every one of them (measured 2026-11-23: an `[MDLC:COMPILER] comp error` per material
+        # and minutes of stall before the first frame). With the geometry on UsdPreviewSurface they are dead weight.
+        for item in described:
+            prim = out.OverridePrim(item["prim_path"])
+            try:
+                prim.SetActive(False)
+                deactivated += 1
+            except Exception:  # noqa: BLE001, S112 - an older pxr without SetActive must not stop the conversion
+                continue
+
     rebound, unbound = 0, 0
     if rebind:
         for prim_path, material_path in bindings.items():
@@ -384,6 +397,7 @@ def build_layer(usd_path: Path, out_layer: Path, *, rebind: bool = True) -> dict
         "materials_with_normal_texture": sum(1 for m in report_materials if "normal" in m["textures"]),
         "bindings": len(bindings),
         "rebound": rebound,
+        "mdl_materials_deactivated": deactivated,
         "unbound": unbound,
         "uv_primvar": uv_primvar,
         "missing_texture_count": len(missing),

@@ -155,3 +155,14 @@ def test_mdl_helpers():
     assert slots["diffuse"].endswith("floor.jpg")
     assert slots["normal"].endswith("floor_n.png")
     assert conv.mdl_colour(text) == (0.2, 0.5, 0.1)
+
+
+def test_mdl_material_prims_are_deactivated(tmp_path):
+    """Re-binding alone leaves the MDL materials in the stage and the renderer compiles every one of them."""
+    scene = _make_scene(tmp_path)
+    report = conv.build_layer(scene, tmp_path / "materials_preview.usda")
+    assert report["mdl_materials_deactivated"] == 1
+    from pxr import Usd
+
+    stage = Usd.Stage.Open(str(tmp_path / "materials_preview.usda"))
+    assert not stage.GetPrimAtPath("/World/Materials/M_Wall").IsActive()

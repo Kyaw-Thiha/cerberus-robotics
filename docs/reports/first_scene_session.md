@@ -304,3 +304,33 @@ Bugs fixed in our code to get a 2-iteration training smoke to pass (each is a re
 (`A crash has occurred`, 14-15 s, exit -9) and occasional 36-80 s exit 1 runs; the crash reporter writes
 `/isaac-sim/kit/data/Kit/IsaacLab/3.0/*.dmp.zip`. Everything ran under `kit_retry` (relaunch until a start marker)
 and, for artifacts, under `run_until_complete.py` (relaunch until the outputs exist).
+
+### Arm locomotion retrain (P2c)
+
+| item | value |
+|---|---|
+| task | `Isaac-Velocity-Rough-Unitree-Go2-Arx5-Cerberus-v0` (new platform `go2_arx5`) |
+| recipe | 1500 iterations, 4096 envs, seed 42, same PPO agent cfg as the legs-only GA retrain |
+| result | completed, 1499/1500 iterations, **training time 3109 s (51.8 min)**, ~1.9-2.3 s/iteration |
+| checkpoint | `policy/locomotion/checkpoints/unitree_go2_rough/2026-11-23_08-49-43_go2_arx5_ga_v1/model_1499.pt` (6.9 MB), copied to `go2_arx5_locomotion_ga_v1_candidate.pt`; R2 `migration/session2/checkpoints/go2_arx5_ga_v1/` |
+| randomisation | arm joint offsets + payload mass **not applied**: both trip a PhysX device-side assert (see above); the arm is held stowed by its actuators |
+| started | on the 24th launch attempt of its wrapper (loader crashes) |
+
+The run restarted once by mistake: the wrapper looked for `model_1500.pt` while the runner numbers iterations
+0-based (`model_1499.pt`), so it treated the finished run as incomplete and relaunched. The relaunch was killed
+within a minute; the wrapper now accepts either name.
+
+### Rendering: what the host allowed
+
+Camera/RTX runs are the fragile part on this host class, and this session they did not start:
+
+| attempt | outcome |
+|---|---|
+| 6 scene-eval caches x 6-25 launches each, `scene_stills.py` (6 stills, MDL on) | 1 launch reached the scene build (149 s), then the process exited **0** with no stills; the rest died at 14-20 s |
+| same with MDL off | same pattern (149 s, then 0 units) |
+| `scene_clip.py` rig (EGO/CHASE/close-up) | never reached the rig: launches died at 3-20 s |
+| proven viewport recorder (`scene_eval.py --scripted --record-clip`) with the retrained checkpoint | pending at the time of writing; the app reached the renderer (9.8 GB VRAM) |
+
+The GLFW windowing plugin fails headless (`carb.windowing-glfw.plugin initialization failed`) and the RTX render
+delegate warns about fabric/streaming; both are consistent with the previous session's finding that camera runs are
+the fragile part. No clip from this session is claimed unless the clip QA gate passed it.

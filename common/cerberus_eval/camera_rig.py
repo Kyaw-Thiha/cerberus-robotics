@@ -292,9 +292,20 @@ class CameraRig:
             self._annotators[spec.name] = annotator
 
     def capture(self, name: str) -> np.ndarray:
-        """One RGB frame (H, W, 3) uint8; requires a render step after the camera moved."""
+        """One RGB frame (H, W, 3) uint8. Steps the Replicator orchestrator so the annotator has a frame.
+
+        `sim.render()` alone leaves the RGB annotator empty on Sim 6.2 (measured 2026-11-23: shape (0,)), so the
+        frame is requested through the orchestrator, which blocks until the render products have new data.
+        """
         self._ensure_products()
-        return rgb_from_annotator_data(self._annotators[name].get_data())
+        import omni.replicator.core as rep
+
+        rep.orchestrator.step(rt_subframes=1)
+        data = self._annotators[name].get_data()
+        if getattr(data, "size", None) == 0:
+            rep.orchestrator.step(rt_subframes=2)
+            data = self._annotators[name].get_data()
+        return rgb_from_annotator_data(data)
 
     def close(self) -> None:
         for rp in self._render_products.values():

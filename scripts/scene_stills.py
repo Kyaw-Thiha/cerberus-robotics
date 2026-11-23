@@ -96,9 +96,16 @@ def main(argv: list[str] | None = None) -> int:
         simulation_app.update()
 
     try:
-        return render(args, out_dir, width, height)
-    finally:
-        simulation_app.close()
+        rc = render(args, out_dir, width, height)
+    except Exception:  # noqa: BLE001 - SimulationApp.close() exits the process with code 0 and eats the traceback
+        import traceback
+
+        traceback.print_exc()
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(3)  # keep the traceback observable instead of a silent "clean" exit
+    simulation_app.close()
+    return rc
 
 
 def render(args, out_dir: Path, width: int, height: int) -> int:

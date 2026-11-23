@@ -43,6 +43,12 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--walk", action="store_true", help="drive the scripted velocity path")
     parser.add_argument("--arm-demo", action="store_true", help="play the arm reach/turn/grip script")
     parser.add_argument("--label", default="", help="label written into the clip JSON (e.g. policy not yet retrained)")
+    parser.add_argument("--start-state", default=None,
+                        help="resume from this state JSON (a segment's end state from an earlier launch)")
+    parser.add_argument("--end-state", default=None,
+                        help="write the robot state here when the segment finishes (needed to stitch segments)")
+    parser.add_argument("--start-step", type=int, default=0,
+                        help="global step offset: keeps the scripted path and the arm clock continuous across segments")
     parser.add_argument("--mdl", action="store_true")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--enable_cameras", action="store_true", default=True)
@@ -90,6 +96,44 @@ def arm_demo_targets(t: float, *, stowed: dict[str, float], span: float = 4.0) -
     return target
 
 
+# ---- segment state (crash-tolerant rendering) -------------------------------------------------------------------
+
+def capture_state(robot) -> dict:
+    """The robot state a later launch needs to continue exactly: root pose/velocity and every joint position/velocity."""
+    return {
+        "root_pos_w": [float(v) for v in robot.data.root_pos_w[0].detach().cpu().tolist()],
+        "root_quat_wxyz": [float(v) for v in robot.data.root_quat_w[0].detach().cpu().tolist()],
+        "root_lin_vel_w": [float(v) for v in robot.data.root_lin_vel_w[0].detach().cpu().tolist()],
+        "root_ang_vel_w": [float(v) for v in robot.data.root_ang_vel_w[0].detach().cpu().tolist()],
+        "joint_pos": [float(v) for v in robot.data.joint_pos[0].detach().cpu().tolist()],
+        "joint_vel": [float(v) for v in robot.data.joint_vel[0].detach().cpu().tolist()],
+    }
+
+
+def load_state(path: str | Path) -> dict:
+    import json
+
+    data = json.loads(Path(path).read_text())
+    for key in ("root_pos_w", "root_quat_wxyz", "joint_pos", "joint_vel"):
+        if key not in data:
+            raise ValueError(f"state file {path} has no {key}")
+    return data
+
+
+def apply_state(robot, state: dict, device) -> None:
+    """Write a captured state into the articulation (pose, velocity, joints) so the segment continues where it stopped."""
+    import torch
+
+    def t(values):
+        return torch.tensor([values], device=device, dtype=torch.float32)
+
+    root_pose = t(state["root_pos_w"] + state["root_quat_wxyz"])
+    robot.write_root_pose_to_sim(root_pose)
+    if "root_lin_vel_w" in state and "root_ang_vel_w" in state:
+        robot.write_root_velocity_to_sim(t(state["root_lin_vel_w"] + state["root_ang_vel_w"]))
+    robot.write_joint_state_to_sim(t(state["joint_pos"]), t(state["joint_vel"]))
+
+
 def main(argv: list[str] | None = None) -> int:
     args = parse_args(argv)
     if args.mdl:
@@ -105,9 +149,16 @@ def main(argv: list[str] | None = None) -> int:
     for _ in range(5):
         simulation_app.update()
     try:
-        return record(args)
-    finally:
-        simulation_app.close()
+        rc = record(args)
+    except Exception:  # noqa: BLE001 - SimulationApp.close() exits the process with code 0 and eats the traceback
+        import traceback
+
+        traceback.print_exc()
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(3)  # keep the traceback observable instead of a silent "clean" exit
+    simulation_app.close()
+    return rc
 
 
 def record(args) -> int:
@@ -141,11 +192,15 @@ def record(args) -> int:
     device = env.unwrapped.device
     robot = env.unwrapped.scene["robot"]
 
-    # settle, so the clip does not open on the spawn pose
+    # settle, so the clip does not open on the spawn pose; a resumed segment starts from the saved state instead
     zero = torch.zeros((1, 3), device=device)
-    for _ in range(90):
-        hook.apply(zero)
-        env.step(policy(se.fresh_observations(env)))
+    start_state = load_state(args.start_state) if args.start_state else None
+    if start_state is None:
+        for _ in range(90):
+            hook.apply(zero)
+            env.step(policy(se.fresh_observations(env)))
+    else:
+        apply_state(robot, start_state, device)
 
     robot_prim = (f"/World/envs/env_0/Robot/{GO2_ARX5_BASE_PRIM_REL_PATH}" if args.embodiment == "go2_arx5"
                   else "/World/envs/env_0/Robot/base")
@@ -192,9 +247,10 @@ def record(args) -> int:
     started = time.perf_counter()
     try:
         for step in range(steps):
-            sim_t = step / float(args.fps)
+            global_step = args.start_step + step
+            sim_t = global_step / float(args.fps)
             if path is not None:
-                idx = min(int(step * 1.0), len(path.commands) - 1)
+                idx = min(int(global_step * 1.0), len(path.commands) - 1)
                 cmd = torch.tensor([path.commands[idx]], device=device, dtype=torch.float32)
             else:
                 cmd = zero
@@ -220,6 +276,8 @@ def record(args) -> int:
         rig.close()
 
     log.write(poses_path)
+    if args.end_state:
+        write_json_atomic(Path(args.end_state), capture_state(robot))
     write_json_atomic(out_dir / f"{name}.json", {
         "clip": str(clip_path), "poses": str(poses_path), "camera": args.camera, "kind": spec.kind,
         "scene": args.scene, "embodiment": args.embodiment, "checkpoint": args.checkpoint,

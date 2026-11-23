@@ -121,6 +121,12 @@ four creations and one live instance, and they only touch instances they created
 - `docs/sensor_setup.md`, `docs/slam_design.md`, `docs/worlds_integration_spec.md`, `docs/adversarial_gate_method.md`: rigs, SLAM, scenes, the robustness gate
 - `docs/archive.md`: what was removed, which tag holds it, how to restore it
 
+## Showcase
+
+What the stack can show today, what each clip is (physics or kinematic, policy or scripted) and what is still
+missing: `docs/showcase.md`. Kit launch reliability on the current host class, with numbers and the relaunch rule:
+`docs/reports/kit_reliability.md`.
+
 ## Git workflow
 
 - Work that needs a GPU host runs on a short-lived branch cut from a fresh `origin/main` clone, so the host never drifts from `main`.

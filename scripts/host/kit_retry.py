@@ -30,7 +30,7 @@ CSV_PATH = REPO_ROOT / "outputs" / "launch_probe.csv"
 ATTEMPT_DIR = REPO_ROOT / "outputs" / "kit_launches"
 STDOUT_TAIL = REPO_ROOT / "outputs" / "kit_retry.log"
 
-STARTUP_MARKER = "Simulation App Startup Complete"
+STARTUP_MARKER = os.environ.get("CERBERUS_STARTED_MARKER", "Simulation App Startup Complete")
 # A launch is not cut off at a fixed 60 s: it may take up to five minutes to reach Startup Complete, and it is
 # declared hung early only when the log stops growing AND the CPU and GPU are idle (see classify_window).
 STARTUP_WINDOW_S = float(os.environ.get("CERBERUS_STARTUP_WINDOW_S", "300"))
@@ -40,7 +40,8 @@ GPU_IDLE_PCT = float(os.environ.get("CERBERUS_GPU_IDLE_PCT", "5"))
 MAX_LAUNCHES = int(os.environ.get("CERBERUS_MAX_LAUNCHES", "10"))
 POLL_S = float(os.environ.get("CERBERUS_LAUNCH_POLL_S", "0.5"))
 NO_START_EXIT = 75
-CRASH_PATTERNS = ("libcarb.tasking", "make_fcontext")
+CRASH_PATTERNS = ("libcarb.tasking", "make_fcontext", "A crash has occurred",
+                  "Crash report files for upload", "terminating this process with exit code 139")
 
 
 @dataclass
@@ -167,9 +168,19 @@ def launch_once(command: list[str], *, env: dict, attempt_log: Path, window_s: f
                 except ProcessLookupError:
                     pgid = proc.pid
                 cpu_pct, gpu_idle = cpu_probe(pgid), gpu_probe()
+            signature = crash_signature(text)
+            if signature and STARTUP_MARKER not in text:
+                # The known loader crash never recovers; waiting for the 5-minute cap just burns the budget.
+                _kill_tree(proc)
+                try:
+                    proc.wait(timeout=10)
+                except subprocess.TimeoutExpired:
+                    pass
+                text += _read(attempt_log)
+                return Attempt(False, proc.returncode, clock() - started_at, last_line(text), signature, "crash")
             if STARTUP_MARKER in text:
                 rc = proc.wait()  # started: no watchdog from here on
-                return Attempt(True, rc, clock() - started_at, last_line(text), crash_signature(text))
+                return Attempt(True, rc, clock() - started_at, last_line(text), signature)
             if rc is not None:
                 return Attempt(False, rc, elapsed, last_line(text), crash_signature(text))
             window = classify_window(elapsed_s=elapsed, silent_s=clock() - last_growth, cpu_pct=cpu_pct,

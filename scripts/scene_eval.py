@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import subprocess
 import sys
 import time
 from datetime import UTC, datetime
@@ -61,6 +62,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--no-resume", dest="resume", action="store_false", default=True,
                         help="rerun the stand test even if assertions.json already passed")
     parser.add_argument("--dry-run", action="store_true", help="resolve paths and print the plan; no Isaac")
+    parser.add_argument("--build-proxy-only", action="store_true", help=argparse.SUPPRESS)
+    parser.add_argument("--assert-only", action="store_true", help=argparse.SUPPRESS)
     return parser
 
 
@@ -73,6 +76,8 @@ def spawn_poses_for(scene_id: str, n: int) -> list[tuple[float, float, float, fl
     """The first ``n`` validated spawn poses from the admission manifest (never a silent (0, 0, 0) fallback)."""
     from common.cerberus_worlds.admission import spawn_pose
 
+    if scene_id in {"stock", "grscenes:stock"}:
+        return [(0.0, 0.0, 0.0, 0.0)] * n
     source = scene_id.split(":", 1)[0]
     poses = []
     for i in range(n):
@@ -93,13 +98,79 @@ def ensure_scan_proxy(scene: dict, floor_z: float) -> Path:
     return proxy
 
 
-def run(args) -> int:
+def prebuild_scan_proxy(args) -> None:
+    """Build ``scan_proxy.usd`` in a child interpreter BEFORE Kit starts.
+
+    The proxy build is ~13 s of pure ``pxr`` work. Doing it on the main thread after AppLauncher blocks Kit's loop,
+    and Kit exits with code 0 before the first gym.make (measured 2026-11-22 on 580.95.05).
+    """
+    import subprocess
+    import sys as _sys
+
+    from common.cerberus_worlds.registry import get_backend
+    from common.cerberus_worlds.scene_geometry import scan_proxy_path
+
+    if args.scene in {"stock", "grscenes:stock"}:
+        return
+    spawns = spawn_poses_for(args.scene, 1)
+    info = get_backend("plain_usd").load_scene(args.scene)
+    proxy = scan_proxy_path(info["usd_path"])
+    if proxy.is_file():
+        return
+    print(f"[scene_eval] pre-building height-scan proxy (child) floor_z={spawns[0][3]}", flush=True)
+    subprocess.run([_sys.executable, str(Path(__file__)), "--build-proxy-only", "--scene", args.scene],
+                   check=True)
+
+
+def run_assert_only(out_dir: Path) -> int:
+    """Build and write the contract assertions from the inputs the sim dumped (a child process, no Kit)."""
+    from common.cerberus_eval.scene_assertions import build_report
+
+    data = json.loads((out_dir / "assert_inputs.json").read_text(encoding="utf-8"))
+    report = build_report(
+        joint_names=data["joint_names"],
+        obs_dim=int(data["obs_dim"]),
+        obs_row=data["obs_row"],
+        command=data["command"],
+        scan=data["scan"],
+        base_height_m=data["base_height_m"],
+        stand_rows=data["stand_rows"],
+        stand_steps_expected=int(data["stand_steps_expected"]),
+    )
+    if data.get("scan_report") is not None:
+        report.soft["height_scan_flat_ground"] = data["scan_report"]
+    report.add("no_fall_during_stand", not data["fell_envs"], {"fell_envs": data["fell_envs"]})
+    if data.get("min_base_minus_foot") is None:
+        report.soft["robot_stands"] = "skipped (base/foot body names not found in the articulation)"
+    else:
+        report.add("robot_stands", data["min_base_minus_foot"] > 0.15,
+                   {"min_base_minus_foot_z": data["min_base_minus_foot"]})
+    report.soft["scene"] = data["scene"]
+    report.write(out_dir / "assertions.json")
+    print(f"[scene_eval] assertions: {'PASS' if report.passed else 'FAIL'} -> {out_dir / 'assertions.json'}")
+    for check in report.checks:
+        print(f"[scene_eval]   {check}")
+    return 0 if report.passed else 1
+
+
+def fresh_observations(env):
+    """Recompute the observation after a command write; ``get_observations()`` can return the cached reset value."""
+    return env.unwrapped.observation_manager.compute()
+
+
+def policy_observation(obs):
+    """The flat policy tensor from ``env.get_observations()`` (a TensorDict with a ``policy`` group on Lab 3.0)."""
+    try:
+        return obs["policy"]
+    except (KeyError, TypeError):
+        return obs
+
+
+def run(args, app=None) -> int:
     import torch
 
     from common.cerberus_eval.nav_metrics import write_run_json
     from common.cerberus_eval.scene_assertions import (
-        assert_all,
-        build_report,
         contract_terms,
         height_scan_report,
         term_offsets,
@@ -154,17 +225,24 @@ def run(args) -> int:
     )
     hook = se.VelocityCommandHook(env)
     policy = se.load_policy(env, task=task, checkpoint=args.checkpoint)
+    print("[scene_eval] POLICY_OK", flush=True)
     device = env.unwrapped.device
     n = env.unwrapped.num_envs
 
     joint_names = list(env.unwrapped.scene["robot"].joint_names)
+    print(f"[scene_eval] JOINTS {len(joint_names)}", flush=True)
     hook.zero()
-    obs = env.get_observations()
-    obs_row = obs[0].detach().cpu().tolist()
-    obs_dim = int(obs.shape[-1])
+    print("[scene_eval] HOOK_ZERO", flush=True)
+    obs = fresh_observations(env)
+    print("[scene_eval] OBS_OK", flush=True)
+    flat = policy_observation(obs)
+    obs_row = flat[0].detach().cpu().tolist()
+    obs_dim = int(flat.shape[-1])
     command = {"vx": 0.0, "vy": 0.0, "wz": 0.0}
 
+    print("[scene_eval] STAND_METRICS", flush=True)
     stand = se.stand_metrics(env)
+    print("[scene_eval] STAND_METRICS_OK", flush=True)
     base_height = None
     if stand is not None:
         base_height = float(stand["base_minus_foot_z"].mean().item())
@@ -178,49 +256,52 @@ def run(args) -> int:
     first_step_s = None
     for step_index in range(args.steps):
         hook.apply(zero)
-        obs = env.get_observations()
-        rows.append(obs[0].detach().cpu().tolist())
+        obs = fresh_observations(env)
+        rows.append(policy_observation(obs)[0].detach().cpu().tolist())
         t_step = time.perf_counter()
+        print(f"[scene_eval] STEP {step_index}", flush=True)
         obs, _, _, _ = env.step(policy(obs))
         if step_index == 0:
             first_step_s = time.perf_counter() - t_step
         fell |= se.read_fall_flags(env)
         if bool(fell.any()):
             break
+    print("[scene_eval] LOOP_DONE", flush=True)
+    print("[scene_eval] WRITE_TIMINGS", flush=True)
     if first_step_s is not None:
         se.write_timings(out_dir / "build_timings.json", {"first_step_s": first_step_s})
+    print("[scene_eval] FINAL_STAND", flush=True)
     final_stand = se.stand_metrics(env)
+    print("[scene_eval] FINAL_STAND_OK", flush=True)
     min_base_minus_foot = None
     if final_stand is not None:
         min_base_minus_foot = float(final_stand["base_minus_foot_z"].min().item())
 
-    report = build_report(
-        joint_names=joint_names,
-        obs_dim=obs_dim,
-        obs_row=obs_row,
-        command=command,
-        scan=scan,
-        base_height_m=base_height,
-        stand_rows=rows,
-        stand_steps_expected=args.steps,
-    )
-    if scan_report is not None:
-        report.soft["height_scan_flat_ground"] = scan_report
-    report.add("no_fall_during_stand", not bool(fell.any()), {"fell_envs": torch.nonzero(fell).flatten().tolist()})
-    if min_base_minus_foot is None:
-        report.soft["robot_stands"] = "skipped (base/foot body names not found in the articulation)"
-    else:
-        report.add("robot_stands", min_base_minus_foot > 0.15, {"min_base_minus_foot_z": min_base_minus_foot})
-    report.soft["scene"] = {"scene_id": args.scene, "usd_path": scene.get("usd_path"), "num_envs": n,
-                            "spawn_poses": spawns, "task": task, "checkpoint": args.checkpoint}
-    report.write(out_dir / "assertions.json")
-    print(f"[scene_eval] assertions: {'PASS' if report.passed else 'FAIL'} -> {out_dir / 'assertions.json'}")
-    for check in report.checks:
-        print(f"[scene_eval]   {check}")
+    # Kit's native layer exits the process when the pure-Python report runs on the app thread. Dump the inputs and
+    # build the report in a child interpreter instead; no assertion code ever runs inside the sim process.
+    inputs = {
+        "joint_names": joint_names,
+        "obs_dim": obs_dim,
+        "obs_row": obs_row,
+        "command": command,
+        "scan": scan,
+        "base_height_m": base_height,
+        "stand_rows": rows,
+        "stand_steps_expected": args.steps,
+        "scan_report": scan_report,
+        "fell_envs": torch.nonzero(fell).flatten().tolist(),
+        "min_base_minus_foot": min_base_minus_foot,
+        "scene": {"scene_id": args.scene, "usd_path": scene.get("usd_path"), "num_envs": n,
+                  "spawn_poses": spawns, "task": task, "checkpoint": args.checkpoint},
+    }
+    (out_dir / "assert_inputs.json").write_text(json.dumps(inputs, default=str), encoding="utf-8")
+    assert_rc = subprocess.run([sys.executable, str(Path(__file__)), "--assert-only", "--out-dir", str(out_dir)],
+                               check=False).returncode
+    assertions_passed = assert_rc == 0
 
     # --- optional scripted path (command hook + policy + video helper) --------------------------------------
-    summary: dict = {"assertions_passed": report.passed, "stand_steps": len(rows)}
-    if args.scripted and report.passed:
+    summary: dict = {"assertions_passed": assertions_passed, "stand_steps": len(rows)}
+    if args.scripted and assertions_passed:
         start = (spawns[0][0], spawns[0][1], spawns[0][2])
         from common.cerberus_eval.scripted_path import demo_path
 
@@ -268,10 +349,8 @@ def run(args) -> int:
         print(f"[scene_eval] scripted path: {json.dumps(record, default=str)}")
 
     (out_dir / "summary.json").write_text(json.dumps(summary, indent=2, default=str) + "\n", encoding="utf-8")
-    try:
-        assert_all(report)
-    except AssertionError as e:
-        print(f"[scene_eval] FAIL: {e}", file=sys.stderr)
+    if not assertions_passed:
+        print("[scene_eval] FAIL: see assertions.json", file=sys.stderr)
         return 1
     return 0
 
@@ -279,12 +358,25 @@ def run(args) -> int:
 def main(argv: list[str] | None = None) -> int:
     argv = list(sys.argv[1:] if argv is None else argv)
     dry = "--dry-run" in argv
+    proxy_only = "--build-proxy-only" in argv
+    assert_only = "--assert-only" in argv
     parser = build_parser()
-    if not dry:
+    if not dry and not proxy_only and not assert_only:
         from common.cerberus_compat.launcher import add_launcher_args
 
         add_launcher_args(parser)
     args = parser.parse_args(argv)
+
+    if getattr(args, "assert_only", False):
+        return run_assert_only(Path(args.out_dir) if args.out_dir else default_out_dir())
+
+    if getattr(args, "build_proxy_only", False):
+        spawns = spawn_poses_for(args.scene, 1)
+        from common.cerberus_worlds.registry import get_backend
+
+        scene = get_backend("plain_usd").load_scene(args.scene)
+        print(ensure_scan_proxy(scene, spawns[0][3]))
+        return 0
 
     if dry:
         spawns = spawn_poses_for(args.scene, args.num_envs)
@@ -298,6 +390,8 @@ def main(argv: list[str] | None = None) -> int:
         }, indent=2))
         return 0
 
+    prebuild_scan_proxy(args)
+
     if getattr(args, "record_clip", False):
         args.enable_cameras = True  # the launcher only creates a capture-capable visualizer with this set
     # MDL_SYSTEM_PATH must be set BEFORE the app launches; the registry is pure python, so no Isaac import here.
@@ -309,8 +403,12 @@ def main(argv: list[str] | None = None) -> int:
 
     app_launcher = AppLauncher(args)
     simulation_app = app_launcher.app
+    # Kit shuts itself down if the app loop is never driven; a few updates right after launch settle it. Keep this
+    # short: each update can block until a frame, so a long loop here delays the build by minutes.
+    for _ in range(5):
+        simulation_app.update()
     try:
-        return run(args)
+        return run(args, simulation_app)
     finally:
         simulation_app.close()
 

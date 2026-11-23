@@ -68,18 +68,21 @@ commands:
 joints:
   # Articulation order in training (joint_ordering: null -> Isaac preserves asset order); the ROS
   # side must map by name, never by position.
+  # Isaac Lab preserves the ASSET order (preserve_order: false, joint_names: ".*"): all hips, then all
+  # thighs, then all calves. Confirmed live on 2026-11-23 (scene-1, 580.95.05/595.58.03): the articulation
+  # reports FL/FR/RL/RR hip, then thigh, then calf. The earlier per-leg transcription was wrong.
   order:
     - FL_hip_joint
-    - FL_thigh_joint
-    - FL_calf_joint
     - FR_hip_joint
-    - FR_thigh_joint
-    - FR_calf_joint
     - RL_hip_joint
-    - RL_thigh_joint
-    - RL_calf_joint
     - RR_hip_joint
+    - FL_thigh_joint
+    - FR_thigh_joint
+    - RL_thigh_joint
     - RR_thigh_joint
+    - FL_calf_joint
+    - FR_calf_joint
+    - RL_calf_joint
     - RR_calf_joint
   default_joint_pos_rad:
     FL_hip_joint: 0.1

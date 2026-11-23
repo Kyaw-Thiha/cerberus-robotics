@@ -23,7 +23,7 @@ from __future__ import annotations
 
 import json
 import math
-from collections.abc import Iterable, Mapping, Sequence
+from collections.abc import Callable, Iterable, Mapping, Sequence
 from dataclasses import asdict, dataclass, field
 from pathlib import Path
 from typing import Any
@@ -308,8 +308,10 @@ def build_report(
     stand_rows: Sequence[Sequence[float]] | None = None,
     stand_steps_expected: int = STAND_STEPS,
     contract: Mapping[str, Any] | None = None,
+    pump: Callable[[], None] | None = None,
 ) -> AssertionReport:
     """Run every check the driver has data for; missing inputs are reported as skipped soft entries."""
+    pump = pump or (lambda: None)
     contract = contract or load_contract()
     report = AssertionReport()
 

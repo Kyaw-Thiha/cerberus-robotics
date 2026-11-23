@@ -4,33 +4,34 @@ go2:
   # params and mirrored in common/cerberus_policies/contracts/heightscan_ppo_v1.yaml (a test
   # keeps the two in sync). The old FR-first list was the URDF order, which is NOT what the
   # policy was trained on -- joint values are remapped by name, never by position.
+  # Asset order (Isaac Lab preserve_order: false), confirmed live 2026-11-23.
   joint_names:
     - FL_hip_joint
-    - FL_thigh_joint
-    - FL_calf_joint
     - FR_hip_joint
-    - FR_thigh_joint
-    - FR_calf_joint
     - RL_hip_joint
-    - RL_thigh_joint
-    - RL_calf_joint
     - RR_hip_joint
+    - FL_thigh_joint
+    - FR_thigh_joint
+    - RL_thigh_joint
     - RR_thigh_joint
+    - FL_calf_joint
+    - FR_calf_joint
+    - RL_calf_joint
     - RR_calf_joint
   # Default joint angles from the same saved params (env init_state.joint_pos patterns).
   # One value per entry in joint_names, same order.
   default_joint_pos:
     - 0.1
-    - 0.8
-    - -1.5
     - -0.1
-    - 0.8
-    - -1.5
     - 0.1
+    - -0.1
+    - 0.8
+    - 0.8
+    - 1.0
     - 1.0
     - -1.5
-    - -0.1
-    - 1.0
+    - -1.5
+    - -1.5
     - -1.5
   # sensor_requirements: rig sensors this mode needs (same field as
   # AlgorithmCfg's) -- fails launch if missing. height_scan doesn't count:

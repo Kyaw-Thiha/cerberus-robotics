@@ -64,6 +64,8 @@ cerberus_load_env "$ENV_FILE" || cerberus_say "no credentials file ($ENV_FILE); 
 export CERBERUS_ON_POD=1   # scene assets are host-only, never a laptop checkout (docs/worlds.md)
 export CERBERUS_ALLOW_BAD_DRIVER_RENDER="${CERBERUS_ALLOW_BAD_DRIVER_RENDER:-1}"
 export CERBERUS_SKIP_MDL_PATH="${CERBERUS_SKIP_MDL_PATH:-1}"
+# This Lab build does not print "Simulation App Startup Complete"; the env build is the real start marker.
+export CERBERUS_STARTED_MARKER="${CERBERUS_STARTED_MARKER:-[scene_env] build timings}"
 cerberus_say "scene $SCENE, stages $STAGES, out $OUT_DIR"
 
 if [[ $SKIP_GATE -eq 0 ]]; then
@@ -125,6 +127,8 @@ if [[ -n "$INTERNAL_STAGE" ]]; then
     export CERBERUS_ON_POD=1
     export CERBERUS_ALLOW_BAD_DRIVER_RENDER="${CERBERUS_ALLOW_BAD_DRIVER_RENDER:-1}"
 export CERBERUS_SKIP_MDL_PATH="${CERBERUS_SKIP_MDL_PATH:-1}"
+# This Lab build does not print "Simulation App Startup Complete"; the env build is the real start marker.
+export CERBERUS_STARTED_MARKER="${CERBERUS_STARTED_MARKER:-[scene_env] build timings}"
     "stage_$INTERNAL_STAGE"
     exit $?
 fi

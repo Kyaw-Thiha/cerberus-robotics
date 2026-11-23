@@ -19,6 +19,8 @@ cerberus_defaults() {
     DATA_DIR="${CERBERUS_DATA_DIR:-$HOME/cerberus-data}"
     RESULTS_DIR="${CERBERUS_RESULTS_DIR:-$HOME/cerberus-results}"
     SCENES_DIR="${CERBERUS_SCENES_DIR:-$DATA_DIR/scenes/grscenes/home}"
+    # discovery expects <root>/<source>/.../scenes/<id>; the fetch destination is the mirrored home
+    export CERBERUS_SCENES_DIR="${CERBERUS_SCENES_ROOT:-$DATA_DIR/scenes}"
     ISAACLAB_PATH="${ISAACLAB_PATH:-/workspace/isaaclab}"
     LAB="$ISAACLAB_PATH/isaaclab.sh"
     # Isaac's interpreter has isaaclab/rsl-rl/torch; the system python3 has none of them.

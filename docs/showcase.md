@@ -1,0 +1,45 @@
+# Showcase
+
+What this repository can show today, what each artifact actually is, and what is missing. Every clip named here is
+a real render of a real run; the label says whether it is a policy driving the robot or scripted motion, and whether
+the scene's own materials are on.
+
+Status legend: **done** (gated and shipped), **pending** (build in this session), **missing** (not produced; why).
+
+## Artifacts
+
+| artifact | what it shows | what is simulated / ground truth / scripted | status |
+|---|---|---|---|
+| `mission_kinematic.mp4` (1920x1080, 30 fps, 4 s) | top-down map of the full household mission: navigate to the table, pick with scripted IK, navigate to the place surface, place | **kinematic simulation, scripted IK skills**: A* + pure pursuit on a unicycle (no physics, no slip, no falls) on the scene-1 occupancy grid; the arm solves IK waypoints; the robot/cube poses are the simulator's own state | done |
+| arm clips `ego_arm.mp4`, `chase_arm.mp4`, `closeup_arm.mp4`, `overview_arm.mp4` | the Go2 **with the ARX5** standing in the real GRScenes home while the arm reaches, turns the wrist and opens/closes the gripper | RTX render of the physics sim; the legs are driven by the frozen locomotion checkpoint, the arm by scripted joint targets; camera poses logged per frame and checked by the clip QA gate | pending (see notes) |
+| `demo_scene1.mp4` (previous session) | 90 s of the legs-only robot walking a scripted path | **rejected**: the scene rendered as one flat colour (MDL materials unresolved) and the camera was fixed, not following | not shown |
+
+## Scene look: what was wrong and what was fixed
+
+The previous session's demo rendered the whole home as a single flat red-orange. Measured here, on the scene USD the
+run loads (`start_result_navigation.usd`): **3,282 MDL shader prims**, 5,013 asset inputs, **0 missing files**, and
+`MDL_SYSTEM_PATH` empty -- because `run_session.sh` sets `CERBERUS_SKIP_MDL_PATH=1`. The flat colour is an
+unresolved MDL material, not a broken USD. The fix is to point Kit at the scene's `Materials` root (810 MDL files,
+including `KooPbr.mdl`, which 280 of them import) **before** the app launches.
+
+## Metrics
+
+| measurement | value | kind |
+|---|---|---|
+| kinematic mission, N=10 seeded trials, real scene-1 grid | 4/10 success; failure modes: navigation to table 1, navigation to place 2, place unreachable 2, pick unreachable 1 | kinematic upper bound with a scripted arm |
+| navigation, kinematic, real grid (previous session) | 10/10, SPL 1.0, 5.62 m mean path | kinematic upper bound, unicycle |
+| arm locomotion retrain | see `docs/reports/first_scene_session.md` | PPO, 4096 envs, seed 42 |
+
+## What is missing, and why
+
+- **Physics navigation and the physics household mission**: the host class crashes Kit's loader on most launches and
+  exits 0 after long sim blocks; see `docs/reports/kit_reliability.md` and `docs/reports/kit_crash_report.md`.
+- **A hero clip with the retrained policy**: pending the retrain's evaluation.
+- **SLAM and JEPLO**: see their rows in `docs/reports/first_scene_session.md`.
+
+## Credits
+
+- **GRScenes-100** home scenes: CC BY-NC-SA 4.0, non-commercial use. Dataset: <https://github.com/OpenRobotLab/GRScenes>
+- **Isaac Sim / Isaac Lab** (NVIDIA) for the simulator and the RL stack.
+- **JEPLO** (ASIG-X) is referenced as the *authors' demo with their released checkpoint*, not as our pipeline; it is
+  GPLv3 and lives outside this repository.

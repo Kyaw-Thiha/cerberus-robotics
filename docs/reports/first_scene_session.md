@@ -248,3 +248,59 @@ The in-loop metrics writer is implemented and unit-tested; it will produce the J
 scripted block.
 
 Final spend: about **5.95 USD of 18**. No VMs, no timers, no secret files, no sleep inhibitor.
+
+## 2026-11-23 session 2: arm first (Go2 + ARX5)
+
+Session 2 ran on a fresh Hyperstack L40 (`cerberus-scene2`, id 1177066, 825 GB, 1.0866 USD/h) with the same
+`cerberus-remote-v6` image and driver **595.58.03**. Two host-level facts cost time and are worth recording:
+
+- The R595 image (`Ubuntu Server 24.04 LTS R595 CUDA 13.2 with Docker`) is now **hard-restricted to B300-SXM**
+  flavours; `pick-image` had to learn to skip flavour-restricted images (patched, tested) and the VM was created
+  from the **R570** image instead.
+- After purging the image's driver, **nouveau had the GPU** (`NVRM: GPU ... is already bound to nouveau`); the
+  driver only worked after blacklisting nouveau and rebuilding the initramfs. One later `Xid 43` left torch unable
+  to see the GPU (`RuntimeError: No CUDA GPUs are available`) until a reboot.
+
+### Look: the flat red-orange is an unresolved MDL material
+
+`scripts/inspect_scene_materials.py` (pxr only, no Kit) over the three scene variants:
+
+| variant | prims | materials | MDL shader nodes | asset inputs | missing files |
+|---|---|---|---|---|---|
+| `start_result_navigation.usd` | 13,754 | 3,293 | 3,072 | 4,696 | 0 |
+| `start_result_raw.usd` | 14,724 | 3,507 | 3,282 | 5,013 | 0 |
+| `start_result_interaction.usd` | 14,847 | 3,507 | 3,282 | 5,013 | 0 |
+
+Every variant is MDL-based (`info:mdl:sourceAsset = Materials/DayMaterial.mdl`, resolved on disk), and the Materials
+root holds 810 `.mdl` files including `KooPbr.mdl`. `MDL_SYSTEM_PATH` was empty because `run_session.sh` exports
+`CERBERUS_SKIP_MDL_PATH=1` (a workaround from 2026-11-22, when pointing Kit at the 810-file folder crashed it at
+startup). So the previous demo clip's flat colour is an unresolved material, not a bad USD, and the fix is the path
+plus the UE4 modules, set before AppLauncher.
+
+### Arm embodiment (P2a)
+
+New platform `policy/locomotion/core/platforms/go2_arx5/`:
+
+- the fused 20-DoF body (`GO2_ARX5_CFG`) with the policy pinned to the **12 leg joints by name** in contract order
+  (`preserve_order=True`): the fused USD's own order is per leg (FR, FL, RR, RL) because it comes from the merged
+  URDF, so positional data would otherwise be silently permuted against the 235-D contract;
+- the arm held at the stowed pose by its own implicit PD actuators, outside the 12-D action vector;
+- two randomisation events (per-episode arm joint offsets, payload mass) implemented and **blocked**: they trip a
+  PhysX device-side assert at the reset/startup event on this stack. Three hypotheses were tried (absolute vs added
+  mass, `root_physx_view` vs `data.body_mass`, inertia kept consistent). The retrain runs with
+  `CERBERUS_ARM_EVENTS=0`; the arm is still held stowed, which is what the policy contract needs.
+
+Bugs fixed in our code to get a 2-iteration training smoke to pass (each is a real defect, not tuning):
+
+1. observation/action `asset_cfg` must pin the contract joint order (`preserve_order`) and be a fresh object per
+   term (Isaac Lab resolves `joint_ids` in place);
+2. `env_ids` reaches an event as `None`, a slice or a tensor;
+3. `default_joint_pos.dtype` is a `type`, not a `torch.dtype` (`new_tensor` instead);
+4. `train.py` read `args_cli.adversarial_env`, which its own parser never defines.
+
+### Kit launch reliability
+
+163 launch attempts this session: **159 LAUNCH_FAIL, 4 STARTED** (2.5 %). Failures are the loader crash
+(`A crash has occurred`, 14-15 s, exit -9) and occasional 36-80 s exit 1 runs; the crash reporter writes
+`/isaac-sim/kit/data/Kit/IsaacLab/3.0/*.dmp.zip`. Everything ran under `kit_retry` (relaunch until a start marker)
+and, for artifacts, under `run_until_complete.py` (relaunch until the outputs exist).

@@ -156,6 +156,26 @@ def focal_length_for(hfov_deg: float, horizontal_aperture_mm: float = 20.955) ->
     return (horizontal_aperture_mm / 2.0) / math.tan(math.radians(hfov_deg) / 2.0)
 
 
+def _current_stage():
+    """The open USD stage: ``omni.usd``'s context when Kit is running, ``pxr.Usd``'s context otherwise.
+
+    ``pxr.Usd.GetContext`` does not exist in the USD build that ships with Isaac Sim 6.2 (measured 2026-11-23:
+    ``AttributeError: module 'pxr.Usd' has no attribute 'GetContext'``), and importing ``pxr`` before ``omni.usd``
+    breaks the Kit context anyway, so ask omni.usd first.
+    """
+    try:
+        import omni.usd
+
+        stage = omni.usd.get_context().get_stage()
+        if stage is not None:
+            return stage
+    except (ImportError, AttributeError):
+        pass
+    from pxr import Usd
+
+    return Usd.GetContext().GetStage()
+
+
 class CameraRig:
     """Creates the camera prims, keeps the chase camera behind the robot, and captures RGB frames.
 
@@ -167,7 +187,7 @@ class CameraRig:
         from pxr import Gf, Usd, UsdGeom
 
         self._Usd, self._UsdGeom, self._Gf = Usd, UsdGeom, Gf
-        self.stage = stage or Usd.GetContext().GetStage()
+        self.stage = stage or _current_stage()
         self.robot_prim_path = robot_prim_path
         self.specs = {spec.name: spec for spec in specs}
         self.paths: dict[str, str] = {}

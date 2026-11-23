@@ -121,8 +121,9 @@ def render(args, out_dir: Path, width: int, height: int) -> int:
                                   seed=args.seed, with_cameras=False)
     if args.dome_intensity is not None:
         light_prim = "/World/skyLight"
-        from pxr import Usd
-        stage = Usd.GetContext().GetStage()
+        import omni.usd
+
+        stage = omni.usd.get_context().get_stage()
         prim = stage.GetPrimAtPath(light_prim)
         if prim and prim.IsValid():
             attr = prim.GetAttribute("inputs:intensity")

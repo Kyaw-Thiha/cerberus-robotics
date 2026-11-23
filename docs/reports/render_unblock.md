@@ -45,7 +45,24 @@ above the original scene. The dataset itself is opened read-only.
 `CERBERUS_SCENE_USD_OVERRIDE` makes the sim load that wrapper; it is honoured inside
 `common/cerberus_worlds/arena_assets.sim_usd_path` (tested).
 
-_(results of the still runs are appended below as they finish)_
+### Accepted stills (the first that pass every check)
+
+| still | mean luminance | clipped | hue bins >= 5% | verdict |
+|---|---|---|---|---|
+| `figures/render_unblock_ego.png` (EGO, 1920x1080) | 157.8 | 0.1% | 4 | **PASS** |
+| `figures/render_unblock_chase.png` (CHASE, 1920x1080) | 147.2 | 0.1% | 6 | **PASS** |
+
+What they show (opened and described, not inferred): the EGO still looks along an L-shaped white sofa with two
+cushions into an open kitchen (cabinets, range hood, oven, fridge), with a coffee table, a framed picture and a
+glossy floor carrying the scene's own rect-light speculars; the robot's own shoulder still fills the right edge of
+the EGO frame, so that offset is not final. The CHASE still is the wide look: the full living area and kitchen
+(sink, faucet, kettle, microwave, fridge), a dining table with four chairs, a hallway shoe rack with shoes, wall
+art, and the robot's arm at the bottom centre. Neither is "flat colour" and neither is the scene's original MDL
+look: the textures are the dataset's own files (the MDL sources name them) rendered through UsdPreviewSurface.
+
+Settings recorded for every render: dome intensity 300, scene lights on, spawn `-3.75,0.73,0.0`,
+EGO offset `0.38,0,0.30` pitch 14, CHASE distance 1.3 / height 1.35 / pitch 22 for stills and
+1.15 / 1.05 / 15 for clips.
 
 ## The host state after a crash storm (measured 2026-11-23)
 

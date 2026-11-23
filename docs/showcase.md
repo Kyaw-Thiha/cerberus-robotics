@@ -12,6 +12,7 @@ Status legend: **done** (gated and shipped), **pending** (build in this session)
 |---|---|---|---|
 | `mission_kinematic.mp4` (1920x1080, 30 fps, 4 s) | top-down map of the full household mission: navigate to the table, pick with scripted IK, navigate to the place surface, place | **kinematic simulation, scripted IK skills**: A* + pure pursuit on a unicycle (no physics, no slip, no falls) on the scene-1 occupancy grid; the arm solves IK waypoints; the robot/cube poses are the simulator's own state | done |
 | arm clips `ego_arm.mp4`, `chase_arm.mp4`, `closeup_arm.mp4`, `overview_arm.mp4` | the Go2 **with the ARX5** standing in the real GRScenes home while the arm reaches, turns the wrist and opens/closes the gripper | RTX render of the physics sim; the legs driven by a locomotion checkpoint, the arm by scripted joint targets; camera poses logged per frame and checked by the clip QA gate | **missing**: no camera launch survived on this host (see 'Rendering' below) |
+| `walking_30s.mp4` (30 s, 1280x720, 20 fps) | **JEPLO authors' demo**: their released checkpoint walking the Go2 in their own MuJoCo sim-to-sim loop, headless | their simulator (`unitree_mujoco` python route) and their checkpoint; depth comes from a port of their publisher, inference on CUDA EP (not TensorRT); **not our pipeline, not our scene**; the clip-QA still checks fail its hue diversity because MuJoCo's grid is grey (media checks pass) | done (labelled: authors' demo) |
 | `demo_scene1.mp4` (previous session) | 90 s of the legs-only robot walking a scripted path | **rejected**: the scene rendered as one flat colour (MDL materials unresolved) and the camera was fixed, not following | not shown |
 
 ## Scene look: what was wrong and what was fixed
@@ -49,7 +50,9 @@ The kinematic mission animation above is produced by matplotlib + ffmpeg, not by
 - **Physics navigation and the physics household mission**: the host class crashes Kit's loader on most launches and
   exits 0 after long sim blocks; see `docs/reports/kit_reliability.md` and `docs/reports/kit_crash_report.md`.
 - **A hero clip with the retrained policy**: pending the retrain's evaluation.
-- **SLAM and JEPLO**: see their rows in `docs/reports/first_scene_session.md`.
+- **SLAM**: FAST-LIO2 / ORB-SLAM3 had no time box in either session; the rosbags and the docker recipes are untouched.
+- **JEPLO**: ran (attempt 2) in the authors' own MuJoCo demo; see `docs/reports/jeplo_spike.md`. It is not integrated:
+  adapting it needs their sensor simulation re-implemented on our stack (3-4 weeks, their estimate in that report).
 
 ## Credits
 

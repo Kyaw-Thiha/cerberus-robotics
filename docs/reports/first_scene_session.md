@@ -334,3 +334,27 @@ Camera/RTX runs are the fragile part on this host class, and this session they d
 The GLFW windowing plugin fails headless (`carb.windowing-glfw.plugin initialization failed`) and the RTX render
 delegate warns about fabric/streaming; both are consistent with the previous session's finding that camera runs are
 the fragile part. No clip from this session is claimed unless the clip QA gate passed it.
+
+## 2026-11-24 session 3: the render unblock (RTX stills and clips of the ARM robot)
+
+The hard requirement was a high-fidelity RTX video of the Go2 + ARX5 in a real GRScenes home. It now exists, and the
+route is documented in `docs/reports/render_unblock.md`. The four defects that had blocked it, none of which was in
+the scene data:
+
+1. **Materials.** Every material binds an MDL shader (KooPbr) whose maps are named inside the `.mdl` source, not in
+   the USD shader inputs. `scripts/scene_materials_to_preview.py` reads those sources, rebuilds each material as
+   `UsdPreviewSurface` with the same texture files (1,678 diffuse / 2,866 normal maps on this scene, 3,847 bindings
+   rebound, 0 missing files) and **deactivates the MDL prims** -- with them active the renderer compiled all 3,293
+   modules (one `[MDLC:COMPILER] comp error` each) and stalled the scene build.
+2. **Lighting.** The scene carries 137 of its own lights; adding the locomotion env's 2,000-intensity dome blew the
+   room out to white. Dome 300 keeps the scene's own lighting.
+3. **Capture.** `rep.orchestrator.step(rt_subframes=1)` cost **15.0 s per 720p frame** in this scene; `sim.render()`
+   + `app.update()` + `annotator.get_data()` returns the same frame in **0.11 s** (measured, `time_probe` runs on the
+   VM). A 15 s clip went from "hours" to 4 minutes.
+4. **Camera poses.** On Isaac Lab 3.0 the articulation lives in Fabric and the USD xform is never refreshed, so the
+   chase camera stayed parked at its first placement and the pose log never moved. The rig is now driven and logged
+   from the physics state (`robot.data.root_pos_w/root_quat_w`).
+
+Two stills pass every still check and are shipped as figures (`figures/render_unblock_ego.png`,
+`figures/render_unblock_chase.png`): mean luminance 157.8 / 147.2, clipped 0.1 %, hue bins 4 / 6.
+Clips are in `~/cerberus-results/2026-11-23/clips_final/` and the QA verdicts are in the showcase.

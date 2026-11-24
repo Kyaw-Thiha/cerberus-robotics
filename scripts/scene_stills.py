@@ -177,8 +177,10 @@ def render(args, out_dir: Path, width: int, height: int) -> int:
 
     for spec in specs:
         robot_state = env.unwrapped.scene["robot"].data
+        q = [float(v) for v in robot_state.root_quat_w[0].detach().cpu().tolist()]
+        # Isaac Lab 3.0 stores root_quat_w as XYZW; the rig wants WXYZ
         rig.update(base_pos=robot_state.root_pos_w[0].detach().cpu().numpy(),
-                   base_quat_wxyz=tuple(float(v) for v in robot_state.root_quat_w[0].detach().cpu().tolist()))
+                   base_quat_wxyz=(q[3], q[0], q[1], q[2]))
         sim.render()
         frame = rig.capture(spec.name)
         print(f"[stills] {spec.name} frame {frame.shape} {frame.dtype}", flush=True)

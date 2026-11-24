@@ -288,11 +288,13 @@ def record(args) -> int:
             # the robots live in Fabric: read the physics state, never the (stale) USD xform
             bpos = robot.data.root_pos_w[0].detach().cpu().numpy()
             bquat = robot.data.root_quat_w[0].detach().cpu().numpy()
-            rig.update(base_pos=bpos, base_quat_wxyz=tuple(float(v) for v in bquat))
+            # Isaac Lab 3.0 stores root_quat_w as XYZW; the rig wants WXYZ
+            q = [float(v) for v in bquat]
+            rig.update(base_pos=bpos, base_quat_wxyz=(q[3], q[0], q[1], q[2]))
             frame = rig.capture(spec.name)
             writer.append_data(frame)
             cam_pos, cam_quat = rig.world_pose(spec.name)
-            log.append(t=sim_t, base_pos=bpos, base_quat_wxyz=tuple(float(v) for v in bquat),
+            log.append(t=sim_t, base_pos=bpos, base_quat_wxyz=(q[3], q[0], q[1], q[2]),
                        cam_pos=cam_pos, cam_quat_wxyz=cam_quat)
             if step % max(args.fps, 1) == 0:
                 print(f"[clip] {step}/{steps} t={sim_t:.1f}s fps={step / max(sim_t, 1e-6):.1f}", flush=True)

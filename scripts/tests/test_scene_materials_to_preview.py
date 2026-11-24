@@ -169,7 +169,7 @@ def test_mdl_material_prims_are_deactivated(tmp_path):
 
 
 def test_uv_set_detection_prefers_the_mesh_primvar(tmp_path):
-    from pxr import Usd, UsdGeom, UsdShade
+    from pxr import Usd, UsdGeom
 
     scene = _make_scene(tmp_path)
     stage = Usd.Stage.Open(str(scene))
@@ -214,7 +214,7 @@ def test_preview_materials_live_inside_the_scene_root(tmp_path):
 
 
 def test_light_scale_overrides_every_light(tmp_path):
-    from pxr import Sdf, Usd, UsdLux
+    from pxr import Usd, UsdLux
 
     scene = _make_scene(tmp_path)
     stage = Usd.Stage.Open(str(scene))

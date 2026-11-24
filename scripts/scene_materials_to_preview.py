@@ -397,6 +397,17 @@ def build_layer(usd_path: Path, out_layer: Path, *, rebind: bool = True,
             except Exception:  # noqa: BLE001, S112 - an older pxr without SetActive must not stop the conversion
                 continue
 
+    deinstanced = 0
+    if rebind:
+        # USD does not allow a per-instance material override on an `instanceable` prim: the binding lives on the
+        # prototype and our rebind is ignored. GRScenes models are instanced, so turn instancing off in this layer
+        # (the visual layer only; physics is untouched by a material layer).
+        for prim in stage.Traverse():
+            if prim.IsInstanceable():
+                over = out.OverridePrim(str(prim.GetPath()))
+                over.SetInstanceable(False)
+                deinstanced += 1
+
     rebound, unbound = 0, 0
     if rebind:
         for prim_path, material_path in bindings.items():
@@ -426,6 +437,7 @@ def build_layer(usd_path: Path, out_layer: Path, *, rebind: bool = True,
         "bindings": len(bindings),
         "rebound": rebound,
         "mdl_materials_deactivated": deactivated,
+        "instances_deinstanced": deinstanced,
         "unbound": unbound,
         "uv_primvar": uv_primvar,
         "uv_primvars_used": {k: v for k, v in list(uv_by_material.items())[:10]},

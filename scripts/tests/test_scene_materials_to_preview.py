@@ -182,3 +182,20 @@ def test_uv_set_detection_prefers_the_mesh_primvar(tmp_path):
 
     uv = conv.uv_sets_by_material(Usd.Stage.Open(str(scene)))
     assert uv["/World/Materials/M_Wall"] == "st1"
+
+
+def test_instanceable_prims_are_deinstanced(tmp_path):
+    """A per-instance material override is ignored while the prim is instanceable; the layer turns it off."""
+    from pxr import Usd, UsdGeom
+
+    scene = _make_scene(tmp_path)
+    stage = Usd.Stage.Open(str(scene))
+    mesh = UsdGeom.Mesh.Define(stage, "/World/Geometry/Chair")
+    mesh.CreatePointsAttr([(0, 0, 0), (1, 0, 0), (1, 1, 0)])
+    mesh.GetPrim().SetInstanceable(True)
+    stage.GetRootLayer().Save()
+
+    report = conv.build_layer(scene, tmp_path / "materials_preview.usda")
+    assert report["instances_deinstanced"] == 1
+    check = Usd.Stage.Open(str(tmp_path / "materials_preview.usda"))
+    assert not check.GetPrimAtPath("/World/Geometry/Chair").IsInstanceable()

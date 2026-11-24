@@ -25,7 +25,8 @@ def stub(tmp_path, name, body):
 def test_lib_syntax_and_helpers():
     for script in [HOST / "session_lib.sh", HOST / "run_session.sh", HOST / "bootstrap_host.sh",
                    HOST / "run_stack_check.sh", HOST / "run_scene_eval.sh", HOST / "run_scene_admission.sh",
-                   HOST / "run_slam_eval.sh"]:
+                   HOST / "run_slam_eval.sh", HOST / "install_driver.sh",
+                   HOST / "hyperstack_heartbeat.sh"]:
         r = subprocess.run(["bash", "-n", str(script)], capture_output=True, text=True, check=False)
         assert r.returncode == 0, f"{script}: {r.stderr}"
 
@@ -131,3 +132,11 @@ def test_every_archived_entry_point_has_a_provider_neutral_replacement():
         text = (HOST / name).read_text()
         assert "pod_deadman" not in text and "runpod" not in text.lower() and "vast" not in text.lower()
         assert "session_lib.sh" in text
+
+
+def test_driver_installer_pins_the_allowlisted_build_and_blacklists_nouveau():
+    text = (HOST / "install_driver.sh").read_text()
+    assert "595.58.03" in text
+    assert "blacklist nouveau" in text
+    assert "--dkms" in text
+    assert "nvidia-smi --query-gpu=driver_version" in text

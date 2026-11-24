@@ -18,13 +18,12 @@ import clip_qa
 
 
 def varied_frame(size: int = 96) -> np.ndarray:
-    """Four colour quarters plus a grey strip: several hues, mid luminance, nothing clipped."""
+    """Six vertical bands at different luminance: four saturated hues plus dark and light grey. Nothing clipped."""
     frame = np.zeros((size, size, 3), dtype=np.uint8)
-    q = size // 2
-    frame[:q, :q] = (150, 150, 150)   # grey (hue ignored)
-    frame[:q, q:] = (120, 140, 90)    # olive
-    frame[q:, :q] = (110, 150, 160)   # blue-grey
-    frame[q:, q:] = (165, 120, 110)   # brown
+    colours = [(200, 80, 80), (80, 180, 80), (80, 80, 200), (210, 210, 60), (60, 60, 60), (230, 230, 230)]
+    edges = np.linspace(0, size, len(colours) + 1).astype(int)
+    for colour, x0, x1 in zip(colours, edges[:-1], edges[1:]):
+        frame[:, x0:x1] = colour
     return frame
 
 
@@ -43,6 +42,35 @@ def test_flat_red_frame_fails_on_hue_diversity():
     assert not checks["passed"]
     assert not checks["hue_ok"]
     assert checks["hue_bins_over_5pct"] <= 1
+
+
+def washed_out_frame(size: int = 96) -> np.ndarray:
+    """Several hues, but almost no contrast: the new luminance-std rule must reject it."""
+    frame = np.zeros((size, size, 3), dtype=np.uint8)
+    q = size // 2
+    frame[:q, :q] = (150, 115, 115)
+    frame[:q, q:] = (115, 150, 115)
+    frame[q:, :q] = (115, 115, 150)
+    frame[q:, q:] = (145, 145, 110)
+    return frame
+
+
+def blank_grey_frame(size: int = 96) -> np.ndarray:
+    return np.full((size, size, 3), 148, dtype=np.uint8)
+
+
+def test_washed_out_frame_fails_the_luminance_std_rule():
+    checks = clip_qa.still_checks(washed_out_frame())
+    assert checks["hue_bins_over_5pct"] >= 3, checks
+    assert not checks["luminance_std_ok"]
+    assert not checks["passed"]
+
+
+def test_blank_grey_frame_fails():
+    checks = clip_qa.still_checks(blank_grey_frame())
+    assert not checks["luminance_std_ok"]
+    assert not checks["hue_ok"]
+    assert not checks["passed"]
 
 
 def test_dark_and_blown_frames_fail_luminance_or_clipping():
@@ -148,3 +176,25 @@ def test_still_gate_reads_pngs(tmp_path):
     assert ok["passed"]
     both = clip_qa.still_gate([good, bad])
     assert not both["passed"]
+
+
+def test_data_half_requires_content_alignment_and_captions(tmp_path):
+    from PIL import Image
+
+    map_like = np.zeros((96, 96, 3), dtype=np.uint8)
+    map_like[:] = 245
+    map_like[20:22, 10:80] = 15
+    map_like[60:62, 10:80] = 15
+    map_like[20:60, 10:12] = 15
+    good = tmp_path / "map.png"
+    Image.fromarray(map_like).save(good)
+    blank = tmp_path / "blank.png"
+    Image.fromarray(np.full((96, 96, 3), 128, dtype=np.uint8)).save(blank)
+
+    ok = clip_qa.data_half_checks(good, labels=["Occupancy grid (ground truth)"])
+    assert ok["passed"], ok
+    blank_report = clip_qa.data_half_checks(blank, labels=["Occupancy grid"])
+    assert not blank_report["passed"]
+    uncaptioned = clip_qa.data_half_checks(good, labels=None)
+    assert not uncaptioned["passed"]
+    assert "no captions" in uncaptioned["problems"][0]

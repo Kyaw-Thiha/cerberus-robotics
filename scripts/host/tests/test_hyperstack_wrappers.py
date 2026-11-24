@@ -35,12 +35,19 @@ exit 0
 
 
 class FakeHyperstack:
-    def __init__(self):
+    def __init__(self, calls_path=None):
         self.vms = []
         self.next_id = 101
         self.last_create = None
         self.keypair_body = None
         self.deleted = []
+        self.sg_rules = []
+        self.calls_path = calls_path
+
+    def _note(self, line):
+        if self.calls_path:
+            with open(self.calls_path, "a") as handle:
+                handle.write(line + "\n")
 
     def handle(self, method, path, body):
         base = path.split("?", 1)[0]
@@ -79,10 +86,20 @@ class FakeHyperstack:
                 "id": self.next_id, "name": body.get("name"), "status": "ACTIVE",
                 "floating_ip": "203.0.113.9", "flavor": {"name": body.get("flavor_name"), "gpu": "L40"},
                 "image": {"name": body.get("image_name")},
+                "security_rules": body.get("security_rules", []),
             }
             self.next_id += 1
             self.vms.append(vm)
             return 200, {"status": True, "instances": [vm]}
+        if base.startswith("/core/virtual-machines/") and base.endswith("/sg-rules") and method == "POST":
+            vm_id = int(base.split("/")[3])
+            vm = next((v for v in self.vms if v["id"] == vm_id), None)
+            if vm is None:
+                return 404, {"status": False, "message": "not found"}
+            self.sg_rules.append((vm_id, body))
+            vm.setdefault("security_rules", []).append(body)
+            self._note("api-post-sg-rule")
+            return 200, {"status": True}
         if base.startswith("/core/virtual-machines/"):
             vm_id = int(base.rsplit("/", 1)[1])
             vm = next((v for v in self.vms if v["id"] == vm_id), None)
@@ -139,6 +156,7 @@ def hs(tmp_path):
         path.chmod(path.stat().st_mode | stat.S_IEXEC)
     calls = tmp_path / "calls"
     calls.write_text("")
+    state.calls_path = str(calls)
     key = tmp_path / "key"
     key.write_text("PRIVATE-KEY-MATERIAL")
     (tmp_path / "key.pub").write_text("ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAITEST cerberus-hyperstack\n")
@@ -275,3 +293,42 @@ def test_status_reports_spend_without_secrets(hs):
     assert r.returncode == 0, r.stderr
     assert "cerberus-x" in r.stdout and "spend ~$" in r.stdout
     assert API_KEY not in r.stdout + r.stderr
+
+
+HB_VM = {"id": 55, "name": "cerberus-hb", "status": "ACTIVE", "floating_ip": "203.0.113.50",
+         "security_rules": [{"remote_ip_prefix": "198.51.100.1/32"}]}
+
+
+def test_heartbeat_refreshes_the_ssh_rule_before_touching_the_file(hs):
+    env, state, _ = hs
+    state.vms.append(dict(HB_VM, security_rules=[{"remote_ip_prefix": "198.51.100.1/32"}]))
+    Path(env["CALLS"]).write_text("")
+    run_env = dict(env, HYPERSTACK_PUBLIC_IP="198.51.100.2", HYPERSTACK_RULE_SETTLE="0")
+    r = run("hyperstack_heartbeat.sh", "--id", "55", env=run_env)
+    assert r.returncode == 0, r.stderr
+    text = calls(env)
+    assert "api-post-sg-rule" in text, text
+    assert text.index("api-post-sg-rule") < text.index("ssh "), text
+    assert "/var/lib/cerberus/heartbeat" in text
+    assert state.sg_rules[-1][1]["remote_ip_prefix"] == "198.51.100.2/32"
+    assert state.sg_rules[-1][1]["port_range_min"] == 22
+
+
+def test_heartbeat_skips_the_post_when_the_rule_is_already_there(hs):
+    env, state, _ = hs
+    state.vms.append(dict(HB_VM, security_rules=[{"remote_ip_prefix": "198.51.100.2/32"}]))
+    Path(env["CALLS"]).write_text("")
+    run_env = dict(env, HYPERSTACK_PUBLIC_IP="198.51.100.2", HYPERSTACK_RULE_SETTLE="0")
+    r = run("hyperstack_heartbeat.sh", "--id", "55", env=run_env)
+    assert r.returncode == 0, r.stderr
+    text = calls(env)
+    assert "api-post-sg-rule" not in text
+    assert "ssh " in text and "/var/lib/cerberus/heartbeat" in text
+
+
+def test_heartbeat_does_not_touch_when_the_vm_is_gone(hs):
+    env, state, _ = hs
+    Path(env["CALLS"]).write_text("")
+    r = run("hyperstack_heartbeat.sh", "--id", "999", env=dict(env, HYPERSTACK_RULE_SETTLE="0"))
+    assert r.returncode == 3
+    assert "ssh " not in calls(env)

@@ -4,11 +4,17 @@
 Every video is judged on numbers taken from the file itself (ffprobe), from five frames decoded at 0/25/50/75/100
 percent, and -- when the recorder logged them -- from the camera and base poses of every frame.
 
-Still checks (each of the five frames, 0-255 RGB):
-  * mean luminance in [70, 170];
+Still checks (each of the five frames, 0-255 RGB), Gate v2:
+  * mean luminance in [60, 240] (wide band; a blank or blown frame still fails);
+  * luminance std >= 25 (a washed-out frame fails; calibrated under the owner-approved ego frames, which
+    measure 34.5 and 50.2 -- the old [70, 170] band alone passed the uniform grey still_ego.png with std 0);
   * at most 5 percent of pixels clipped at 255;
   * at least 3 hue bins of 30 degrees each holding at least 5 percent of the pixels
     (a single-colour scene, e.g. the flat red-orange render, fails here).
+
+Data halves (map, depth image, SLAM, plots) use ``data_half_checks``: not blank (luminance std >= 3), the same
+frame count / fps / duration as the render half, and non-empty captions. The render-half still checks do not apply
+to a schematic panel.
 
 Pose checks (``--poses``; schema ``cerberus.poses.v1``, written next to the clip by the recorder):
   * ``ego``      -- the camera moves, and its transform relative to the base is constant within 2 cm and 2 degrees;
@@ -48,7 +54,8 @@ from PIL import Image
 
 # ---- still checks -----------------------------------------------------------------------------------------------
 
-LUM_MIN, LUM_MAX = 70.0, 170.0
+LUM_MIN, LUM_MAX = 60.0, 240.0
+LUM_STD_MIN = 25.0
 CLIP_LEVEL = 255
 CLIP_MAX_FRAC = 0.05
 HUE_BIN_DEG = 30
@@ -100,19 +107,23 @@ def hue_bin_fractions(rgb: np.ndarray, sat_floor: float = SAT_FLOOR) -> list[flo
 
 def still_checks(rgb: np.ndarray) -> dict[str, Any]:
     mean = mean_luminance(rgb)
+    spread = float(luma(rgb).std())
     clipped = clipped_fraction(rgb)
     fractions = hue_bin_fractions(rgb)
     strong = [i for i, f in enumerate(fractions) if f >= MIN_HUE_FRAC]
     checks = {
         "mean_luminance": round(mean, 2),
         "mean_luminance_ok": LUM_MIN <= mean <= LUM_MAX,
+        "luminance_std": round(spread, 2),
+        "luminance_std_ok": spread >= LUM_STD_MIN,
         "clipped_fraction": round(clipped, 4),
         "clipped_ok": clipped <= CLIP_MAX_FRAC,
         "hue_fractions": [round(f, 3) for f in fractions],
         "hue_bins_over_5pct": len(strong),
         "hue_ok": len(strong) >= MIN_HUE_BINS,
     }
-    checks["passed"] = bool(checks["mean_luminance_ok"] and checks["clipped_ok"] and checks["hue_ok"])
+    checks["passed"] = bool(checks["mean_luminance_ok"] and checks["luminance_std_ok"]
+                            and checks["clipped_ok"] and checks["hue_ok"])
     return checks
 
 
@@ -378,11 +389,79 @@ def still_gate(paths: list[Path]) -> dict[str, Any]:
     return {"stills": results, "passed": bool(results) and all(r["passed"] for r in results)}
 
 
+# ---- data halves (map, depth image, SLAM, plots) ---------------------------------------------------------------
+
+DATA_STD_MIN = 3.0
+
+
+def panel_checks(rgb: np.ndarray) -> dict[str, Any]:
+    """A schematic panel must not be blank: some luminance variation, no photo-style band."""
+    spread = float(luma(rgb).std())
+    return {"panel_luminance_std": round(spread, 2), "panel_not_blank": spread >= DATA_STD_MIN}
+
+
+def halves_match(render: Path, data: Path, duration_tol: float = 0.05) -> dict[str, Any]:
+    """The two halves must cover the same frames: equal frame count, fps and duration."""
+    a = ffprobe_info(render)
+    b = ffprobe_info(data)
+    out = {
+        "render": {"frames": a["frames"], "fps": a["fps"], "duration_s": a["duration_s"]},
+        "data": {"frames": b["frames"], "fps": b["fps"], "duration_s": b["duration_s"]},
+        "same_frames": a["frames"] == b["frames"],
+        "same_fps": abs(a["fps"] - b["fps"]) <= 0.01,
+        "same_duration": abs(a["duration_s"] - b["duration_s"]) <= duration_tol,
+    }
+    out["passed"] = out["same_frames"] and out["same_fps"] and out["same_duration"]
+    return out
+
+
+def data_half_checks(data: Path, render: Path | None = None, labels: list[str] | None = None,
+                     frames_dir: Path | None = None) -> dict[str, Any]:
+    """Gate a data half: not blank, aligned with the render half, and captioned."""
+    problems: list[str] = []
+    report: dict[str, Any] = {"data": str(data), "problems": problems}
+    if data.suffix.lower() == ".png":
+        rgb = np.asarray(Image.open(data).convert("RGB"), dtype=np.uint8)
+        checks = panel_checks(rgb)
+        report["panels"] = [checks]
+    else:
+        info = ffprobe_info(data)
+        report["media"] = info
+        keeps = Path(frames_dir) if frames_dir else Path(tempfile.mkdtemp(prefix="clipqa_data_"))
+        keeps.mkdir(parents=True, exist_ok=True)
+        panels = []
+        for fraction, at_s in zip((0, 25, 50, 75, 100), sample_times(info["duration_s"]), strict=True):
+            frame = extract_frame(data, at_s, info["width"], info["height"])
+            checks = panel_checks(frame)
+            png = keeps / f"{data.stem}_data_{fraction:03d}.png"
+            Image.fromarray(frame).save(png)
+            checks.update({"percent": fraction, "png": str(png)})
+            panels.append(checks)
+        report["panels"] = panels
+    if not all(item["panel_not_blank"] for item in report["panels"]):
+        problems.append("a data panel is blank")
+    caption_ok = bool(labels) and all(str(label).strip() for label in labels)
+    report["labels"] = list(labels or [])
+    report["labels_present"] = caption_ok
+    if not caption_ok:
+        problems.append("no captions supplied for the data half")
+    if render is not None:
+        match = halves_match(render, data)
+        report["match"] = match
+        if not match["passed"]:
+            problems.append("data half and render half are not frame-aligned")
+    report["passed"] = not problems
+    return report
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description="Clip QA gate (see the module docstring)")
     parser.add_argument("clip", nargs="?")
     parser.add_argument("--stills", nargs="+", default=None,
                         help="apply the still checks to PNG files instead of a clip")
+    parser.add_argument("--data-half", default=None, help="gate a data half (map/depth/SLAM/plot) instead of a clip")
+    parser.add_argument("--against", default=None, help="the render-half clip the data half must align with")
+    parser.add_argument("--labels", default=None, help="comma-separated captions expected on the data half")
     parser.add_argument("--camera", default="none",
                         choices=["ego", "chase", "overview", "closeup", "none"])
     parser.add_argument("--poses", default=None, help="pose JSON written by the recorder")
@@ -394,6 +473,31 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--media-only", action="store_true",
                         help="only the ffprobe checks (schematic animations: a 2D map is not a rendered photo)")
     args = parser.parse_args(argv)
+
+    if args.data_half:
+        data = Path(args.data_half)
+        if not data.is_file():
+            print(f"clip_qa: {data} is not a file", file=sys.stderr)
+            return 2
+        labels = [part.strip() for part in args.labels.split(",")] if args.labels else None
+        try:
+            report = data_half_checks(data, Path(args.against) if args.against else None, labels,
+                                      Path(args.frames_dir) if args.frames_dir else None)
+        except RuntimeError as exc:
+            print(f"clip_qa: {exc}", file=sys.stderr)
+            return 2
+        for panel in report["panels"]:
+            print(f"  data {panel.get('percent', '-'):>3}% std={panel['panel_luminance_std']} -> "
+                  f"{'ok' if panel['panel_not_blank'] else 'BLANK'}")
+        print(f"  labels={report['labels']} present={report['labels_present']}")
+        if "match" in report:
+            print(f"  halves: {report['match']}")
+        print(("PASS " if report["passed"] else "FAIL ") + str(data))
+        for problem in report["problems"]:
+            print(f"  problem: {problem}")
+        if args.json_out:
+            Path(args.json_out).write_text(json.dumps(report, indent=2) + "\n")
+        return 0 if report["passed"] else 1
 
     if args.stills:
         paths = [Path(p) for p in args.stills]

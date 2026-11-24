@@ -45,7 +45,7 @@ export RCLONE_CONFIG_R2_TYPE=s3 RCLONE_CONFIG_R2_PROVIDER=Cloudflare \
        RCLONE_CONFIG_R2_ACCESS_KEY_ID="$R2_ACCESS_KEY_ID" \
        RCLONE_CONFIG_R2_SECRET_ACCESS_KEY="$R2_SECRET_ACCESS_KEY" \
        RCLONE_CONFIG_R2_ENDPOINT="https://${R2_ACCOUNT_ID}.r2.cloudflarestorage.com" \
-       RCLONE_CONFIG_R2_ACL=private
+       RCLONE_CONFIG_R2_ACL=private RCLONE_CONFIG_R2_NO_CHECK_BUCKET=true
 for dir in /home/ubuntu/cerberus-results /home/ubuntu/cerberus-robotics/policy/locomotion/runs; do
     [ -d "$dir" ] || continue
     timeout 540 rclone copy "$dir" "R2:${R2_BUCKET}/${PREFIX}/$(basename "$dir")" --transfers 4 \

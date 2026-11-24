@@ -57,6 +57,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--chase-pitch", type=float, default=12.0)
     parser.add_argument("--ego-offset", default="0.30,0.0,0.08")
     parser.add_argument("--ego-pitch", type=float, default=17.0)
+    parser.add_argument("--exposure-stops", type=float, default=None,
+                        help="RTX tonemapper exposure compensation in stops (one setting for every camera)")
     parser.add_argument("--dome-intensity", type=float, default=None,
                         help="override the env dome light intensity (the scene carries its own lights)")
     parser.add_argument("--enable_cameras", action="store_true", default=True)
@@ -196,6 +198,16 @@ def record(args) -> int:
     env, scene = se.build_loco_env(args.scene, [(x, y, yaw0, 0.0)], task=task, num_envs=1,
                                    episode_length_s=max(120.0, args.seconds + 30.0), seed=args.seed,
                                    with_cameras=False)
+    if args.exposure_stops is not None:
+        import carb.settings
+
+        settings = carb.settings.get_settings()
+        for key in ("/rtx/post/tonemap/exposure", "/rtx/post/tonemap/exposureCompensation"):
+            try:
+                settings.set_float(key, float(args.exposure_stops))
+            except Exception:  # noqa: BLE001 - a stack without that key simply ignores it
+                pass
+        print(f"[exposure] stops -> {args.exposure_stops}", flush=True)
     if args.dome_intensity is not None:
         import omni.usd
 

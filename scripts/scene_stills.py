@@ -39,6 +39,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--out-dir", default=None)
     parser.add_argument("--views", type=int, default=5)
     parser.add_argument("--resolution", default="1920x1080")
+    parser.add_argument("--exposure-stops", type=float, default=None,
+                        help="RTX tonemapper exposure compensation in stops (one setting for every camera)")
     parser.add_argument("--dome-intensity", type=float, default=None,
                         help="override the scene dome light intensity (default: the scene cfg's own value)")
     parser.add_argument("--mdl", action="store_true", help="set MDL_SYSTEM_PATH before the app launches")
@@ -126,6 +128,16 @@ def render(args, out_dir: Path, width: int, height: int) -> int:
     spawns = [(x, y, yaw0, 0.0)]
     env, scene = se.build_loco_env(args.scene, spawns, task=task, num_envs=1, episode_length_s=120.0,
                                   seed=args.seed, with_cameras=False)
+    if args.exposure_stops is not None:
+        import carb.settings
+
+        settings = carb.settings.get_settings()
+        for key in ("/rtx/post/tonemap/exposure", "/rtx/post/tonemap/exposureCompensation"):
+            try:
+                settings.set_float(key, float(args.exposure_stops))
+            except Exception:  # noqa: BLE001 - a stack without that key simply ignores it
+                pass
+        print(f"[exposure] stops -> {args.exposure_stops}", flush=True)
     if args.dome_intensity is not None:
         light_prim = "/World/skyLight"
         import omni.usd

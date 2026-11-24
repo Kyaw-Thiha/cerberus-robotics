@@ -70,7 +70,7 @@ def mdl_colour(text: str) -> tuple[float, float, float] | None:
         return None
     return tuple(values) if len(values) == 3 else None
 
-PREVIEW_ROOT = "/PreviewMaterials"
+PREVIEW_ROOT = "/PreviewMaterials"  # replaced at build time by <scene root>/__PreviewMaterials (see build_layer)
 LAYER_NAME = "materials_preview.usda"
 WRAPPER_NAME = "scene_preview_metric.usd"
 
@@ -317,15 +317,28 @@ def build_layer(usd_path: Path, out_layer: Path, *, rebind: bool = True,
     uv_by_material = uv_sets_by_material(stage)
     mpu = float(UsdGeom.GetStageMetersPerUnit(stage))
 
+    # The preview materials MUST live inside the scene's own root prim. A wrapper that references the scene into
+    # /Scene cannot bind to an absolute /PreviewMaterials target: USD ignores any relationship target outside the
+    # reference scope ("refers to a path outside the scope of the reference ... Ignoring"), which rendered every
+    # surface with the fallback material (measured 2026-11-23, and the reason a flat-red debug layer stayed grey).
+    scene_root = stage.GetDefaultPrim()
+    if scene_root and scene_root.IsValid():
+        root_path = scene_root.GetPath()
+    elif described:
+        root_path = Sdf.Path("/" + described[0]["prim_path"].strip("/").split("/")[0])
+    else:
+        root_path = Sdf.Path("/")
+    preview_root = f"{root_path}/__PreviewMaterials" if str(root_path) != "/" else "/__PreviewMaterials"
+
     out = Usd.Stage.CreateInMemory()
     out.GetRootLayer().subLayerPaths.append(str(usd_path))
     out.GetRootLayer().metersPerUnit = mpu
-    scope = UsdGeom.Scope.Define(out, PREVIEW_ROOT)
+    scope = UsdGeom.Scope.Define(out, preview_root)
 
     converted: dict[str, str] = {}  # original material path -> new material path
     report_materials = []
     for index, item in enumerate(described):
-        new_path = f"{PREVIEW_ROOT}/m_{_sanitize(item['prim_path'].strip('/').replace('/', '_'))}"
+        new_path = f"{preview_root}/m_{_sanitize(item['prim_path'].strip('/').replace('/', '_'))}"
         if new_path in converted.values():  # several materials can sanitise to the same name
             new_path = f"{new_path}_{index}"
         mat = UsdShade.Material.Define(out, new_path)

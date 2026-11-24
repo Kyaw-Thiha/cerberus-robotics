@@ -199,3 +199,15 @@ def test_instanceable_prims_are_deinstanced(tmp_path):
     assert report["instances_deinstanced"] == 1
     check = Usd.Stage.Open(str(tmp_path / "materials_preview.usda"))
     assert not check.GetPrimAtPath("/World/Geometry/Chair").IsInstanceable()
+
+
+def test_preview_materials_live_inside_the_scene_root(tmp_path):
+    """A target outside the referenced scope is ignored by USD, so the materials must sit under the scene root."""
+    from pxr import Usd
+
+    scene = _make_scene(tmp_path)  # default prim is /World
+    report = conv.build_layer(scene, tmp_path / "materials_preview.usda")
+    stage = Usd.Stage.Open(str(tmp_path / "materials_preview.usda"))
+    preview_path = report["samples"][0]["preview"]
+    assert preview_path.startswith("/World/__PreviewMaterials/")
+    assert stage.GetPrimAtPath(preview_path).IsValid()

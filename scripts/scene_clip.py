@@ -50,6 +50,8 @@ def parse_args(argv: list[str] | None = None) -> argparse.Namespace:
     parser.add_argument("--start-step", type=int, default=0,
                         help="global step offset: keeps the scripted path and the arm clock continuous across segments")
     parser.add_argument("--mdl", action="store_true")
+    parser.add_argument("--replay-log", default=None,
+                        help="npz from a tour run: set root pose/joints per frame and render (no physics, no policy)")
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--spawn", default="0,0,0", help="x,y,yaw_rad of the robot in the scene (default 0,0,0)")
     parser.add_argument("--chase-distance", type=float, default=1.6)
@@ -247,7 +249,7 @@ def record(args) -> int:
                              pitch_down_deg=args.ego_pitch)
     elif args.camera == "chase":
         spec = cr.CameraSpec("chase", "chase", (width, height), hfov_deg=70.0, distance=args.chase_distance,
-                             height=args.chase_height, pitch_down_deg=args.chase_pitch)
+                             height=args.chase_height, pitch_down_deg=args.chase_pitch, near_clip_m=0.12)
     elif args.camera == "closeup":
         # to the robot's front-right at arm height, looking at the arm's workspace
         fwd = np.array([math.cos(yaw), math.sin(yaw), 0.0])
@@ -277,6 +279,54 @@ def record(args) -> int:
 
     writer = imageio.get_writer(str(clip_path), fps=args.fps, macro_block_size=None)
     sim = env.unwrapped.sim
+    if args.replay_log:
+        import numpy as _np
+
+        data = _np.load(args.replay_log, allow_pickle=True)
+        poses, times = _np.asarray(data["pose_xyzw"], dtype=float), _np.asarray(data["t"], dtype=float)
+        occupancy = None
+        try:
+            from planning.occupancy import load_npz
+
+            usd = Path(scene.get("usd_path", ""))
+            occupancy = load_npz(usd.parent / "occupancy.npz")
+            print(f"[clip] replay occupancy: {usd.parent / 'occupancy.npz'}", flush=True)
+        except Exception as exc:  # noqa: BLE001 - the boom stays at full length
+            print(f"[clip] replay has no grid for the boom ({type(exc).__name__}); full boom", flush=True)
+        joints = _np.asarray(data["joint_pos"], dtype=_np.float32) if "joint_pos" in data else None
+        zero6 = torch.zeros((1, 6), device=device)
+        n_frames = max(1, round(float(times[-1] - times[0]) * args.fps) + 1)
+        for k in range(n_frames):
+            t = times[0] + k / float(args.fps)
+            idx = max(0, min(int(_np.searchsorted(times, t, side="right") - 1), len(poses) - 1))
+            px, py, pz, qx, qy, qz, qw = poses[idx]
+            robot.write_root_pose_to_sim(torch.tensor([[px, py, pz, qx, qy, qz, qw]], dtype=torch.float32,
+                                                       device=device))
+            robot.write_root_velocity_to_sim(zero6)
+            if joints is not None:
+                jp = torch.tensor([joints[idx]], dtype=torch.float32, device=device)
+                if jp.shape[1] == robot.num_joints:
+                    robot.write_joint_state_to_sim(jp, torch.zeros_like(jp))
+            sim.render()
+            # low_pass=1.0 keeps the chase offset exactly constant in the base frame (the gate checks that)
+            rig.update(base_pos=(px, py, pz), base_quat_wxyz=(qw, qx, qy, qz), low_pass=1.0,
+                       occupancy=occupancy)
+            writer.append_data(rig.capture(spec.name))
+            cam_pos, cam_quat = rig.world_pose(spec.name)
+            log.append(t=float(t), base_pos=(px, py, pz), base_quat_wxyz=(qw, qx, qy, qz),
+                       cam_pos=cam_pos, cam_quat_wxyz=cam_quat)
+            if k % max(args.fps, 1) == 0:
+                print(f"[clip] replay {k}/{n_frames}", flush=True)
+        writer.close()
+        rig.close()
+        log.write(poses_path)
+        write_json_atomic(out_dir / f"{name}.json", {
+            "clip": str(clip_path), "poses": str(poses_path), "camera": args.camera,
+            "mode": "replay (root pose + joints, no physics)", "source_log": str(args.replay_log),
+            "frames": n_frames, "fps": args.fps, "resolution": [width, height],
+        })
+        print(f"[clip] wrote {clip_path} and {poses_path}", flush=True)
+        return 0
     started = time.perf_counter()
     try:
         for step in range(steps):

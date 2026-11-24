@@ -47,7 +47,7 @@ def compose(left: Path, right: Path, out: Path, *, left_text: str, right_text: s
     if problems:
         raise SystemExit("; ".join(problems))
     size = 22
-    caption = (f"drawtext=fontfile={font}:text='{{text}}':x=16:y=14:fontsize={size}:"
+    caption = (f"drawtext=fontfile={font}:text='{{text}}':x=18:y=26:fontsize={size}:"
                "fontcolor=white:box=1:boxcolor=black@0.45:boxborderw=6")
     filt = (f"[0:v]{caption.format(text=_escape(left_text))}[l];"
             f"[1:v]{caption.format(text=_escape(right_text))}[r];[l][r]hstack=inputs=2[v]")

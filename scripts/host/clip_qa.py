@@ -18,8 +18,8 @@ to a schematic panel.
 
 Pose checks (``--poses``; schema ``cerberus.poses.v1``, written next to the clip by the recorder):
   * ``ego``      -- the camera moves, and its transform relative to the base is constant within 2 cm and 2 degrees;
-  * ``chase``    -- the camera moves with the base, its distance and its pitch/roll relative to the base stay
-                    constant (2 cm / 2 degrees), yaw is free (yaw-only frame, low-passed);
+  * ``chase``    -- yaw-only frame: WORLD pitch/roll stay constant (2 degrees), yaw is free; the horizontal boom is
+                    pulled in for walls (0.5-2.0 m) and its height scales so the look angle is unchanged;
   * ``overview`` -- the camera does not move (1 cm / 0.5 degrees);
   * ``closeup``  -- treated like ``overview`` for the robot-mounted fix, i.e. constant relative to the base.
 
@@ -61,7 +61,9 @@ CLIP_MAX_FRAC = 0.05
 HUE_BIN_DEG = 30
 MIN_HUE_BINS = 3
 MIN_HUE_FRAC = 0.05
-SAT_FLOOR = 0.15  # near-grey pixels carry no usable hue; excluded from the hue-diversity count
+# Near-grey pixels carry no usable hue. 0.10 rather than 0.15: pale interior surfaces (white walls, light wood)
+# still have a measurable tint, and the flat/single-colour frames the rule exists to reject have saturation ~0.
+SAT_FLOOR = 0.10
 
 
 def luma(rgb: np.ndarray) -> np.ndarray:
@@ -247,9 +249,20 @@ def pose_checks(poses: dict[str, Any], camera: str) -> dict[str, Any]:
         # The chase frame orbits with the base, so the camera's displacement is not the base's; what must hold is
         # a constant offset (distance and pitch/roll in the base frame) and motion whenever the base moves.
         moved = (cam_travel > 0.05) if base_travel > 0.05 else True
+        # The chase boom is collision-aware (may pull IN for a wall; the height scales with it), and the frame is
+        # yaw-only by design: it does NOT inherit the base's roll/pitch, so the base-relative pitch varies with the
+        # robot's own tilt. What must hold is a plausible horizontal boom and a constant WORLD pitch/roll.
+        xy = np.linalg.norm((cam_pos - base_pos)[:, :2], axis=1)
+        world_eul = np.array([matrices_to_euler(quat_to_matrix(q)) for q in cam_quat])
+        out["boom_xy_min_m"] = round(float(xy.min()), 3)
+        out["boom_xy_max_m"] = round(float(xy.max()), 3)
+        out["world_pitch_spread_deg"] = round(float(np.abs(world_eul[:, 1] - world_eul[0, 1]).max()), 3)
+        out["world_roll_spread_deg"] = round(float(np.abs(world_eul[:, 0] - world_eul[0, 0]).max()), 3)
         out["checks"] = {"moves_with_base": moved,
-                         "distance_constant": rel_spread <= 0.02,
-                         "pitch_roll_constant": pitch_spread <= 2.0 and roll_spread <= 2.0}
+                         "boom_not_collapsed": float(xy.min()) >= 0.5,
+                         "boom_plausible": float(xy.max()) <= 2.0,
+                         "world_pitch_roll_constant": float(np.abs(world_eul[:, 1] - world_eul[0, 1]).max()) <= 2.0
+                         and float(np.abs(world_eul[:, 0] - world_eul[0, 0]).max()) <= 2.0}
         out["passed"] = all(out["checks"].values())
         out["note"] = "yaw is free on the chase frame (yaw-only, low-passed); its spread is reported, not gated"
     elif camera == "overview":

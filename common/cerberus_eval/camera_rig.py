@@ -91,6 +91,17 @@ def quat_multiply(a: tuple[float, float, float, float], b: tuple[float, float, f
             aw * bz + ax * by - ay * bx + az * bw)
 
 
+def quat_to_matrix(quat_wxyz) -> np.ndarray:
+    w, x, y, z = (float(v) for v in quat_wxyz)
+    n = math.sqrt(w * w + x * x + y * y + z * z) or 1.0
+    w, x, y, z = w / n, x / n, y / n, z / n
+    return np.array([
+        [1 - 2 * (y * y + z * z), 2 * (x * y - z * w), 2 * (x * z + y * w)],
+        [2 * (x * y + z * w), 1 - 2 * (x * x + z * z), 2 * (y * z - x * w)],
+        [2 * (x * z - y * w), 2 * (y * z + x * w), 1 - 2 * (x * x + y * y)],
+    ])
+
+
 def rotate_vector(vec, quat_wxyz) -> np.ndarray:
     """Rotate a vector by a WXYZ quaternion (three.js-style, no scipy dependency)."""
     w, x, y, z = (float(v) for v in quat_wxyz)
@@ -235,10 +246,10 @@ class CameraRig:
     def _create(self) -> None:
         UsdGeom = self._UsdGeom
         for spec in self.specs.values():
-            # The EGO camera is defined *under* the base-link prim: the transform to the base is then exact by
-            # construction and never drifts, which is exactly what the clip QA gate checks.
-            path = (f"{self.robot_prim_path}/{spec.name}_camera" if spec.kind == "ego"
-                    else f"/World/cerberus_cameras/{spec.name}")
+            # All cameras are world prims placed from the articulation pose each frame. Parenting the EGO camera
+            # under the base prim inherited that prim's own rotation (the fused ARX5 base link is rolled 90 deg),
+            # which produced sideways frames; a world prim with an explicit body-frame offset does not.
+            path = f"/World/cerberus_cameras/{spec.name}"
             camera = UsdGeom.Camera.Define(self.stage, path)
             camera.CreateFocalLengthAttr(focal_length_for(spec.hfov_deg))
             camera.CreateHorizontalApertureAttr(20.955)
@@ -327,24 +338,41 @@ class CameraRig:
             if occupancy is not None:
                 boom, _pulled = clear_boom(base_pos, self._chase_yaw, distance=spec.distance,
                                            height=spec.height, occupancy=occupancy)
-            eye, R = chase_pose(base_pos, self._chase_yaw, distance=boom, height=spec.height,
+            # scale the height with a pulled-in boom so the look angle (and the robot in frame) stays the same
+            height = spec.height * (boom / spec.distance) if spec.distance > 0 else spec.height
+            eye, R = chase_pose(base_pos, self._chase_yaw, distance=boom, height=max(0.3, height),
                                 pitch_down_deg=spec.pitch_down_deg)
             self._write_xform(spec.name, eye, quat_from_matrix(R))
         for spec in self.specs.values():
             if spec.kind != "ego":
                 continue
-            # the ego camera is authored in the base frame; its WORLD pose is what the pose log must carry
-            world = base_pos + rotate_vector(tuple(spec.offset), base_quat)
-            self._authored[spec.name] = (np.asarray(world, dtype=float), tuple(float(v) for v in base_quat))
+            # body-mounted: world pose = base pose * fixed local offset, with a fixed downward pitch
+            R_base = quat_to_matrix(base_quat)
+            world = np.asarray(base_pos, dtype=float) + R_base @ np.asarray(spec.offset, dtype=float)
+            R_local = rotation_from_forward(forward_from_yaw_pitch(0.0, math.radians(spec.pitch_down_deg)))
+            q_world = quat_from_matrix(R_base @ R_local)
+            self._write_xform(spec.name, world, q_world)
+            self._authored[spec.name] = (np.asarray(world, dtype=float), tuple(float(v) for v in q_world))
 
     # -- capture
     def _ensure_products(self) -> None:
         if self._render_products or getattr(self, "_vp_windows", None):
             return
-        try:
-            import omni.replicator.core as rep
-        except ModuleNotFoundError:
-            rep = None
+        rep = None
+        for attempt in range(3):
+            try:
+                import omni.replicator.core as rep
+                break
+            except ModuleNotFoundError:
+                # the extension is loaded asynchronously after app launch; give it app updates, then retry
+                try:
+                    import omni.kit.app
+
+                    for _ in range(100):
+                        omni.kit.app.get_app().update()
+                except Exception:  # noqa: BLE001
+                    pass
+                rep = None
         if rep is None:
             # Some images ship replicator in extscache without enabling it; a headless viewport capture works
             # without it (verified 2026-11-24: capture_viewport_to_file, ~10 app updates per frame).

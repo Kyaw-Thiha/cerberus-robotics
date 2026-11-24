@@ -53,6 +53,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--out", required=True)
     parser.add_argument("--settle-steps", type=int, default=90)
     parser.add_argument("--debug", action="store_true", help="print actions/depth/pose every 50 steps")
+    parser.add_argument("--goals-xy", default=None,
+                        help="explicit goals 'x,y;x,y' (overrides the seeded goal picker)")
     parser.add_argument("--record-dir", default=None,
                         help="also record CHASE and EGO halves (960x1080, 30 fps) during the live run")
     return parser
@@ -105,7 +107,7 @@ class JeploIsaacBackend:
         self._rig = cr.CameraRig(robot_prim_path=base, specs=specs)
         self._writers = {name: imageio.get_writer(str(self.record_dir / f"{name}.mp4"), fps=30,
                                                   macro_block_size=None) for name in ("chase", "ego")}
-        print(f"[jeplo] recording chase/ego to {self.record_dir}", flush=True)
+        print("[jeplo] recording started after settle", flush=True)
 
     def _capture(self) -> None:
         if self._rig is None:
@@ -288,7 +290,10 @@ def run(args) -> int:
             "joint_pos": [float(v) for v in data.joint_pos[0].detach().cpu()],
         }
 
-    goals = pick_tour_goals(grid, start, seed=args.seed, n=args.goals, min_total_m=args.min_net)
+    if args.goals_xy:
+        goals = [tuple(float(v) for v in part.split(",")) for part in args.goals_xy.split(";") if part.strip()]
+    else:
+        goals = pick_tour_goals(grid, start, seed=args.seed, n=args.goals, min_total_m=args.min_net)
     print(f"[jeplo] start={start} goals={[(round(x, 2), round(y, 2)) for x, y in goals]}", flush=True)
     config = TourConfig(goal_tolerance_m=args.goal_tolerance, max_total_time_s=args.max_total_time)
     result = run_tour(backend, grid, goals, config=config,

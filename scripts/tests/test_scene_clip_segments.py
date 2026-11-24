@@ -137,3 +137,25 @@ def test_load_state_rejects_an_incomplete_file(tmp_path: Path):
     path.write_text('{"root_pos_w": [0, 0, 0]}')
     with pytest.raises(ValueError, match="root_quat_wxyz"):
         scene_clip.load_state(path)
+
+
+def test_merge_poses_concatenates_segments_in_order(tmp_path):
+    import json
+
+    import merge_poses
+
+    segs = []
+    for index in range(2):
+        directory = tmp_path / f"clip_seg{index}"
+        directory.mkdir()
+        frames = [{"t": index * 10 + i, "base_pos": [i, 0, 0], "base_quat_wxyz": [1, 0, 0, 0],
+                   "cam_pos": [0, 0, 1], "cam_quat_wxyz": [1, 0, 0, 0]} for i in range(3)]
+        (directory / f"clip_seg{index}.poses.json").write_text(json.dumps(
+            {"schema": "cerberus.poses.v1", "camera": "chase", "width": 1920, "height": 1080, "hfov_deg": 70,
+             "frames": frames}))
+        segs.append(directory)
+
+    merged = merge_poses.merge(segs, "clip")
+    assert merged["segments"] == 2
+    assert [f["t"] for f in merged["frames"]] == [0, 1, 2, 10, 11, 12]
+    assert merged["camera"] == "chase"

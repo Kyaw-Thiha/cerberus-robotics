@@ -143,3 +143,24 @@ pass.
 QA honesty: `scripts/host/clip_qa.py` thresholds were untouched all session (luminance 70-170, clipping <= 5 %,
 >= 3 hue bins at >= 5 %). Measured hue bins: still ego 5, still chase 2; walk_ego clip 3/4/3/3/3; walk_overview
 3/4/1/1/1; arm_closeup 2/1/1/1/1; arm_chase (pre-fix materials) 2-3.
+
+## What shipped, and what is still open
+
+Gated this session (clip QA unchanged):
+
+| artifact | verdict |
+|---|---|
+| `walk_ego.mp4` (1080p30, 20 s, EGO, retrained policy, real textures) | **PASS** - luminance 120-133, 0.000-0.001 clipped, 4-5 hue bins, camera-pose checks ok |
+| `walk_ego_split.mp4` (same walk + top-down planner map) | **PASS** - luminance 83-86, 0.000 clipped, 3-4 hue bins |
+| `teaser_walk_ego_10s.gif` (10 s, 640 px) | 1.36 MB, within the 8 MB cap |
+| `still_ego.png` 1920x1080 | **PASS** - luminance 134, 5 hue bins |
+| `arm_ego.mp4` (arm demo, 20 s) | 4/5 frames pass; frame 0 reads 173.8 (limit 170) |
+| `arm_chase.mp4`, `arm_closeup.mp4`, `walk_chase.mp4`, `walk_overview.mp4` | rendered, kept as evidence; fail the luminance band (199-260) and, for the close-up, the camera lands inside furniture |
+
+Open, with the measurement that closes it for now: **exposure**. The RTX tonemapper exposure (-1.5 stops: 199.2 vs
+199.3), hiding the emissive HDR sphere (222.5) and a 0.45 scale on all 137 scene lights (222 -> 199) do not bring this
+white-lit home into 70-170. A next attempt should drive the render product's own auto-exposure histogram rather than
+guessing setting keys, or move the camera to darker rooms.
+
+Track M (physics mission), SLAM and the K2 matrix were not attempted: the session's remaining time went to the
+render unblock, and the two earlier VMs were lost to their dead-man on CGNAT address changes.

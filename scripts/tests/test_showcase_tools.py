@@ -86,3 +86,23 @@ def test_showcase_builds_a_short_film_from_synthetic_chapters(tmp_path):
     assert (info["width"], info["height"]) == (1920, 1080)
     assert 3.0 <= info["duration_s"] <= 7.0
     assert Path(result["gif"]).stat().st_size <= 8 * 1024 * 1024
+
+
+def test_lidar_panel_is_readable_from_a_depth_log(tmp_path):
+    steps, v, h = 20, 25, 60
+    depth = np.full((steps, v, h), 0.8, dtype=np.float16)
+    depth[:, 8:16, 20:40] = 0.3
+    log = {
+        "lidar_depth": depth, "lidar_depth_scale": np.array([2.0]),
+        "t": np.arange(steps) * 0.02, "goal_index": np.zeros(steps, dtype=np.int16),
+        "goals_xy": np.array([[1.0, 0.0]]), "pose_xyzw": np.zeros((steps, 7), dtype=np.float32),
+        "grid": np.zeros((10, 10), dtype=np.int8), "grid_origin_xy": np.array([0.0, 0.0]),
+        "grid_resolution_m": np.array([0.1]), "path_xy": np.zeros((0, 2), dtype=np.float32),
+        "path_leg": np.zeros(0, dtype=np.int16),
+    }
+    path = tmp_path / "lidar.npz"
+    np.savez_compressed(path, **log)
+    panel = render_data_panel.render_lidar_panel(np.load(path), 10, 10, 240, 270, "LiDAR (sensed)")
+    assert panel.size == (240, 270)
+    rgb = np.asarray(panel.convert("RGB"), dtype=np.float32)
+    assert rgb.std() > 10.0

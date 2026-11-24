@@ -125,7 +125,7 @@ def render_lidar_frame(depth: np.ndarray, width: int, height: int, hits_xy: np.n
     # a labelled colour scale
     for i in range(10, W - 30, 2):
         frac = (i - 30) / max(1, W - 60)
-        bar = tuple(int(v) for v in _turbo(np.array([[[1.0 - frac]]], dtype=np.float32))[0, 0])
+        bar = tuple(int(v) for v in _turbo(np.array([[1.0 - frac]], dtype=np.float32))[0, 0])
         draw.line([i, top + img_h + 12, i, top + img_h + 30], fill=bar)
     draw.text((30, top + img_h + 38), "2.0 m", font=_font(18), fill=(210, 210, 210))
     draw.text((W - 90, top + img_h + 38), "0.0 m", font=_font(18), fill=(210, 210, 210))
@@ -134,9 +134,11 @@ def render_lidar_frame(depth: np.ndarray, width: int, height: int, hits_xy: np.n
     if hits_xy is not None:
         strip_top = top + img_h + 100
         strip_h = H - strip_top - 70
-        panel = _render_bev(hits_xy, W - 60, strip_h)
-        img.paste(panel, (30, strip_top))
-        draw.text((30, strip_top - 24), "LiDAR hits (bird's-eye, body frame)", font=_font(18), fill=(210, 210, 210))
+        if strip_h > 40:
+            panel = _render_bev(hits_xy, W - 60, strip_h)
+            img.paste(panel, (30, strip_top))
+            draw.text((30, strip_top - 24), "LiDAR hits (bird's-eye, body frame)", font=_font(18),
+                      fill=(210, 210, 210))
 
     draw.text((20, 16), caption, font=_font(20), fill=(235, 235, 235))
     draw.text((20, H - 40), f"{clock}   {goal}", font=_font(20), fill=(235, 235, 235))
@@ -168,10 +170,31 @@ def _render_bev(hits_xy: np.ndarray, width: int, height: int) -> Image.Image:
     return img
 
 
+def render_lidar_panel(log: np.lib.npyio.NpzFile, index: int, step_index: int, width: int, height: int,
+                       caption: str) -> Image.Image:
+    depth = np.asarray(log["lidar_depth"][step_index], dtype=np.float32)
+    scale_m = float(log["lidar_depth_scale"][0]) if "lidar_depth_scale" in log else 2.0
+    ranges = depth * scale_m
+    V, H = ranges.shape
+    theta = np.radians(-4.5 + (np.arange(V) + 0.5) * (50.0 / V))[:, None]
+    phi = np.radians(-60.0 + (np.arange(H) + 0.5) * (120.0 / H))[None, :]
+    rr = ranges
+    x = (rr * np.cos(theta) * np.cos(phi)).reshape(-1)
+    y = (rr * np.cos(theta) * np.sin(phi)).reshape(-1)
+    hits_xy = np.stack([x, y], axis=1)
+    goals = log["goals_xy"]
+    leg = int(log["goal_index"][min(index, len(log["goal_index"]) - 1)])
+    t = float(log["t"][min(index, len(log["t"]) - 1)])
+    clock = f"{int(t // 60):02d}:{t % 60:04.1f}"
+    return render_lidar_frame(ranges, width, height, hits_xy, caption, clock,
+                              f"goal {leg + 1}/{len(goals)}")
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     parser.add_argument("--log", required=True)
-    parser.add_argument("--panel", choices=["map"], default="map")
+    parser.add_argument("--panel", choices=["map", "lidar"], default="map")
+    parser.add_argument("--caption", default=None)
     parser.add_argument("--width", type=int, default=960)
     parser.add_argument("--height", type=int, default=1080)
     parser.add_argument("--fps", type=int, default=30)
@@ -190,7 +213,11 @@ def main(argv: list[str] | None = None) -> int:
     for k in range(frames):
         t = times[0] + k / args.fps
         index = max(0, min(int(np.searchsorted(times, t, side="right") - 1), steps - 1))
-        image = render_map_frame(log, index, args.width, args.height)
+        if args.panel == "map":
+            image = render_map_frame(log, index, args.width, args.height)
+        else:
+            image = render_lidar_panel(log, index, index, args.width, args.height,
+                                       args.caption or "LiDAR depth as JEPLO sees it (sensed, 25x60, 0-2 m)")
         image.save(frame_dir / f"frame_{k:05d}.png")
     cmd = ["ffmpeg", "-y", "-v", "error", "-framerate", str(args.fps),
            "-i", str(frame_dir / "frame_%05d.png"), "-c:v", "libx264", "-pix_fmt", "yuv420p",

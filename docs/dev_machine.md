@@ -237,3 +237,30 @@ locally, not yet proven on Brev.
 - `brev_status.sh` prints a spend estimate from the local ledger (`~/cerberus-results/brev/ledger.jsonl`), computed as
   price x hours alive for every create that has no matching delete.
 - Check `brev ls` before you go to sleep; a stopped instance can still bill for its disk on some providers.
+
+## Known issues (2026-11-24)
+
+- **Isaac Lab 3.0 pose terms.** `robot.data.root_quat_w` / `root_pos_w` report shape `(num_envs,)` (ProxyArray)
+  although one entry holds 4/3 values. Slice per env (`[i]`) and stack; `data.root_quat_w[:, :]` raises
+  "quaternion last dim must be 4".
+- **Height scan source.** The locomotion height scanner must ray-cast `scan_proxy.usd`, one clean triangle mesh with
+  ceilings/roofs removed. Against the raw house it hits the ceiling and every cell reads the same.
+- **LiDAR source.** JEPLO's depth sensor uses the same proxy (`/World/scan_proxy`); it contains walls, floor and
+  furniture, which is what the policy must see.
+- **Arm locomotion checkpoint does not translate in the scene (2026-11-24).** Commands reach the observation and
+  the height scan is sane, but `go2_arx5_locomotion_ga_v1_candidate.pt` produces large actions (mean |a| 1.87) with
+  base velocity 0.015 m/s under a 0.7 m/s command. The legs-only `go2_locomotion_ga_v1_candidate.pt` tracks 0.41 m/s
+  in the same scene and env. Do not tune the policy to hide this; use the Go2 baseline and report it.
+- **Pure-pursuit singularity.** `wz = 2 v sin(alpha) / d` is zero at `alpha = pi`; without a turn-in-place branch
+  the robot drives away in a large loop from a target directly behind (measured: 14 m away from the next goal).
+- **SimulationApp.close() exits with code 0 and eats the traceback.** Wrap the run in try/except and
+  `os._exit(3)` after printing, or failures look like clean runs.
+- **Random libcarb crash at Kit startup.** Roughly one launch in five dies within ~10 s (dump file 0 bytes).
+  Retry the same command; judge success by output files, not the exit code.
+- **Driver install on the provider image.** The runfile aborts while Ubuntu's packaged driver is present, while
+  `/usr/lib/nvidia/alternate-install-present` exists, or while the nvidia modules are loaded. Purge the packaged
+  driver, remove that marker and the 570 leftovers, `rmmod` the modules, then install; keep `libnvidia-container`
+  (removing it breaks Docker's GPU runtime). `scripts/host/install_driver.sh` does this.
+- **R2 from the CLI.** Writes need the env-defined remote (`RCLONE_CONFIG_<name>_*` from `.env`) plus
+  `NO_CHECK_BUCKET=true` and bucket-qualified paths. Bucket-level operations (versioning, ListBuckets) answer 403;
+  that is expected and does not block object writes.

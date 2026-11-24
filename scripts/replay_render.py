@@ -52,6 +52,7 @@ def main(argv: list[str] | None = None) -> int:
 
     add_launcher_args(parser)
     args = parser.parse_args(argv)
+    args.enable_cameras = True   # the capture path needs a render product
 
     from common.cerberus_worlds.registry import get_backend
 
@@ -150,6 +151,10 @@ def render(args) -> int:
                 jp = torch.tensor([joints[idx]], dtype=torch.float32, device=device)
                 robot.write_joint_state_to_sim(jp, torch.zeros_like(jp))
             sim.render()
+            if k in (0, 10, 100):
+                read = robot.data.root_pos_w[0].detach().cpu().numpy()
+                err = float(np.linalg.norm(read - np.array([px, py, pz])))
+                print(f"[replay] pose write/read error at frame {k}: {err * 1000:.2f} mm", flush=True)
             rig.update(base_pos=(px, py, pz), base_quat_wxyz=(qw, qx, qy, qz), occupancy=occupancy)
             frame = rig.capture(args.camera)
             writer.append_data(frame)

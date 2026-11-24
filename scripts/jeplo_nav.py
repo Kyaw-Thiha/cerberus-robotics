@@ -79,6 +79,14 @@ class JeploIsaacBackend:
         self._joint_names = list(self.robot.joint_names) if hasattr(self.robot, "joint_names") else []
 
     # -- TourBackend ---------------------------------------------------------------------------
+    def reset(self, poses) -> None:
+        """Teleport env 0 (nav eval episodes) and clear the policy's history, hidden state and depth buffer."""
+        self.se.reset_envs_to(self.env, list(poses))
+        self.policy.reset()
+        self.depth.reset()
+        self._depth_latest = np.ones((25, 60), dtype=np.float32)
+        self._depth_rows = []
+
     def step(self, commands) -> None:
         import torch
 
@@ -96,8 +104,6 @@ class JeploIsaacBackend:
         return [bool(v) for v in self.se.read_fall_flags(self.env).detach().cpu()]
 
     def observation(self, command) -> dict:
-        from common.cerberus_eval.camera_rig import quat_from_matrix  # noqa: F401
-
         data = self.robot.data
         q_xyzw = [float(v) for v in data.root_quat_w[0].detach().cpu()]
         q_wxyz = (q_xyzw[3], q_xyzw[0], q_xyzw[1], q_xyzw[2])

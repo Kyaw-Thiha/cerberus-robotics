@@ -65,6 +65,11 @@ Navigation eval (same seeded start-goal pairs, planner and controller as the PPO
 `summary.json` under `outputs/scratch/jeplo/nav_eval` (VM copy `/home/ubuntu/cerberus-results/jeplo/nav_eval_seed0`).
 The PPO baseline on the same pairs follows below.
 
-On the same task the PPO baseline (Go2 height-scan policy) walked 5.7 m and fell at 8.3 s while turning west; the
-legs-only policy tracks 0.41 m/s in a straight-line probe. Those are results about the trained policies, not about
-JEPLO's adapter (which is the only changed component for the JEPLO runs).
+On the same one-goal tour the PPO baseline (Go2 height-scan policy) walked 5.1 m and fell at 5.3 s; an earlier
+open-loop walk with the same policy reached only 0.14 m in 20 s because it drove into a couch. The arm-robot
+checkpoint does not translate in the scene at all (0.015 m/s under a 0.7 m/s command). Those are results about the
+trained policies, not about JEPLO's adapter, which is the only changed component for the JEPLO runs.
+
+The PPO N=5 eval on the same pairs could not be completed: Kit crashed at startup on four consecutive attempts
+(leftover GPU-context problem after the crash storm). The N=1 tour comparison and the JEPLO N=5 numbers are the
+available evidence; that limitation is stated in `docs/showcase.md`.

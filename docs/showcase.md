@@ -22,6 +22,10 @@ the teaser and GIF are 60 s / 10 s cuts.
 | 99_results.png | success, falls, path efficiency (PPO / JEPLO / kinematic bound) | — | N and seeds printed in the subtitle |
 | walk_ego.mp4, arm_ego.mp4 | session-3 RTX renders of the same home and the arm robot | scripted / open-loop | labelled "session 3" in the film |
 
+The T5 grasp mission could not be recorded: `scene_arm_grasp.py` crashed at Kit startup on all three attempts in the
+same GPU-context state that blocked the live chase capture. T4's PPO N=5 run is likewise blocked; the N=1 tour
+comparison is what the results card shows for PPO.
+
 ## Results (same seed 0, same goal (7.55, -1.92), same planner and controller)
 
 | policy | reached | net displacement | path efficiency | falls |

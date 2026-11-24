@@ -40,7 +40,9 @@ def render(rows: list[dict], out: Path, title: str = "Navigation in scene 1 (phy
     n = rows[0].get("n", "?") if rows else "?"
     seeds = rows[0].get("seeds", "?") if rows else "?"
     fig.suptitle(title, fontsize=12)
-    fig.text(0.5, 0.02, f"N = {n} per policy; seeds {seeds}; ground-truth map and pose, same planner and controller",
+    note = rows[0].get("note", "") if rows else ""
+    fig.text(0.5, 0.02, f"N = {n}; seeds {seeds}; {note}" if note else
+             f"N = {n}; seeds {seeds}; ground-truth map and pose, same planner and controller",
              ha="center", fontsize=8, color="#555555")
     fig.tight_layout(rect=(0, 0.05, 1, 0.94))
     out.parent.mkdir(parents=True, exist_ok=True)

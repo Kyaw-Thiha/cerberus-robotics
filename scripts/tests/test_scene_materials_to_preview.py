@@ -211,3 +211,18 @@ def test_preview_materials_live_inside_the_scene_root(tmp_path):
     preview_path = report["samples"][0]["preview"]
     assert preview_path.startswith("/World/__PreviewMaterials/")
     assert stage.GetPrimAtPath(preview_path).IsValid()
+
+
+def test_light_scale_overrides_every_light(tmp_path):
+    from pxr import Sdf, Usd, UsdLux
+
+    scene = _make_scene(tmp_path)
+    stage = Usd.Stage.Open(str(scene))
+    light = UsdLux.RectLight.Define(stage, "/World/Lights/room")
+    light.CreateIntensityAttr(1000.0)
+    stage.GetRootLayer().Save()
+
+    report = conv.build_layer(scene, tmp_path / "materials_preview.usda", light_scale=0.5)
+    assert report["light_overrides"] == 1
+    check = Usd.Stage.Open(str(tmp_path / "materials_preview.usda"))
+    assert check.GetPrimAtPath("/World/Lights/room").GetAttribute("inputs:intensity").Get() == 500.0

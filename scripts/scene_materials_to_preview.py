@@ -303,7 +303,8 @@ def _primvar_name(stage) -> str:
 
 
 def build_layer(usd_path: Path, out_layer: Path, *, rebind: bool = True,
-                debug_colour: tuple[float, float, float] | None = None) -> dict:
+                debug_colour: tuple[float, float, float] | None = None,
+                light_scale: float | None = None) -> dict:
     """Write `out_layer`: UsdPreviewSurface materials + (optionally) re-bound geometry. Returns the report."""
     from pxr import Sdf, Usd, UsdGeom, UsdShade
 
@@ -410,6 +411,23 @@ def build_layer(usd_path: Path, out_layer: Path, *, rebind: bool = True,
             except Exception:  # noqa: BLE001, S112 - an older pxr without SetActive must not stop the conversion
                 continue
 
+    light_overrides = 0
+    if light_scale is not None and light_scale > 0:
+        # One global scale on every scene light, applied identically to every camera (owner's option b). The lights
+        # live inside the scene's own root, so these overrides are in the same reference scope as the material binds.
+        for prim in stage.Traverse():
+            if not prim.GetTypeName().endswith("Light"):
+                continue
+            attr = prim.GetAttribute("inputs:intensity")
+            if not attr:
+                continue
+            value = attr.Get()
+            if value is None:
+                continue
+            over = out.OverridePrim(str(prim.GetPath()))
+            over.CreateAttribute("inputs:intensity", Sdf.ValueTypeNames.Float).Set(float(value) * float(light_scale))
+            light_overrides += 1
+
     deinstanced = 0
     if rebind:
         # USD does not allow a per-instance material override on an `instanceable` prim: the binding lives on the
@@ -451,6 +469,8 @@ def build_layer(usd_path: Path, out_layer: Path, *, rebind: bool = True,
         "rebound": rebound,
         "mdl_materials_deactivated": deactivated,
         "instances_deinstanced": deinstanced,
+        "light_overrides": light_overrides,
+        "light_scale": light_scale,
         "unbound": unbound,
         "uv_primvar": uv_primvar,
         "uv_primvars_used": {k: v for k, v in list(uv_by_material.items())[:10]},
@@ -506,6 +526,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out-dir", default=None, help="where the layer and wrapper go (default: beside --usd)")
     parser.add_argument("--json", default=None)
     parser.add_argument("--no-rebind", action="store_true", help="write the materials but leave bindings alone")
+    parser.add_argument("--light-scale", type=float, default=None,
+                        help="multiply every scene light's intensity by this factor (one setting for all cameras)")
     parser.add_argument("--debug-colour", default=None,
                         help="R,G,B: flat colour for every material, to test whether the override is applied at all")
     args = parser.parse_args(argv)
@@ -513,7 +535,8 @@ def main(argv: list[str] | None = None) -> int:
     usd = Path(args.usd)
     out_dir = Path(args.out_dir) if args.out_dir else usd.parent
     debug = tuple(float(v) for v in args.debug_colour.split(",")) if args.debug_colour else None
-    report = build_layer(usd, out_dir / LAYER_NAME, rebind=not args.no_rebind, debug_colour=debug)
+    report = build_layer(usd, out_dir / LAYER_NAME, rebind=not args.no_rebind, debug_colour=debug,
+                         light_scale=args.light_scale)
     wrapper = write_preview_wrapper(usd, out_dir / LAYER_NAME)
     report["wrapper"] = str(wrapper)
     report["override_env"] = f"CERBERUS_SCENE_USD_OVERRIDE={wrapper}"

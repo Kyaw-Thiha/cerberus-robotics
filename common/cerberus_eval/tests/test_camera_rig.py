@@ -9,6 +9,7 @@ import sys
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 from common.cerberus_eval import camera_rig as cr
@@ -100,3 +101,31 @@ def test_rgb_from_annotator_data_handles_odd_layouts():
     floats = np.full((4, 5, 3), 0.5, dtype=np.float32)
     out = rgb_from_annotator_data(floats)
     assert out.dtype == np.uint8 and out.max() in (127, 128)
+
+
+def test_update_uses_the_passed_pose_and_logs_a_world_ego_pose():
+    """The chase camera must follow the pose the caller measured, not the (stale) USD xform."""
+    import numpy as np
+
+    from common.cerberus_eval.camera_rig import CameraRig, CameraSpec, rotate_vector
+
+    rig = CameraRig.__new__(CameraRig)  # no Kit: exercise only the arithmetic
+    rig.specs = {
+        "chase": CameraSpec("chase", "chase", (640, 480), hfov_deg=70.0, distance=1.5, height=1.2,
+                            pitch_down_deg=15.0),
+        "ego": CameraSpec("ego", "ego", (640, 480), hfov_deg=90.0, offset=(0.38, 0.0, 0.30)),
+    }
+    rig._chase_yaw = None
+    rig._authored = {}
+    written = {}
+    rig._write_xform = lambda name, pos, quat: written.__setitem__(name, np.asarray(pos, dtype=float))
+    rig.update(base_pos=np.array([2.0, 1.0, 0.4]), base_quat_wxyz=(1.0, 0.0, 0.0, 0.0))
+
+    chase = written["chase"]
+    assert np.linalg.norm(chase[:2] - np.array([2.0, 1.0])) == pytest.approx(1.5, abs=1e-6)
+    ego_pos, _ = rig.world_pose("ego")
+    assert ego_pos == pytest.approx([2.38, 1.0, 0.70])
+
+    # a quarter turn about z moves the ego offset to +y in world coordinates
+    rotated = rotate_vector((0.38, 0.0, 0.3), (0.7071067811865476, 0.0, 0.0, 0.7071067811865476))
+    assert rotated == pytest.approx([0.0, 0.38, 0.3], abs=1e-6)

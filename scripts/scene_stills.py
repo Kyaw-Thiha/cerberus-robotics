@@ -176,7 +176,9 @@ def render(args, out_dir: Path, width: int, height: int) -> int:
                 "mdl_system_path": os.environ.get("MDL_SYSTEM_PATH", "")}
 
     for spec in specs:
-        rig.update()
+        robot_state = env.unwrapped.scene["robot"].data
+        rig.update(base_pos=robot_state.root_pos_w[0].detach().cpu().numpy(),
+                   base_quat_wxyz=tuple(float(v) for v in robot_state.root_quat_w[0].detach().cpu().tolist()))
         sim.render()
         frame = rig.capture(spec.name)
         print(f"[stills] {spec.name} frame {frame.shape} {frame.dtype}", flush=True)

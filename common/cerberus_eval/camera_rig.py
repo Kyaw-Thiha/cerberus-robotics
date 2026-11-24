@@ -91,6 +91,19 @@ def quat_multiply(a: tuple[float, float, float, float], b: tuple[float, float, f
             aw * bz + ax * by - ay * bx + az * bw)
 
 
+def rotate_vector(vec, quat_wxyz) -> np.ndarray:
+    """Rotate a vector by a WXYZ quaternion (three.js-style, no scipy dependency)."""
+    w, x, y, z = (float(v) for v in quat_wxyz)
+    vx, vy, vz = (float(v) for v in vec)
+    # t = 2 * cross(q.xyz, v); v' = v + w*t + cross(q.xyz, t)
+    tx = 2.0 * (y * vz - z * vy)
+    ty = 2.0 * (z * vx - x * vz)
+    tz = 2.0 * (x * vy - y * vx)
+    return np.array([vx + w * tx + (y * tz - z * ty),
+                     vy + w * ty + (z * tx - x * tz),
+                     vz + w * tz + (x * ty - y * tx)])
+
+
 def yaw_of(quat_wxyz: tuple[float, float, float, float]) -> float:
     w, x, y, z = quat_wxyz
     return math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z))
@@ -194,6 +207,7 @@ class CameraRig:
         self._render_products: dict[str, Any] = {}
         self._annotators: dict[str, Any] = {}
         self._chase_yaw: float | None = None
+        self._authored: dict[str, tuple[np.ndarray, tuple[float, ...]]] = {}
         self._create()
 
     # -- prims
@@ -241,12 +255,18 @@ class CameraRig:
         ops = {op.GetOpName(): op for op in xform.GetOrderedXformOps()}
         translate = ops.get("xformOp:translate") or xform.AddTranslateOp()
         orient = ops.get("xformOp:orient") or xform.AddOrientOp()
+        self._authored[name] = (np.array([float(pos[0]), float(pos[1]), float(pos[2])]), tuple(quat_wxyz))
         translate.Set(self._Gf.Vec3d(float(pos[0]), float(pos[1]), float(pos[2])))
         w, x, y, z = quat_wxyz
         orient.Set(self._Gf.Quatf(float(w), float(x), float(y), float(z)))
 
     # -- per-step
     def world_pose(self, name: str) -> tuple[np.ndarray, tuple[float, float, float, float]]:
+        """The camera's world pose. On Isaac Lab 3.0 the articulation poses live in Fabric and the USD xforms are not
+        refreshed, so the transform this rig authored is authoritative (the stage read is only a fallback)."""
+        if name in self._authored:
+            pos, quat = self._authored[name]
+            return np.array(pos), tuple(quat)
         prim = self.stage.GetPrimAtPath(self.paths[name])
         m = self._UsdGeom.Xformable(prim).ComputeLocalToWorldTransform(0.0)
         t = m.ExtractTranslation()
@@ -262,9 +282,17 @@ class CameraRig:
         imag = q.GetImaginary()
         return np.array([t[0], t[1], t[2]]), (q.GetReal(), imag[0], imag[1], imag[2])
 
-    def update(self, *, low_pass: float = 0.25) -> None:
-        """Move the chase camera behind the base with a low-passed yaw (no snapping when the robot turns)."""
-        base_pos, base_quat = self.base_pose()
+    def update(self, *, low_pass: float = 0.25, base_pos=None, base_quat_wxyz=None) -> None:
+        """Place the moving cameras from the robot's live pose.
+
+        `base_pos`/`base_quat_wxyz` should come from the articulation's physics state: on Isaac Lab 3.0 the USD xform
+        of the robot is not refreshed, so reading the stage (the fallback) leaves the chase camera parked (measured
+        2026-11-23: the logged camera never moved while the robot walked).
+        """
+        if base_pos is None or base_quat_wxyz is None:
+            base_pos, base_quat = self.base_pose()
+        else:
+            base_pos, base_quat = np.asarray(base_pos, dtype=float), tuple(float(v) for v in base_quat_wxyz)
         yaw = yaw_of(base_quat)
         if self._chase_yaw is None:
             self._chase_yaw = yaw
@@ -277,6 +305,12 @@ class CameraRig:
             eye, R = chase_pose(base_pos, self._chase_yaw, distance=spec.distance, height=spec.height,
                                 pitch_down_deg=spec.pitch_down_deg)
             self._write_xform(spec.name, eye, quat_from_matrix(R))
+        for spec in self.specs.values():
+            if spec.kind != "ego":
+                continue
+            # the ego camera is authored in the base frame; its WORLD pose is what the pose log must carry
+            world = base_pos + rotate_vector(tuple(spec.offset), base_quat)
+            self._authored[spec.name] = (np.asarray(world, dtype=float), tuple(float(v) for v in base_quat))
 
     # -- capture
     def _ensure_products(self) -> None:

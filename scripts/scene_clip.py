@@ -281,13 +281,13 @@ def record(args) -> int:
                 values = [targets[j] for j in list(ARX5_ARM_JOINTS) + list(GRIPPER_JOINT_NAMES)]
                 robot.set_joint_position_target(torch.tensor([values], device=device), joint_ids=arm_ids)
             env.step(policy(se.fresh_observations(env)))
-            rig.update()
-            sim.render()
+            # the robots live in Fabric: read the physics state, never the (stale) USD xform
+            bpos = robot.data.root_pos_w[0].detach().cpu().numpy()
+            bquat = robot.data.root_quat_w[0].detach().cpu().numpy()
+            rig.update(base_pos=bpos, base_quat_wxyz=tuple(float(v) for v in bquat))
             frame = rig.capture(spec.name)
             writer.append_data(frame)
             cam_pos, cam_quat = rig.world_pose(spec.name)
-            bpos = robot.data.root_pos_w[0].detach().cpu().numpy()
-            bquat = robot.data.root_quat_w[0].detach().cpu().numpy()
             log.append(t=sim_t, base_pos=bpos, base_quat_wxyz=tuple(float(v) for v in bquat),
                        cam_pos=cam_pos, cam_quat_wxyz=cam_quat)
             if step % max(args.fps, 1) == 0:

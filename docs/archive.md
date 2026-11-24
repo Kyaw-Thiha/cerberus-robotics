@@ -84,7 +84,7 @@ as `docs/platform_config.md`), the agent handoffs in `plans/` (the four that car
 `docs/worlds_integration_spec.md`, `docs/sensor_setup.md`, `docs/slam_design.md` and
 `docs/adversarial_gate_method.md`), and two functions with no caller (`xacro_available`, `looks_like_path`).
 
-## Session 4 (2026-11-24, tag `archive/session4-2026-11-24`)
+## Session 4 (2026-11-24, tag `archive/session4-2026-11-24` = the commit *before* removal)
 
 Removed from `main` because the Brev relay was dropped and the session reports had served their purpose; all files
 were uploaded to R2 `archive/2026-11-24/repo-tidy/` (21 files, byte-verified) before deletion:

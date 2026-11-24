@@ -265,6 +265,31 @@ def collect(stage, base_dir: Path = Path(".")) -> tuple[list[dict], dict[str, st
     return described, bindings
 
 
+def uv_sets_by_material(stage) -> dict[str, str]:
+    """material path -> the UV primvar name used by the meshes bound to it.
+
+    GRScenes meshes carry ``st`` on some models and ``st1``/``st2`` on others (measured 2026-11-23: 215 of 401
+    sampled meshes have ``st``, 160 have ``st1``). A texture whose ``st`` primvar does not exist samples its
+    fallback -- white -- which is why a textured material can still render flat.
+    """
+
+    found: dict[str, str] = {}
+    for prim in stage.Traverse():
+        if prim.GetTypeName() not in {"Mesh", "GeomMesh"}:
+            continue
+        names = {a.GetName()[len("primvars:"):] for a in prim.GetAttributes()
+                 if a.GetName().startswith("primvars:") and not a.GetName().endswith(":indices")}
+        uv = next((n for n in ("st", "st1", "st2", "st3") if n in names), None)
+        if uv is None:
+            continue
+        for rel in prim.GetRelationships():
+            if rel.GetName() != "material:binding":
+                continue
+            for target in rel.GetTargets():
+                found.setdefault(str(target), uv)
+    return found
+
+
 def _primvar_name(stage) -> str:
     """The mesh UV primvar name the scene actually authors ('st' for UE4 exports, but check)."""
     for prim in stage.Traverse():
@@ -288,6 +313,7 @@ def build_layer(usd_path: Path, out_layer: Path, *, rebind: bool = True) -> dict
     usd_dir = usd_path.parent
     described, bindings = collect(stage, usd_dir)
     uv_primvar = _primvar_name(stage)
+    uv_by_material = uv_sets_by_material(stage)
     mpu = float(UsdGeom.GetStageMetersPerUnit(stage))
 
     out = Usd.Stage.CreateInMemory()
@@ -312,13 +338,14 @@ def build_layer(usd_path: Path, out_layer: Path, *, rebind: bool = True) -> dict
         if diffuse:
             surface.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).Set(diffuse)
 
+        uv_name = uv_by_material.get(item["prim_path"], uv_primvar)
         textures = item["textures"]
         tex_summary = {}
         if "diffuse" in textures and textures["diffuse"]["exists"]:
             tex = textures["diffuse"]
             reader = UsdShade.Shader.Define(out, f"{new_path}/stReader")
             reader.CreateIdAttr("UsdPrimvarReader_float2")
-            reader.CreateInput("varname", Sdf.ValueTypeNames.Token).Set(uv_primvar)
+            reader.CreateInput("varname", Sdf.ValueTypeNames.Token).Set(uv_name)
             uv_tex = UsdShade.Shader.Define(out, f"{new_path}/diffuseTex")
             uv_tex.CreateIdAttr("UsdUVTexture")
             uv_tex.CreateInput("file", Sdf.ValueTypeNames.Asset).Set(Sdf.AssetPath(tex["path"]))
@@ -335,7 +362,7 @@ def build_layer(usd_path: Path, out_layer: Path, *, rebind: bool = True) -> dict
             tex = textures["normal"]
             reader = UsdShade.Shader.Define(out, f"{new_path}/normalStReader")
             reader.CreateIdAttr("UsdPrimvarReader_float2")
-            reader.CreateInput("varname", Sdf.ValueTypeNames.Token).Set(uv_primvar)
+            reader.CreateInput("varname", Sdf.ValueTypeNames.Token).Set(uv_name)
             ntex = UsdShade.Shader.Define(out, f"{new_path}/normalTex")
             ntex.CreateIdAttr("UsdUVTexture")
             ntex.CreateInput("file", Sdf.ValueTypeNames.Asset).Set(Sdf.AssetPath(tex["path"]))
@@ -400,6 +427,7 @@ def build_layer(usd_path: Path, out_layer: Path, *, rebind: bool = True) -> dict
         "mdl_materials_deactivated": deactivated,
         "unbound": unbound,
         "uv_primvar": uv_primvar,
+        "uv_primvars_used": {k: v for k, v in list(uv_by_material.items())[:10]},
         "missing_texture_count": len(missing),
         "missing_textures": missing[:20],
         "samples": report_materials[:5],

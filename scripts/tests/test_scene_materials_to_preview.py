@@ -166,3 +166,19 @@ def test_mdl_material_prims_are_deactivated(tmp_path):
 
     stage = Usd.Stage.Open(str(tmp_path / "materials_preview.usda"))
     assert not stage.GetPrimAtPath("/World/Materials/M_Wall").IsActive()
+
+
+def test_uv_set_detection_prefers_the_mesh_primvar(tmp_path):
+    from pxr import Usd, UsdGeom, UsdShade
+
+    scene = _make_scene(tmp_path)
+    stage = Usd.Stage.Open(str(scene))
+    mesh = UsdGeom.Mesh(stage.GetPrimAtPath("/World/Geometry/Wall"))
+    # GRScenes models use st1/st2 as often as st; a texture bound to "st" then samples its white fallback
+    UsdGeom.PrimvarsAPI(mesh.GetPrim()).RemovePrimvar("st")
+    UsdGeom.PrimvarsAPI(mesh.GetPrim()).CreatePrimvar(
+        "st1", Sdf.ValueTypeNames.TexCoord2fArray, UsdGeom.Tokens.vertex).Set([(0, 0), (1, 0), (1, 1)])
+    stage.GetRootLayer().Save()
+
+    uv = conv.uv_sets_by_material(Usd.Stage.Open(str(scene)))
+    assert uv["/World/Materials/M_Wall"] == "st1"

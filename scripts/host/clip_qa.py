@@ -274,19 +274,21 @@ def project_point(point: np.ndarray, cam_pos: np.ndarray, cam_quat: np.ndarray, 
     return round(u), round(v), bool(inside)
 
 
-def robot_visible(frame: np.ndarray, pixel: tuple[int, int], depth_ok: bool,
+def robot_visible_in_frame(frame: np.ndarray, pixel: tuple[int, int], depth_ok: bool,
                   hfov_deg: float) -> dict[str, Any]:
     """Heuristic: the projection is inside the frame and the patch there differs from the border background."""
     h, w = frame.shape[:2]
-    if not depth_ok:
-        return {"visible": False, "reason": "base is behind the camera"}
     u, v = pixel
+    if not depth_ok:
+        return {"visible": False, "reason": "base is behind the camera", "contrast": 0.0,
+                "patch_luminance": 0.0, "border_luminance": 0.0, "patch_std": 0.0, "pixel": [int(u), int(v)]}
     # robot body half-height ~0.35 m at the logged depth; use a generous patch
     half = max(int(0.06 * w), 20)
     y0, y1 = max(v - half, 0), min(v + half, h)
     x0, x1 = max(u - half, 0), min(u + half, w)
     if y1 <= y0 or x1 <= x0:
-        return {"visible": False, "reason": "projection outside the frame"}
+        return {"visible": False, "reason": "projection outside the frame", "contrast": 0.0,
+                "patch_luminance": 0.0, "border_luminance": 0.0, "patch_std": 0.0, "pixel": [int(u), int(v)]}
     patch = frame[y0:y1, x0:x1]
     border = np.concatenate([frame[0, :, :], frame[-1, :, :], frame[:, 0, :], frame[:, -1, :]], axis=0)
     patch_l = luma(patch)
@@ -354,7 +356,7 @@ def run_gate(clip: Path, *, camera: str = "none", poses_path: Path | None = None
                 entry = poses["frames"][round((len(poses["frames"]) - 1) * fraction / 100.0)]
                 u, v, in_front = project_point(np.array(entry["base_pos"]), np.array(entry["cam_pos"]),
                                                np.array(entry["cam_quat_xyzw"]), hfov, info["width"], info["height"])
-                vis.append({"percent": fraction, **robot_visible(frame, (u, v), in_front, hfov)})
+                vis.append({"percent": fraction, **robot_visible_in_frame(frame, (u, v), in_front, hfov)})
             report["robot_visibility"] = vis
             if not all(item["visible"] for item in vis):
                 report["problems"].append("robot not visible in every chase frame")

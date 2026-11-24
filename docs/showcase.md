@@ -12,7 +12,15 @@ Status legend: **done** (gated and shipped), **pending** (build in this session)
 |---|---|---|---|
 | `mission_kinematic.mp4` (1920x1080, 30 fps, 4 s) | top-down map of the full household mission: navigate to the table, pick with scripted IK, navigate to the place surface, place | **kinematic simulation, scripted IK skills**: A* + pure pursuit on a unicycle (no physics, no slip, no falls) on the scene-1 occupancy grid; the arm solves IK waypoints; the robot/cube poses are the simulator's own state | done |
 | `arm_chase.mp4`, `arm_closeup.mp4` (1920x1080, 30 fps, 20 s) | the Go2 **with the ARX5** standing in the real GRScenes home while the arm reaches, turns the wrist and opens/closes the gripper | RTX render of the physics sim; legs held by the retrained `go2_arx5_locomotion_ga_v1_candidate` checkpoint, arm by scripted joint targets; camera poses logged per frame; **scene materials are the dataset's own textures rebuilt as UsdPreviewSurface** (the MDL shaders themselves do not compile on this stack) | rendered in session 3 |
-| `walk_ego.mp4`, `walk_chase.mp4`, `walk_overview.mp4` + `hero_walk_60s.mp4` | the arm robot walking a scripted path in the home, cut EGO -> CHASE -> fixed OVERVIEW | RTX render; velocity commands are scripted, the joints come from the retrained checkpoint; pose logs per frame | rendered in session 3 |
+| `walk_ego.mp4` (1920x1080, 30 fps, 20 s) | the arm robot walking a scripted path in the home | RTX render; velocity commands are scripted, the joints come from the retrained checkpoint; pose log per frame; passes the clip QA gate (hue bins 3-5, luminance 122) | rendered and gated in session 3 |
+| `arm_ego.mp4` (1920x1080, 30 fps, 20 s) | the arm robot standing while the arm reaches, turns the wrist and opens/closes the gripper | RTX render; legs held by the retrained checkpoint, arm scripted | rendered in session 3 |
+
+**Scene look, stated honestly.** The materials are the dataset's own textures, rebuilt as `UsdPreviewSurface` and bound
+in scope (the root cause of the earlier flat grey was a USD reference-scope rule, see
+`docs/reports/render_unblock.md`). What is *not* solved on this stack: exposure. The RTX tonemapper setting and a
+0.45 global scale on all 137 scene lights change these views by less than 10 %, so the wide views of this white-toned
+home read a mean luminance of 173-235 and fail the gate's 70-170 band (the EGO view reads 134 and passes). No
+threshold was changed to hide that.
 | `walking_30s.mp4` (30 s, 1280x720, 20 fps) | **JEPLO authors' demo**: their released checkpoint walking the Go2 in their own MuJoCo sim-to-sim loop, headless | their simulator (`unitree_mujoco` python route) and their checkpoint; depth comes from a port of their publisher, inference on CUDA EP (not TensorRT); **not our pipeline, not our scene**; the clip-QA still checks fail its hue diversity because MuJoCo's grid is grey (media checks pass) | done (labelled: authors' demo) |
 | `demo_scene1.mp4` (previous session) | 90 s of the legs-only robot walking a scripted path | **rejected**: the scene rendered as one flat colour (MDL materials unresolved) and the camera was fixed, not following | not shown |
 

@@ -36,7 +36,8 @@ def draw_map(ax, grid, meta, path_xy, pose, step_label: str, path_label: str = "
 
     resolution = float(meta.get("resolution_m", meta.get("resolution", 0.05)) or 0.05)
     origin = meta.get("origin_xy", meta.get("origin", [0.0, 0.0]))
-    ax.imshow(grid, cmap="Greys", origin="lower",
+    ax.set_facecolor("#5a5a5a")
+    ax.imshow(grid, cmap="gray", origin="lower", vmin=-1.6, vmax=2.6,
               extent=(origin[0], origin[0] + grid.shape[1] * resolution,
                       origin[1], origin[1] + grid.shape[0] * resolution))
     if path_xy is not None and len(path_xy) > 1:
@@ -47,11 +48,12 @@ def draw_map(ax, grid, meta, path_xy, pose, step_label: str, path_label: str = "
     ax.plot([x], [y], "o", color="#d62728", markersize=5)
     ax.arrow(x, y, 0.35 * np.cos(yaw), 0.35 * np.sin(yaw), head_width=0.12, color="#d62728")
     ax.set_aspect("equal")
-    ax.set_xlabel("x (m)")
-    ax.set_ylabel("y (m)")
-    ax.set_title("top-down map (planner occupancy, ground truth)", fontsize=9)
+    ax.set_xlabel("x (m)", color="#c8c8c8")
+    ax.set_ylabel("y (m)", color="#c8c8c8")
+    ax.tick_params(colors="#909090", labelsize=7)
+    ax.set_title("top-down map (planner occupancy, ground truth)", fontsize=9, color="#e0e0e0")
     if step_label:
-        ax.text(0.02, 0.02, step_label, transform=ax.transAxes, fontsize=8, va="bottom")
+        ax.text(0.02, 0.02, step_label, transform=ax.transAxes, fontsize=8, va="bottom", color="#e0e0e0")
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -67,10 +69,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--size", default="1920x1080")
     args = parser.parse_args(argv)
 
-    import imageio.v2 as imageio
+    import subprocess
+    import tempfile
+
     import matplotlib
-    import numpy as np
-    from PIL import Image
 
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -83,36 +85,44 @@ def main(argv: list[str] | None = None) -> int:
     trajectory = None
     poses = json.loads(Path(args.poses).read_text())
     frames = poses["frames"] if isinstance(poses, dict) else poses
-    base = [(f["base_pos"][0], f["base_pos"][1], _yaw(f["base_quat_wxyz"])) for f in frames]
+    def base_yaw(frame):
+        if "base_quat_wxyz" in frame:
+            return _yaw(frame["base_quat_wxyz"])
+        x, y, z, w = frame["base_quat_xyzw"]  # the pose log stores XYZW
+        return _yaw([w, x, y, z])
+
+    base = [(f["base_pos"][0], f["base_pos"][1], base_yaw(f)) for f in frames]
     if args.path_from_poses:
         trajectory = [[p[0], p[1]] for p in base]
 
-    reader = imageio.get_reader(args.clip)
-    fps = reader.get_meta_data().get("fps", 30)
-    writer = imageio.get_writer(args.out, fps=fps, macro_block_size=None)
-
+    fps_probe = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+                                "stream=r_frame_rate", "-of", "csv=p=0", args.clip],
+                               capture_output=True, text=True, check=False).stdout.strip()
     try:
-        for index, frame in enumerate(reader):
-            pose = base[min(index, len(base) - 1)]
-            fig = plt.figure(figsize=(half / 100, height / 100), dpi=100)
+        num, den = fps_probe.split("/")
+        fps = float(num) / float(den)
+    except (ValueError, ZeroDivisionError):
+        fps = 30.0
+
+    # One map PNG per clip frame, then ffmpeg hstacks the two streams (no imageio/ffmpeg-python needed).
+    with tempfile.TemporaryDirectory() as tmp:
+        tmpdir = Path(tmp)
+        for index, pose in enumerate(base):
+            fig = plt.figure(figsize=(half / 100, height / 100), dpi=100, facecolor="#5a5a5a")
             ax = fig.add_axes([0.08, 0.07, 0.9, 0.86])
             here = trajectory[: min(index + 1, len(trajectory))] if trajectory else None
             draw_map(ax, grid, meta, here if trajectory else path_xy, pose, f"t = {index / fps:5.1f} s",
                      path_label="logged trajectory" if trajectory else "planned path")
-            fig.canvas.draw()
-            map_rgb = np.asarray(fig.canvas.buffer_rgba())[..., :3]
+            fig.savefig(tmpdir / f"map_{index:05d}.png")
             plt.close(fig)
-
-            image = Image.fromarray(frame)
-            image.thumbnail((half, height))
-            canvas = Image.new("RGB", (width, height), (16, 16, 16))
-            canvas.paste(image, ((half - image.width) // 2, (height - image.height) // 2))
-            canvas.paste(Image.fromarray(map_rgb).resize((half, height)), (half, 0))
-            writer.append_data(np.asarray(canvas))
-    finally:
-        writer.close()
-        reader.close()
-    print(f"wrote {args.out} ({index + 1} frames, {args.label})")
+        subprocess.run(["ffmpeg", "-y", "-i", args.clip, "-framerate", str(fps),
+                        "-i", str(tmpdir / "map_%05d.png"),
+                        "-filter_complex",
+                        (f"[0:v]scale={half}:{height}:force_original_aspect_ratio=decrease,"
+                         f"pad={half}:{height}:(ow-iw)/2:(oh-ih)/2:color=0x101010[l];[l][1:v]hstack"),
+                        "-c:v", "libx264", "-pix_fmt", "yuv420p", "-r", str(fps), args.out],
+                       check=True, capture_output=True)
+    print(f"wrote {args.out} ({len(base)} frames, {args.label})")
     return 0
 
 

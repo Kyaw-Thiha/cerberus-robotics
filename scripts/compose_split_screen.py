@@ -31,7 +31,7 @@ def load_grid(path: Path):
     return np.asarray(grid), meta
 
 
-def draw_map(ax, grid, meta, path_xy, pose, step_label: str):
+def draw_map(ax, grid, meta, path_xy, pose, step_label: str, path_label: str = "planned path"):
     import numpy as np
 
     resolution = float(meta.get("resolution_m", meta.get("resolution", 0.05)) or 0.05)
@@ -42,7 +42,7 @@ def draw_map(ax, grid, meta, path_xy, pose, step_label: str):
     if path_xy is not None and len(path_xy) > 1:
         xs = [p[0] for p in path_xy]
         ys = [p[1] for p in path_xy]
-        ax.plot(xs, ys, "-", color="#1f77b4", linewidth=1.6, label="planned path")
+        ax.plot(xs, ys, "-", color="#1f77b4", linewidth=1.6, label=path_label)
     x, y, yaw = pose
     ax.plot([x], [y], "o", color="#d62728", markersize=5)
     ax.arrow(x, y, 0.35 * np.cos(yaw), 0.35 * np.sin(yaw), head_width=0.12, color="#d62728")
@@ -60,6 +60,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--poses", required=True)
     parser.add_argument("--grid", required=True)
     parser.add_argument("--path", default=None, help="JSON with a list of [x, y] waypoints (the planned path)")
+    parser.add_argument("--path-from-poses", action="store_true",
+                        help="draw the robot's own logged trajectory instead (say so in --label)")
     parser.add_argument("--out", required=True)
     parser.add_argument("--label", default="RTX view | top-down map")
     parser.add_argument("--size", default="1920x1080")
@@ -78,9 +80,12 @@ def main(argv: list[str] | None = None) -> int:
 
     grid, meta = load_grid(Path(args.grid))
     path_xy = json.loads(Path(args.path).read_text()) if args.path else None
+    trajectory = None
     poses = json.loads(Path(args.poses).read_text())
     frames = poses["frames"] if isinstance(poses, dict) else poses
     base = [(f["base_pos"][0], f["base_pos"][1], _yaw(f["base_quat_wxyz"])) for f in frames]
+    if args.path_from_poses:
+        trajectory = [[p[0], p[1]] for p in base]
 
     reader = imageio.get_reader(args.clip)
     fps = reader.get_meta_data().get("fps", 30)
@@ -91,7 +96,9 @@ def main(argv: list[str] | None = None) -> int:
             pose = base[min(index, len(base) - 1)]
             fig = plt.figure(figsize=(half / 100, height / 100), dpi=100)
             ax = fig.add_axes([0.08, 0.07, 0.9, 0.86])
-            draw_map(ax, grid, meta, path_xy, pose, f"t = {index / fps:5.1f} s")
+            here = trajectory[: min(index + 1, len(trajectory))] if trajectory else None
+            draw_map(ax, grid, meta, here if trajectory else path_xy, pose, f"t = {index / fps:5.1f} s",
+                     path_label="logged trajectory" if trajectory else "planned path")
             fig.canvas.draw()
             map_rgb = np.asarray(fig.canvas.buffer_rgba())[..., :3]
             plt.close(fig)

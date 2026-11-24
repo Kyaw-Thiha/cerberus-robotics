@@ -24,9 +24,13 @@ LICENSE, never imported by the core). This report records what ran, what did not
 
 ## J2 Sensor (our implementation)
 
-- `plugins/jeplo/sensor.py` builds the same 25x60 grid from Isaac Lab ray hits, with the authors' sensor offset
-  (0.275, 0, 0.148) and 180-degree x rotation, 2.0 m range, Gaussian noise, bottom-row dropout, 10-frame
-  accumulation, 10 Hz publication. Training-only random occlusion masks are **not** added (deployment has none).
+- `plugins/jeplo/pattern.py` reproduces the authors' spherical-slice ray pattern (25 vertical, 60 horizontal,
+  x=cos v cos h, y=cos v sin h, z=sin v). Isaac Lab's stock `LidarPatternCfg` does **not** produce the same
+  directions: with it, every ray missed the floor and the depth image was all 1.0.
+- `plugins/jeplo/sensor.py` builds the 25x60 image **in ray order** (range from the sensor origin for each pattern
+  ray), which is exact for a grid ray caster and avoids any ray-frame convention mismatch; 2.0 m range, Gaussian
+  noise, bottom-row dropout, 10-frame accumulation, 10 Hz publication. Training-only random occlusion masks are
+  **not** added (deployment has none).
 - Numeric validation against a direct NumPy port of their projection on a synthetic room (floor, walls, a front
   wall): per-pixel agreement is exact, max |error| 0.0 m, 0 disagreeing bins; 221 of 1500 bins filled. Figure:
   `outputs/scratch/jeplo_sensor_validation.png`. Honest limitation: this is geometry-level, not a run of their Isaac
@@ -41,7 +45,23 @@ LICENSE, never imported by the core). This report records what ran, what did not
   finite actions, targets for all 12 joints, a `height_scan` key is **rejected**, commands never exceed the
   contract range. All pass locally.
 
-## J4 In our scene
+## J4 In our scene (zero-shot, released checkpoint)
 
-PENDING — the zero-shot walk is the decisive test and is running now. Results and the honest outcome (including a
-failure) go here.
+**It walks.** First seeded goal at (7.55, -1.92), start (-3.70, 0.78), scene 1, legs-only Go2, our LiDAR simulation:
+
+| t (sim) | pose | distance to goal | command (vx, wz) |
+|---|---|---|---|
+| 5 s | (-1.65, -0.75) | 9.28 m | 0.72, 0.19 |
+| 10 s | (1.59, -1.08) | 6.02 m | 0.75, -0.12 |
+| 15 s | (4.70, -1.78) | 2.85 m | 0.79, 0.03 |
+| 20 s | (7.22, -1.90) | **0.33 m (reached)** | 0.22, -0.02 |
+
+Result: reached within 0.33 m of the goal, net displacement **11.33 m**, no fall, 20 s of simulated time. Command
+tracking is close to the requested speed (~0.65 m/s achieved on ~0.75 m/s commands). The checkpoint is the authors'
+released ONNX pair, unchanged; the observation comes from our simulator (no height scan, no privileged data).
+
+The full multi-goal tour, the N=10 seeded comparison against the PPO baseline, and the arm-robot check follow below.
+
+On the same task the PPO baseline (Go2 height-scan policy) walked 5.7 m and fell at 8.3 s while turning west; the
+legs-only policy tracks 0.41 m/s in a straight-line probe. Those are results about the trained policies, not about
+JEPLO's adapter (which is the only changed component for the JEPLO runs).

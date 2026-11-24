@@ -63,11 +63,12 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def run(args) -> int:
-    from isaaclab.sensors import RayCasterCfg, patterns
+    from isaaclab.sensors import RayCasterCfg
 
     from common.cerberus_eval.nav_loop import NavConfig, run_navigation
     from planning.local_planner.core.pure_pursuit import PurePursuitConfig
     from planning.sampling import sample_pairs
+    from plugins.jeplo.pattern import RaySphericalSlicePatternCfg
     from policy.locomotion.eval import scene_env as se
     from scripts.explore_tour import load_grid, nearest_free
     from scripts.jeplo_nav import OFFSET_POS, OFFSET_QUAT_WXYZ, JeploIsaacBackend
@@ -79,8 +80,7 @@ def run(args) -> int:
     lidar = RayCasterCfg(
         prim_path="/World/envs/env_0/Robot/base",
         offset=RayCasterCfg.OffsetCfg(pos=OFFSET_POS, rot=OFFSET_QUAT_WXYZ), ray_alignment="base",
-        pattern_cfg=patterns.LidarPatternCfg(channels=25, vertical_fov_range=[-4.5, 45.5],
-                                             horizontal_fov_range=[-60.0, 60.0], horizontal_res=2.0),
+        pattern_cfg=RaySphericalSlicePatternCfg(),
         max_distance=2.0, mesh_prim_paths=["/World/scan_proxy"], update_period=0.02, debug_vis=False)
     env, _ = se.build_loco_env(args.scene, [(start[0], start[1], 0.0, grid.floor_z)], task=se.task_for_embodiment("go2"),
                                seed=args.seed, episode_length_s=args.max_time + 60.0, with_cameras=False,

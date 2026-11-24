@@ -82,9 +82,27 @@ class SphericalDepth:
         np.minimum.at(grid, (ti[ok], pi[ok]), rr[ok])
         return grid
 
+    def project_rays(self, hits_w, sensor_pos) -> np.ndarray:
+        """Ranges in RAY ORDER (V x H), which is exact for a grid ray caster: no frame conventions involved.
+
+        The ray caster returns one hit per pattern ray, and our pattern is (25, 60) in row-major order, so the
+        depth image is the per-ray range from the sensor origin. Unfilled/far rays become max range.
+        """
+        hits = np.asarray(hits_w, dtype=np.float64).reshape(-1, 3)
+        origin = np.asarray(sensor_pos, dtype=np.float64).reshape(3)
+        r = np.linalg.norm(hits - origin, axis=1)
+        r = np.where(np.isfinite(r) & (r > 0.1) & (r <= self.max_range_m), r, self.max_range_m)
+        return r.reshape(V, H)
+
+    def update_rays(self, hits_w, sensor_pos) -> np.ndarray | None:
+        """Per-ray depth update, same accumulation/noise/dropout as :meth:`update`."""
+        return self._publish(self.project_rays(hits_w, sensor_pos))
+
     def update(self, hits_w, sensor_pos, sensor_quat_wxyz) -> np.ndarray | None:
         """Push one frame; every ``update_every`` calls publish a new normalised depth image (else ``None``)."""
-        frame = self.project(hits_w, sensor_pos, sensor_quat_wxyz)
+        return self._publish(self.project(hits_w, sensor_pos, sensor_quat_wxyz))
+
+    def _publish(self, frame: np.ndarray) -> np.ndarray | None:
         frame = frame + self._rng.normal(0.0, self.noise_std_m, size=frame.shape)
         frame = np.clip(frame, 0.0, self.max_range_m)
         self._hist.append(frame)

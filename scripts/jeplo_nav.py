@@ -52,6 +52,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--embodiment", default="go2", choices=["go2", "go2_arx5"])
     parser.add_argument("--out", required=True)
     parser.add_argument("--settle-steps", type=int, default=90)
+    parser.add_argument("--debug", action="store_true", help="print actions/depth/pose every 50 steps")
     return parser
 
 
@@ -96,6 +97,13 @@ class JeploIsaacBackend:
         tensor = torch.tensor([actions], device=self.env.unwrapped.device, dtype=torch.float32)
         self.env.step(tensor)
         self._record_depth()
+        self._steps = getattr(self, "_steps", 0) + 1
+        if getattr(self, "debug", False) and self._steps % 50 == 0:
+            data = self.robot.data
+            pos = [float(v) for v in data.root_pos_w[0].detach().cpu()]
+            print(f"[jeplo] step {self._steps} pos=({pos[0]:.2f},{pos[1]:.2f}) cmd={command} "
+                  f"|a|={float(np.abs(actions).mean()):.2f} depth_mean={float(self._depth_latest.mean()):.2f}",
+                  flush=True)
 
     def poses(self):
         return [tuple(float(v) for v in row) for row in self.se.read_poses(self.env).detach().cpu()]
@@ -113,7 +121,7 @@ class JeploIsaacBackend:
         pos = [float(v) for v in data.root_pos_w[0].detach().cpu()]
         hits = self.sensor.data.ray_hits_w[0].detach().cpu().numpy()
         sensor_pos, sensor_quat = sensor_pose_w(pos, q_wxyz)
-        published = self.depth.update(hits, sensor_pos, sensor_quat)
+        published = self.depth.update_rays(hits, sensor_pos)
         if published is not None:
             self._depth_latest = published
         names = self._joint_names or [
@@ -180,8 +188,9 @@ def main(argv: list[str] | None = None) -> int:
 
 
 def run(args) -> int:
-    from isaaclab.sensors import RayCasterCfg, patterns
+    from isaaclab.sensors import RayCasterCfg
 
+    from plugins.jeplo.pattern import RaySphericalSlicePatternCfg
     from policy.locomotion.eval import scene_env as se
 
     out = Path(args.out)
@@ -197,8 +206,7 @@ def run(args) -> int:
         prim_path="/World/envs/env_0/Robot/base",
         offset=RayCasterCfg.OffsetCfg(pos=OFFSET_POS, rot=OFFSET_QUAT_WXYZ),
         ray_alignment="base",
-        pattern_cfg=patterns.LidarPatternCfg(channels=25, vertical_fov_range=[-4.5, 45.5],
-                                             horizontal_fov_range=[-60.0, 60.0], horizontal_res=2.0),
+        pattern_cfg=RaySphericalSlicePatternCfg(),
         max_distance=2.0, mesh_prim_paths=["/World/scan_proxy"], update_period=0.02, debug_vis=False)
     env, _scene = se.build_loco_env(args.scene, [(start[0], start[1], yaw, grid.floor_z)],
                                     task=se.task_for_embodiment(args.embodiment), seed=args.seed,
@@ -206,6 +214,7 @@ def run(args) -> int:
                                     extra_sensors={"jeplo_lidar": lidar_cfg})
     os.environ["JEPLO_MODELS"] = str(Path(args.models))
     backend = JeploIsaacBackend(env, se)
+    backend.debug = args.debug
     robot = env.unwrapped.scene["robot"]
     if args.settle_steps > 0:
         import torch

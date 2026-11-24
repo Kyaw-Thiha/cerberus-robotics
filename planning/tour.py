@@ -213,6 +213,10 @@ def run_tour(
                 break
             if leg.controller.at_goal(pose, goal):
                 break
+            if int(t_total * 50) % 250 == 0:
+                print(f"[tour] t={t_total:5.1f}s goal {index + 1}/{len(goals)} "
+                      f"pose=({pose[0]:.2f},{pose[1]:.2f}) d={math.hypot(goal[0] - pose[0], goal[1] - pose[1]):.2f}m "
+                      f"cmd=({step_command[0]:.2f},{step_command[2]:.2f})", flush=True)
         final = float(math.hypot(goal[0] - pose[0], goal[1] - pose[1]))
         distances.append(final)
         reached.append(final <= config.goal_tolerance_m and not fallen)

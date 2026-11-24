@@ -127,3 +127,14 @@ def test_command_goes_through_the_contract_limiter():
     for _ in range(200):
         command = backend.set_command({"vx": 5.0, "vy": 0.0, "wz": 0.0})
     assert command["vx"] == pytest.approx(1.0, abs=1e-6)      # contract max, never 5
+
+
+def test_ray_order_projection_is_exact_for_a_grid_raycaster():
+    sensor = SphericalDepth(noise_std_m=0.0)
+    directions = _ray_directions()
+    origin = np.array([1.0, -2.0, 0.5])
+    ranges = 0.3 + 1.5 * (np.arange(len(directions)) % 97) / 97.0
+    hits = origin + directions * ranges[:, None]
+    grid = sensor.project_rays(hits, origin)
+    assert grid.shape == (V, H)
+    assert np.allclose(grid.reshape(-1), ranges, atol=1e-6)

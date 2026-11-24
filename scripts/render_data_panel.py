@@ -104,9 +104,9 @@ def render_map_frame(log: np.lib.npyio.NpzFile, index: int, width: int, height: 
     draw.text((20, 18), caption, font=_font(22), fill=(235, 235, 235))
     t = float(log["t"][min(index, len(log["t"]) - 1)])
     clock = f"{int(t // 60):02d}:{t % 60:04.1f}"
-    draw.text((20, H - 46), f"{clock}   goal {leg + 1}/{len(goals)}", font=_font(22), fill=(235, 235, 235))
+    draw.text((20, H - 58), f"{clock}   goal {leg + 1}/{len(goals)}", font=_font(22), fill=(235, 235, 235))
     frac = (index + 1) / max(1, len(poses))
-    bar_y = H - 18
+    bar_y = H - 26
     draw.rectangle([20, bar_y, W - 20, bar_y + 8], outline=(120, 120, 120))
     draw.rectangle([20, bar_y, 20 + (W - 40) * frac, bar_y + 8], fill=(90, 210, 120))
     return img

@@ -62,3 +62,27 @@ def test_map_panel_draws_a_readable_frame(tmp_path):
     rgb = np.asarray(panel.convert("RGB"), dtype=np.float32)
     assert rgb.std() > 10.0                       # not blank
     assert rgb.mean() > 20.0
+
+
+def test_showcase_builds_a_short_film_from_synthetic_chapters(tmp_path):
+    import make_showcase
+
+    clips = []
+    for name in ("a.mp4", "b.mp4"):
+        path = tmp_path / name
+        _clip(path, size=(320, 180), duration=2.0)
+        clips.append(path)
+    plan = {
+        "title": "Test film", "subtitle": "synthetic",
+        "chapters": [
+            {"clip": str(clips[0]), "title": "One", "desc": "first", "caption": "left | right", "start": 0.0, "duration": 1.0},
+            {"clip": str(clips[1]), "title": "Two", "desc": "second", "caption": "left | right", "start": 0.0, "duration": 1.0},
+        ],
+        "credits": ["synthetic"],
+        "timing": {"title_s": 1.0, "card_s": 0.5, "end_s": 1.0, "fade": 0.2},
+    }
+    result = make_showcase.build(plan, tmp_path / "out")
+    info = compose_half_split.probe(Path(result["film"]))
+    assert (info["width"], info["height"]) == (1920, 1080)
+    assert 3.0 <= info["duration_s"] <= 7.0
+    assert Path(result["gif"]).stat().st_size <= 8 * 1024 * 1024

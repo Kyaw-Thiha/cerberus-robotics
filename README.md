@@ -7,21 +7,18 @@ in as swappable backends behind three command boundaries, and every backend carr
 **Caveat: simulation only.** There is no real hardware. "Real-world demo" here means a well-instrumented simulation demo, not
 a claim of physical deployment.
 
-## Status (2026-11-23)
+## Status (2026-11-24)
 
-Tier **T1** reached on a plain-SSH Hyperstack VM (L40 48 GB, 825 GB, 1.087 USD/h all-in): the host contract
-passes, Kit starts, and the scene-1 stand test at 1 env passes **all 8 contract assertions** (joint order, 235-D
-layout, command slice, finite 200-step stand, no fall, standing). A **1920x1080, 50 fps, 90.0 s** RTX clip of the
-GA policy walking a scripted path through the slew limiter in the real GRScenes home is at
-`cerberus-results/2026-11-23/demo_scene1.mp4` (also `migration/first_scene/20261123/` on R2); its metrics JSON
-records the measured clip properties but not pose/fall (Kit exits natively before the post-loop record).
+The released **JEPLO** checkpoint runs inside this pipeline: our LiDAR simulation (the authors' 25x60 spherical
+pattern, 2 m range, 10 Hz) feeds their unchanged ONNX pair, and the policy walks the scene-1 tour. It reached the
+first seeded goal in 25.8 s (0.30 m error, net 11.33 m, no fall, path efficiency 0.955). The PPO Go2 height-scan
+baseline, with the same seed, goal, planner and controller, falls at 5.3 s; the arm-robot checkpoint does not
+translate in the scene. Details and numbers: `docs/reports/jeplo_spike.md` and `docs/showcase.md`.
 
-T2 is **partial** and T3 is **not reached**: the host starts Kit only about 1 launch in 10 and its native layer
-exits the process at every post-sim Python boundary, so the navigation summary was not written (5 pairs were
-sampled; the kinematic upper bound is still 20/20, SPL 1.0). Every launch was retried up to 30 times and all seven
-code bugs found on the way are fixed (see `docs/reports/first_scene_session.md`). Spend about 6 USD of the 18 USD
-cap; the VM and its secret file were removed and no timer remains. Next: a host whose Kit starts reliably (or a
-container with a working headless GL context), then the same `run_session.sh` command for demo, smoke, nav, replay.
+The tour pipeline (record-once npz -> data panels / replay) and the clip gate (Gate v2: luminance band 60-240,
+luminance std >= 25, hue diversity, data-half checks) are in `scripts/`. RTX CHASE/EGO halves for the *current* runs
+are blocked by a renderer/GPU-context issue after a crash storm (see `docs/showcase.md`); the data halves and the
+film are delivered and gated, and the film reuses session-3 RTX renders of the same home for the visual chapters.
 
 ## Platform
 

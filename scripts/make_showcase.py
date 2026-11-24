@@ -84,7 +84,8 @@ def _chapter_clip(source: Path, out: Path, *, start: float, duration: float, cap
     if info["fps"] < 20:
         return False
     duration = min(duration, max(0.5, info["duration"] - start))
-    cap = (caption.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\\'").replace("%", "\\%"))
+    # a typographic apostrophe avoids ffmpeg drawtext's single-quote parsing entirely
+    cap = (caption.replace("\\", "\\\\").replace(":", "\\:").replace("'", "\u2019").replace("%", "\\%"))
     draw = (f"drawtext=fontfile={FONT}:text='{cap}':x=40:y=h-96:fontsize=28:fontcolor=white:"
             "box=1:boxcolor=black@0.55:boxborderw=10:enable='between(t,0.5,3.6)',"
             f"drawtext=fontfile={FONT}:text='{tick}':x=w-260:y=24:fontsize=26:fontcolor=white:"

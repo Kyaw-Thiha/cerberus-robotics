@@ -42,6 +42,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--boom-m", type=float, default=1.4)
     parser.add_argument("--boom-height-m", type=float, default=0.9)
     parser.add_argument("--grid", default=None, help="occupancy.npz for the chase boom (default: beside the scene)")
+    parser.add_argument("--scan-proxy", default=None,
+                        help="tiny mesh for the (unused) height scanner: avoids loading the 62M-face house proxy")
     return parser
 
 
@@ -53,6 +55,7 @@ def main(argv: list[str] | None = None) -> int:
     add_launcher_args(parser)
     args = parser.parse_args(argv)
     args.enable_cameras = True   # the capture path needs a render product
+    args.headless = True         # no display on the VM; a windowed launch crashes at startup
 
     from common.cerberus_worlds.registry import get_backend
 
@@ -100,7 +103,8 @@ def render(args) -> int:
     task = se.task_for_embodiment(args.embodiment)
     spawn = (float(poses[0, 0]), float(poses[0, 1]), 0.0, float(poses[0, 2]))
     env, _scene = se.build_loco_env(args.scene, [spawn], task=task, num_envs=1, seed=0,
-                                    episode_length_s=max(60.0, duration + 30.0), with_cameras=False)
+                                    episode_length_s=max(60.0, duration + 30.0), with_cameras=False,
+                                    scan_proxy=args.scan_proxy)
     robot = env.unwrapped.scene["robot"]
     device = env.unwrapped.device
     sim = env.unwrapped.sim
@@ -118,6 +122,7 @@ def render(args) -> int:
         spec = cr.CameraSpec("closeup", "closeup", (args.width, args.height), hfov_deg=60.0,
                              offset=(0.55, -0.35, 0.75), pitch_down_deg=25.0, near_clip_m=args.near_clip)
     rig = cr.CameraRig(robot_prim_path=robot_prim, specs=[spec])
+    print("[replay] env and camera rig ready", flush=True)
     log_pose = cr.PoseLog(camera=args.camera, width=args.width, height=args.height, hfov_deg=spec.hfov_deg)
 
     occupancy = None
@@ -135,6 +140,7 @@ def render(args) -> int:
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
     writer = imageio.get_writer(str(out), fps=args.fps, macro_block_size=None)
+    print("[replay] writer ready; rendering frames", flush=True)
     frames = max(1, round(duration * args.fps) + 1)
     zeros_vel = torch.zeros((1, 6), device=device)
     steps = 0
@@ -150,6 +156,8 @@ def render(args) -> int:
             if joints is not None:
                 jp = torch.tensor([joints[idx]], dtype=torch.float32, device=device)
                 robot.write_joint_state_to_sim(jp, torch.zeros_like(jp))
+            if k == 0:
+                print("[replay] first sim.render()", flush=True)
             sim.render()
             if k in (0, 10, 100):
                 read = robot.data.root_pos_w[0].detach().cpu().numpy()

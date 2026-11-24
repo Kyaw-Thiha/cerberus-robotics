@@ -53,6 +53,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--out", required=True)
     parser.add_argument("--settle-steps", type=int, default=90)
     parser.add_argument("--debug", action="store_true", help="print actions/depth/pose every 50 steps")
+    parser.add_argument("--record-dir", default=None,
+                        help="also record CHASE and EGO halves (960x1080, 30 fps) during the live run")
     return parser
 
 
@@ -78,6 +80,47 @@ class JeploIsaacBackend:
         self._depth_latest = np.ones((25, 60), dtype=np.float32)
         self._depth_rows: list[np.ndarray] = []
         self._joint_names = list(self.robot.joint_names) if hasattr(self.robot, "joint_names") else []
+        self.occupancy = None
+        self.record_dir = None
+        self._rig = None
+        self._writers = {}
+        self._frame_accum = 0.0
+
+    def start_recording(self, record_dir, occupancy, base_prim: str = "/World/envs/env_0/Robot/base") -> None:
+        import imageio
+
+        from common.cerberus_eval import camera_rig as cr
+
+        self.occupancy = occupancy
+        self.record_dir = Path(record_dir)
+        self.record_dir.mkdir(parents=True, exist_ok=True)
+        base = base_prim
+        specs = [
+            cr.CameraSpec("chase", "chase", (960, 1080), hfov_deg=70.0, distance=1.4, height=0.9,
+                          pitch_down_deg=12.0, near_clip_m=0.12),
+            cr.CameraSpec("ego", "ego", (960, 1080), hfov_deg=90.0, offset=(0.30, 0.0, 0.08),
+                          pitch_down_deg=17.0, near_clip_m=0.12),
+        ]
+        self._rig = cr.CameraRig(robot_prim_path=base, specs=specs)
+        self._writers = {name: imageio.get_writer(str(self.record_dir / f"{name}.mp4"), fps=30,
+                                                  macro_block_size=None) for name in ("chase", "ego")}
+        print(f"[jeplo] recording chase/ego to {self.record_dir}", flush=True)
+
+    def _capture(self) -> None:
+        if self._rig is None:
+            return
+
+        self._frame_accum += 50.0 / 30.0
+        if self._frame_accum < 1.0:
+            return
+        self._frame_accum -= 1.0
+        data = self.robot.data
+        pos = [float(v) for v in data.root_pos_w[0].detach().cpu()]
+        q = [float(v) for v in data.root_quat_w[0].detach().cpu()]
+        self.env.unwrapped.sim.render()
+        self._rig.update(base_pos=pos, base_quat_wxyz=(q[3], q[0], q[1], q[2]), occupancy=self.occupancy)
+        for name, writer in self._writers.items():
+            writer.append_data(self._rig.capture(name))
 
     # -- TourBackend ---------------------------------------------------------------------------
     def reset(self, poses) -> None:
@@ -97,6 +140,7 @@ class JeploIsaacBackend:
         tensor = torch.tensor([actions], device=self.env.unwrapped.device, dtype=torch.float32)
         self.env.step(tensor)
         self._record_depth()
+        self._capture()
         self._steps = getattr(self, "_steps", 0) + 1
         if getattr(self, "debug", False) and self._steps % 50 == 0:
             data = self.robot.data
@@ -174,6 +218,7 @@ def main(argv: list[str] | None = None) -> int:
     from isaaclab.app import AppLauncher
 
     app = AppLauncher(args).app
+
     try:
         return run(args)
     except Exception:  # noqa: BLE001 - SimulationApp.close() exits 0 and eats the traceback
@@ -215,6 +260,14 @@ def run(args) -> int:
     os.environ["JEPLO_MODELS"] = str(Path(args.models))
     backend = JeploIsaacBackend(env, se)
     backend.debug = args.debug
+    if args.record_dir:
+        from common.cerberus_description.go2_arx5_spec import (
+            GO2_ARX5_BASE_PRIM_REL_PATH,
+        )
+
+        base_prim = (f"/World/envs/env_0/Robot/{GO2_ARX5_BASE_PRIM_REL_PATH}"
+                     if args.embodiment == "go2_arx5" else "/World/envs/env_0/Robot/base")
+        backend.start_recording(args.record_dir, grid, base_prim)
     robot = env.unwrapped.scene["robot"]
     if args.settle_steps > 0:
         import torch
@@ -246,6 +299,8 @@ def run(args) -> int:
     }
     payload = tour_npz_payload(grid, result, scene_id=args.scene, extra_arrays=extra_arrays)
     np.savez_compressed(out / "tour.npz", **payload)
+    for writer in backend._writers.values():
+        writer.close()
     summary = {
         "policy": "jeplo", "scene": args.scene, "seed": args.seed, "embodiment": args.embodiment,
         "start": [start[0], start[1], yaw], "goals": goals, "reached": result.reached,

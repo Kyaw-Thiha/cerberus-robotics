@@ -339,10 +339,25 @@ class CameraRig:
 
     # -- capture
     def _ensure_products(self) -> None:
-        if self._render_products:
+        if self._render_products or getattr(self, "_vp_windows", None):
             return
-        import omni.replicator.core as rep
+        try:
+            import omni.replicator.core as rep
+        except ModuleNotFoundError:
+            rep = None
+        if rep is None:
+            # Some images ship replicator in extscache without enabling it; a headless viewport capture works
+            # without it (verified 2026-11-24: capture_viewport_to_file, ~10 app updates per frame).
+            from omni.kit.viewport.utility import create_viewport_window
 
+            self._vp_windows = {}
+            for spec in self.specs.values():
+                window = create_viewport_window(f"capture_{spec.name}", width=int(spec.resolution[0]),
+                                                height=int(spec.resolution[1]))
+                window.viewport_api.camera_path = self.paths[spec.name]
+                self._vp_windows[spec.name] = window
+            print("[camera_rig] using headless viewport capture (no replicator)", flush=True)
+            return
         for spec in self.specs.values():
             rp = rep.create.render_product(self.paths[spec.name], spec.resolution)
             annotator = rep.annotators.get("rgb")
@@ -350,8 +365,35 @@ class CameraRig:
             self._render_products[spec.name] = rp
             self._annotators[spec.name] = annotator
 
+    def _capture_viewport(self, name: str) -> np.ndarray:
+        import os
+        import tempfile
+
+        import omni.kit.app
+        from PIL import Image
+
+        app = omni.kit.app.get_app()
+        window = self._vp_windows[name]
+        window.viewport_api.camera_path = self.paths[name]
+        for _ in range(2):
+            app.update()
+        fd, path = tempfile.mkstemp(suffix=".png")
+        os.close(fd)
+        from omni.kit.viewport.utility import capture_viewport_to_file
+
+        capture_viewport_to_file(window.viewport_api, path)
+        for _ in range(120):
+            app.update()
+            if os.path.getsize(path) > 0:
+                break
+        try:
+            frame = np.asarray(Image.open(path).convert("RGB"), dtype=np.uint8)
+        finally:
+            os.unlink(path)
+        return frame
+
     def capture(self, name: str) -> np.ndarray:
-        """One RGB frame (H, W, 3) uint8. Steps the Replicator orchestrator so the annotator has a frame.
+        """One RGB frame (H, W, 3) uint8 (Replicator annotator or the headless viewport fallback).
 
         `sim.render()` alone leaves the RGB annotator empty on Sim 6.2 (measured 2026-11-23: shape (0,)), so the
         frame is requested through the orchestrator, which blocks until the render products have new data.

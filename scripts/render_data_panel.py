@@ -198,7 +198,8 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--width", type=int, default=960)
     parser.add_argument("--height", type=int, default=1080)
     parser.add_argument("--fps", type=int, default=30)
-    parser.add_argument("--out", required=True, help="mp4 path; frames go to <out>/../<stem>_frames/")
+    parser.add_argument("--out", required=True)
+    parser.add_argument("--frames-dir", default=None, help="keep PNG frames here (default: a temp dir)")
     args = parser.parse_args(argv)
 
     log = np.load(args.log, allow_pickle=True)
@@ -208,7 +209,9 @@ def main(argv: list[str] | None = None) -> int:
     frames = max(1, round(duration * args.fps) + 1)
     out = Path(args.out)
     out.parent.mkdir(parents=True, exist_ok=True)
-    frame_dir = out.parent / f"{out.stem}_frames"
+    import tempfile
+
+    frame_dir = Path(args.frames_dir) if args.frames_dir else Path(tempfile.gettempdir()) / f"panel_{out.stem}_frames"
     frame_dir.mkdir(parents=True, exist_ok=True)
     for k in range(frames):
         t = times[0] + k / args.fps

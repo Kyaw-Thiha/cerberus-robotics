@@ -1,39 +1,52 @@
-# Showcase clips
+# Showcase clips (2026-11-24)
 
-Everything the owner watches lives in one flat folder, `outputs/videos/<date>/`, and is mirrored to R2 under
-`showcase/<date>/`. Each clip is a half split: LEFT is the CHASE camera, RIGHT is the modality named in the file.
-Each half is rendered natively at 960x1080 and captions say what is real, ground truth or scripted.
+Everything the owner watches is in one flat folder, `outputs/videos/2026-11-24/`, mirrored to R2 under
+`showcase/2026-11-24/`. The film `00_cerberus_showcase.mp4` (98 s, 1920x1080, H.264, silent) presents the chapters;
+the teaser and GIF are 60 s / 10 s cuts.
 
-## What the labels mean
+## What is real, ground truth, sensed or scripted
 
-- **Render** — an RTX frame from the scene in Isaac Sim.
-- **Ground truth** — simulator state (occupancy grid, planned path, pose, trajectory). Not perception.
-- **Sensed** — what the robot's own simulated sensor provides (LiDAR depth image, camera image).
-- **Scripted** — an open-loop or IK-driven motion, not a learned policy.
+- **Render** — an RTX frame of the GRScenes home in Isaac Sim.
+- **Ground truth** — simulator state (occupancy grid, A* path, pose). Not perception.
+- **Sensed** — what the robot's own simulated sensor provides (the 25x60 LiDAR depth image).
+- **Scripted** — open-loop or IK motion, not a learned policy.
 
 ## Clips
 
-| file | left | right | policy | what is real / ground truth / scripted |
+| file | content | policy | labels |
+|---|---|---|---|
+| 00_cerberus_showcase.mp4 | the film: home render, exploration map, JEPLO LiDAR, PPO baseline, arm robot, results | mixed, captioned per chapter | credits + "ground truth / sensed / scripted as captioned" |
+| 01_exploration_map.mp4 | occupancy grid, planned A* path, travelled trail, goal, clock | JEPLO (released checkpoint) | grid and path are ground truth; 25.8 s run |
+| 03_jeplo_lidar.mp4 | the 25x60 spherical depth image as JEPLO sees it, turbo scale in metres, bird's-eye hit strip | JEPLO + our sensor simulation | sensed, not ground truth |
+| 04_ppo_map_falls.mp4 | the same seed/goal with the PPO height-scan policy: it falls at 5.3 s | PPO Go2 (`go2_locomotion_ga_v1_candidate`) | ground-truth map; honest failure |
+| 99_results.png | success, falls, path efficiency (PPO / JEPLO / kinematic bound) | — | N and seeds printed in the subtitle |
+| walk_ego.mp4, arm_ego.mp4 | session-3 RTX renders of the same home and the arm robot | scripted / open-loop | labelled "session 3" in the film |
+
+## Results (same seed 0, same goal (7.55, -1.92), same planner and controller)
+
+| policy | reached | net displacement | path efficiency | falls |
 |---|---|---|---|---|
-| 01_chase_map.mp4 | Chase camera | Occupancy grid + A* path + trail (ground truth) | PPO Go2 (`go2_locomotion_ga_v1_candidate`) | Render + simulator ground-truth map; planned path from A* |
-| 02_chase_ego.mp4 | Chase camera | Onboard front camera (sensed) | same run as 01 | Render; the ego image is the exact simulated camera view |
-| 03_chase_lidar_jeplo.mp4 | Chase camera | 25x60 spherical depth as JEPLO sees it (sensed) | JEPLO released checkpoint + our sensor sim | Render + our LiDAR simulation; caption says so |
-| 04_ppo_vs_jeplo.mp4 | PPO chase | JEPLO chase | PPO vs JEPLO, same seed/route/goals | Render; failures kept and captioned |
-| 05_chase_wrist_mission_*.mp4 | Chase camera | Wrist camera + step strip | scripted IK (physical or magic grasp, labelled) | Render; grasp label states which |
-| 00_cerberus_showcase.mp4 | full film | — | all of the above | title/chapter cards, captions, credits |
+| JEPLO (released ONNX, our sensor simulation) | yes, 0.30 m | 11.33 m in 25.8 s | 0.955 | 0 |
+| PPO Go2 height-scan | no | 3.67 m in 5.3 s | — | 1 |
+| Kinematic bound (A* + pure pursuit) | yes | 11.28 m in 42.4 s | ~0.98 | 0 |
 
-## Honest findings
+The JEPLO run uses the authors' unchanged checkpoint, our ray-caster simulation (authors' 25x60 pattern, 2 m range,
+10 Hz), and no height scan. The PPO policy receives commands (verified in its observation) and a sane height scan
+(min -1.0, max -0.12, std 0.30) but falls while turning; the arm-robot checkpoint does not translate at all in the
+scene (base velocity 0.015 m/s under a 0.7 m/s command). Those are results, not tuning problems hidden away.
 
-- The arm-robot retrained policy (`go2_arx5_locomotion_ga_v1_candidate.pt`) does not translate in the scene on
-  this stack: commands reach the observation and the height scan is sane, but base velocity stays ~0.015 m/s under
-  a 0.7 m/s command. The legs-only Go2 policy tracks ~0.41 m/s in the same scene and env. The tour clips therefore
-  use the Go2 baseline; this is a result, not a tuning problem hidden away.
-- Session-3's "walk" clip did not move because it was open-loop and faced a couch; the current tour uses reachable
-  goals, A* and closed-loop pure pursuit, and fixed the pure-pursuit turn-around singularity (alpha = pi).
+## Render blocker (honest)
+
+The CHASE/EGO halves of the *current* runs could not be rendered on this VM: repeated Kit crashes left the GPU
+context unusable and the scene was still bound to ~800 MDL materials. After converting the materials
+(`scene_materials_to_preview.py` -> `scene_preview_metric.usd`, `CERBERUS_SCENE_USD_OVERRIDE`) and rebooting, a 2 s
+`scene_clip.py` CHASE render succeeded, but the live JEPLO recording crashed again and its retries did not finish
+inside the session. The data halves above are real, gated (`clip_qa --data-half` PASS) and use the same logs the
+policy ran on; the film includes session-3 RTX renders of the same home for the visual chapters. Next step: record
+the chase/ego halves in one live run on a fresh VM after the material conversion (code ready:
+`jeplo_nav.py --record-dir`), then compose the half-splits.
 
 ## Credits
 
-- GRScenes-100 scenes: CC BY-NC-SA 4.0, non-commercial use.
-- Isaac Sim / Isaac Lab (NVIDIA).
-- JEPLO: the authors' released checkpoint (Yuan et al.); our adapter and sensor simulation are labelled in every
-  clip. `plugins/jeplo/` is GPL-3.0 and never imported by the core.
+GRScenes-100 scenes: CC BY-NC-SA 4.0, non-commercial. Isaac Sim / Isaac Lab (NVIDIA). JEPLO: the authors' released
+checkpoint (Yuan et al.), used with our adapter and sensor simulation; `plugins/jeplo/` is GPL-3.0.

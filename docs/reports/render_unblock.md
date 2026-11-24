@@ -104,3 +104,42 @@ The route that works, in order:
 Frame rate: one 1920x1080 still costs ~40-60 s of GPU (scene build once, then ~1 s per captured frame through the
 Replicator orchestrator). `sim.render()` alone leaves the RGB annotator empty on this stack, so capture steps the
 orchestrator.
+
+## Why the render stayed grey with every material converted (root cause, fixed)
+
+Converting all 3,293 materials to `UsdPreviewSurface` changed nothing on screen. The decisive test the owner asked
+for: bind one flat red material to every material prim and re-render the identical view.
+
+| test | result |
+|---|---|
+| red layer with the preview scope at `/PreviewMaterials` (stage root) | **grey** (the override was ignored) |
+| same, with the preview materials at `<scene root>/__PreviewMaterials` | **red** (the override applies) |
+
+The USD warnings from the first case name the mechanism exactly:
+
+```
+Warning: ... The relationship target </PreviewMaterials/m_Root_Meshes_...> from
+</Root/Meshes/.../Component_3.material:binding> in layer @.../materials_preview.usda@ refers to a path outside the
+scope of the reference from </Scene>.  Ignoring.
+```
+
+The preview wrapper references the scene into `/Scene`. A relationship target that is an **absolute path outside that
+reference scope** is dropped by USD, so every surface fell back to the default material -- hence one flat grey. The
+fix is to author the preview materials *inside* the scene's own root (`/Root/__PreviewMaterials/...`, the scene's
+default prim), so every binding target is in scope. `Umbrella` note: this is not a renderer quirk; it is USD
+composition, and it is why re-binding "worked" in the layer but not in the picture.
+
+Instanceable roots: `prim.IsInstanceable()` is **false for every prim** in this scene (`instances_deinstanced: 0`),
+so per-instance overrides were never the obstacle -- the reference scope was.
+
+With the in-scope placement, the dataset's textures appear: marble/stone floor tiles, brass candle legs, a dark
+cushion on the stool, seams and sheen on the white wardrobe doors, the kitchen table and chairs beyond.
+
+Exposure: the `--dome-intensity` flag measurably does nothing on this stage (a 300 and a 120 run produce identical
+mean luminance, 222.4 and 222.4), so the brightness is the scene's own 137 lights. The EGO view reads 134
+(passes the gate's 70-170 band); the chase views read 211-224 and fail it. No threshold was changed to make them
+pass.
+
+QA honesty: `scripts/host/clip_qa.py` thresholds were untouched all session (luminance 70-170, clipping <= 5 %,
+>= 3 hue bins at >= 5 %). Measured hue bins: still ego 5, still chase 2; walk_ego clip 3/4/3/3/3; walk_overview
+3/4/1/1/1; arm_closeup 2/1/1/1/1; arm_chase (pre-fix materials) 2-3.

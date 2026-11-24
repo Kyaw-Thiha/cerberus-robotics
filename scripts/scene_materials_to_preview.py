@@ -302,7 +302,8 @@ def _primvar_name(stage) -> str:
     return "st"
 
 
-def build_layer(usd_path: Path, out_layer: Path, *, rebind: bool = True) -> dict:
+def build_layer(usd_path: Path, out_layer: Path, *, rebind: bool = True,
+                debug_colour: tuple[float, float, float] | None = None) -> dict:
     """Write `out_layer`: UsdPreviewSurface materials + (optionally) re-bound geometry. Returns the report."""
     from pxr import Sdf, Usd, UsdGeom, UsdShade
 
@@ -334,12 +335,12 @@ def build_layer(usd_path: Path, out_layer: Path, *, rebind: bool = True) -> dict
         surface.CreateInput("roughness", Sdf.ValueTypeNames.Float).Set(0.6)
         surface.CreateInput("useSpecularWorkflow", Sdf.ValueTypeNames.Int).Set(0)
 
-        diffuse = item["colours"].get("diffuse")
+        diffuse = debug_colour if debug_colour is not None else item["colours"].get("diffuse")
         if diffuse:
             surface.CreateInput("diffuseColor", Sdf.ValueTypeNames.Color3f).Set(diffuse)
 
         uv_name = uv_by_material.get(item["prim_path"], uv_primvar)
-        textures = item["textures"]
+        textures = {} if debug_colour is not None else item["textures"]
         tex_summary = {}
         if "diffuse" in textures and textures["diffuse"]["exists"]:
             tex = textures["diffuse"]
@@ -480,11 +481,14 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument("--out-dir", default=None, help="where the layer and wrapper go (default: beside --usd)")
     parser.add_argument("--json", default=None)
     parser.add_argument("--no-rebind", action="store_true", help="write the materials but leave bindings alone")
+    parser.add_argument("--debug-colour", default=None,
+                        help="R,G,B: flat colour for every material, to test whether the override is applied at all")
     args = parser.parse_args(argv)
 
     usd = Path(args.usd)
     out_dir = Path(args.out_dir) if args.out_dir else usd.parent
-    report = build_layer(usd, out_dir / LAYER_NAME, rebind=not args.no_rebind)
+    debug = tuple(float(v) for v in args.debug_colour.split(",")) if args.debug_colour else None
+    report = build_layer(usd, out_dir / LAYER_NAME, rebind=not args.no_rebind, debug_colour=debug)
     wrapper = write_preview_wrapper(usd, out_dir / LAYER_NAME)
     report["wrapper"] = str(wrapper)
     report["override_env"] = f"CERBERUS_SCENE_USD_OVERRIDE={wrapper}"

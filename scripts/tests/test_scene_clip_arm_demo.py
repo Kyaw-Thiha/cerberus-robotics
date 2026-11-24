@@ -39,3 +39,13 @@ def test_cycle_is_deterministic_and_bounded():
         b = arm_demo_targets(t, stowed=STOWED)
         assert a == b
         assert abs(a["joint1"]) <= 0.5 and abs(a["joint2"]) <= 0.7
+
+
+def test_scripted_path_commands_are_dicts():
+    """scene_clip must translate the scripted schedule's {vx, vy, wz} dicts into a velocity triple."""
+    from common.cerberus_eval.scripted_path import scripted_path_for_seed
+
+    path = scripted_path_for_seed(0)
+    entry = path.commands[0]
+    assert isinstance(entry, dict)
+    assert {"vx", "vy", "wz"} <= set(entry)

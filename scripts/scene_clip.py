@@ -272,7 +272,11 @@ def record(args) -> int:
             sim_t = global_step / float(args.fps)
             if path is not None:
                 idx = min(int(global_step * 1.0), len(path.commands) - 1)
-                cmd = torch.tensor([path.commands[idx]], device=device, dtype=torch.float32)
+                entry = path.commands[idx]
+                # commands are dicts {vx, vy, wz} (the contract's velocity triple)
+                values = ([entry.get("vx", 0.0), entry.get("vy", 0.0), entry.get("wz", 0.0)]
+                          if isinstance(entry, dict) else list(entry))
+                cmd = torch.tensor([values], device=device, dtype=torch.float32)
             else:
                 cmd = zero
             hook.apply(cmd)

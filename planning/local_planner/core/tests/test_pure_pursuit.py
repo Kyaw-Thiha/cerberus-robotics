@@ -123,3 +123,32 @@ def test_kinematic_collision_is_an_outcome_not_a_success():
     if record["outcome"] == "collision":
         assert record["success"] is False
         assert record["blocked_cell_steps"] > 0
+
+
+def test_turns_in_place_when_the_target_is_behind():
+    """alpha=pi makes the curvature term zero; the controller must still turn, not drive away in a loop."""
+    import math
+
+    from common.cerberus_eval.nav_loop import MockBackend
+
+    cfg = PurePursuitConfig(dt=0.02, goal_tolerance_m=0.2)
+    controller = PurePursuit(cfg, limiter())
+    path = [(0.0, 0.0), (2.0, 0.0)]
+    pose = (0.0, 0.0, 0.0)                      # facing +x, the path target is +x: fine
+    cmd = controller.command(pose, path)
+    assert cmd["vx"] > 0.0
+    # now the robot has turned round: the same path lies behind it
+    behind = (0.0, 0.0, math.pi)
+    cmd = controller.command(behind, path)
+    assert cmd["vx"] < 0.8                      # ramping down to a turn in place, not holding speed
+    assert cmd["wz"] > 0.0                      # yaw rate is non-zero (alpha=+pi turns left)
+
+    backend = MockBackend(1)
+    backend.reset([(0.0, 0.0, math.pi)])
+    controller.reset()
+    for _ in range(2000):
+        pose = backend.poses()[0]
+        if controller.at_goal(pose, path[-1]):
+            break
+        backend.step([controller.command(pose, path)])
+    assert controller.at_goal(backend.poses()[0], path[-1])

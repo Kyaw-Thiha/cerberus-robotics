@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import sys
 from datetime import UTC, datetime
 from pathlib import Path
@@ -51,6 +52,8 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--min-net", type=float, default=6.0)
     parser.add_argument("--max-total-time", type=float, default=180.0)
     parser.add_argument("--video", action="store_true", help="physics only: capture a CHASE clip during the run")
+    parser.add_argument("--settle-steps", type=int, default=90,
+                        help="zero-command steps before the tour so the robot stands up (scene_clip uses 90)")
     return parser
 
 
@@ -79,7 +82,38 @@ def nearest_free(grid, x: float, y: float) -> tuple[float, float]:
 
 
 def main(argv: list[str] | None = None) -> int:
-    args = build_parser().parse_args(argv)
+    argv = list(sys.argv[1:] if argv is None else argv)
+    mock = "--mock" in argv
+    parser = build_parser()
+    if not mock:
+        from common.cerberus_compat.launcher import add_launcher_args
+
+        add_launcher_args(parser)
+    args = parser.parse_args(argv)
+    if mock:
+        return run(args)
+
+    from common.cerberus_worlds.registry import get_backend
+
+    get_backend("plain_usd").prepare_scene_env(args.scene)
+    from isaaclab.app import AppLauncher
+
+    app_launcher = AppLauncher(args)
+    simulation_app = app_launcher.app
+    try:
+        return run(args)
+    except Exception:  # noqa: BLE001 - SimulationApp.close() exits 0 and eats the traceback
+        import traceback
+
+        traceback.print_exc()
+        sys.stdout.flush()
+        sys.stderr.flush()
+        os._exit(3)
+    finally:
+        simulation_app.close()
+
+
+def run(args) -> int:
     out = Path(args.out) if args.out else default_out_dir()
     out.mkdir(parents=True, exist_ok=True)
 
@@ -122,6 +156,14 @@ def main(argv: list[str] | None = None) -> int:
         policy = se.load_policy(env, task=task, checkpoint=args.checkpoint)
         backend = IsaacBackend(env, hook, policy)
         robot = env.unwrapped.scene["robot"]
+        if args.settle_steps > 0:
+            import torch
+
+            zero = torch.zeros((1, 3), device=env.unwrapped.device)
+            for _ in range(args.settle_steps):
+                hook.apply(zero)
+                env.step(policy(se.fresh_observations(env)))
+            print(f"[tour] settled for {args.settle_steps} zero-command steps", flush=True)
 
         def extra():
             data = robot.data

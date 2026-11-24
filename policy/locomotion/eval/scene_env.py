@@ -164,6 +164,7 @@ def build_loco_env(
     timings_path: str | Path | None = None,
     with_cameras: bool = False,
     camera_resolution: tuple[int, int] | None = None,
+    extra_sensors: dict[str, Any] | None = None,
 ) -> tuple[Any, dict[str, Any]]:
     """``gym.make`` the Play task in the scene and teleport every env to its ``(x, y, yaw[, floor_z])`` spawn.
 
@@ -197,6 +198,9 @@ def build_loco_env(
     env_cfg.seed = int(seed)
     apply_loco_scene(env_cfg, scene, scan_proxy=scan_proxy)
     apply_deterministic_commands(env_cfg)
+    for sensor_name, sensor_cfg in (extra_sensors or {}).items():
+        # an optional sensor (e.g. the JEPLO LiDAR) must go through the scene manager so its buffers initialise
+        setattr(env_cfg.scene, sensor_name, sensor_cfg)
     if with_cameras:
         # only the clip/replay step needs a capture-capable visualizer; metric runs must not pay for rendering
         from policy.locomotion.core.script_utils import ensure_capture_visualizer
@@ -345,8 +349,11 @@ def read_poses(env: Any):
     from common.cerberus_compat.quat import from_isaac
 
     data = env.unwrapped.scene["robot"].data
-    pos = data.root_pos_w[:, :3]
-    q = from_isaac(data.root_quat_w)
+    # Isaac Lab 3.0's ProxyArray reports shape (num_envs,) for pose terms even though one entry holds 3/4 values,
+    # so index per env instead of slicing (measured 2026-11-24; slicing raised "quaternion last dim must be 4").
+    n = int(env.unwrapped.num_envs)
+    pos = torch.stack([data.root_pos_w[i] for i in range(n)])[:, :3]
+    q = torch.stack([from_isaac(data.root_quat_w[i]) for i in range(n)])
     w, x, y, z = q[:, 0], q[:, 1], q[:, 2], q[:, 3]
     yaw = torch.atan2(2.0 * (w * z + x * y), 1.0 - 2.0 * (y * y + z * z))
     return torch.stack([pos[:, 0], pos[:, 1], yaw], dim=1)

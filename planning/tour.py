@@ -53,6 +53,7 @@ class TourResult:
     trace: list[tuple[float, float, float]] = field(default_factory=list)
     commands: list[tuple[float, float, float]] = field(default_factory=list)
     rows: list[dict[str, Any]] = field(default_factory=list)
+    leg_paths: list[list[tuple[float, float]]] = field(default_factory=list)
     notes: list[str] = field(default_factory=list)
 
     @property
@@ -117,7 +118,29 @@ def pick_tour_goals(grid: OccupancyGrid, start: tuple[float, float], *, seed: in
         if not extra:
             break
         chosen.append(max(extra, key=lambda item: item[1])[0])
-    return chosen
+    return _order_goals(start, chosen)
+
+
+def _order_goals(start: tuple[float, float], goals: list[tuple[float, float]]) -> list[tuple[float, float]]:
+    """Nearest-neighbour order from the start, with the farthest goal last.
+
+    Farthest-first picks a good *set*, but visiting it in pick order ping-pongs across the home (measured: 52 m of
+    path for four goals in a 16 m house). Nearest-neighbour walks it as a loop; ending on the farthest goal keeps
+    the tour's net displacement honest instead of finishing back at the start.
+    """
+    remaining = list(goals)
+    ordered: list[tuple[float, float]] = []
+    pose = start
+    while remaining:
+        nxt = min(remaining, key=lambda goal: math.hypot(goal[0] - pose[0], goal[1] - pose[1]))
+        ordered.append(nxt)
+        remaining.remove(nxt)
+        pose = nxt
+    if ordered:
+        farthest = max(ordered, key=lambda goal: math.hypot(goal[0] - start[0], goal[1] - start[1]))
+        last = ordered.index(farthest)
+        ordered[last], ordered[-1] = ordered[-1], ordered[last]
+    return ordered
 
 
 @dataclass
@@ -147,6 +170,7 @@ def run_tour(
     rows: list[dict[str, Any]] = []
     reached: list[bool] = []
     distances: list[float] = []
+    leg_paths: list[list[tuple[float, float]]] = []
     notes: list[str] = []
     fallen = False
     t_total = 0.0
@@ -156,10 +180,12 @@ def run_tour(
     for index, goal in enumerate(goals):
         plan = astar(grid, (pose[0], pose[1]), goal)
         if not plan.success:
+            leg_paths.append([])
             reached.append(False)
             distances.append(float(math.hypot(goal[0] - pose[0], goal[1] - pose[1])))
             notes.append(f"goal {index + 1} unreachable: {plan.reason}")
             continue
+        leg_paths.append(list(plan.path))
         leg = _Leg(index=index, goal=goal, path=plan.path, controller=PurePursuit(pursuit_cfg, limiter))
         leg.controller.reset()
         while leg.t < config.max_leg_time_s and t_total < config.max_total_time_s:
@@ -201,7 +227,7 @@ def run_tour(
     net = float(np.linalg.norm(steps[-1] - steps[0])) if len(steps) > 1 else 0.0
     return TourResult(goals=list(goals), reached=reached, final_distances_m=distances, net_displacement_m=net,
                       path_length_m=path, duration_s=t_total, fallen=fallen, trace=trace, commands=commands,
-                      rows=rows, notes=notes)
+                      rows=rows, leg_paths=leg_paths, notes=notes)
 
 
 def tour_npz_payload(grid: OccupancyGrid, result: TourResult, *, extra_arrays: dict[str, np.ndarray] | None = None,
@@ -233,6 +259,11 @@ def tour_npz_payload(grid: OccupancyGrid, result: TourResult, *, extra_arrays: d
         payload["joint_pos"] = np.asarray([row.get("joint_pos", []) for row in rows], dtype=np.float32)
         payload["root_quat_xyzw"] = np.asarray([row.get("root_quat_xyzw", []) for row in rows], dtype=np.float32)
         payload["root_pos"] = np.asarray([row.get("root_pos", []) for row in rows], dtype=np.float32)
+    flat = [(leg, x, y) for leg, path in enumerate(result.leg_paths) for x, y in path]
+    payload["path_xy"] = np.asarray([[x, y] for _leg, x, y in flat], dtype=np.float32).reshape(-1, 2)
+    payload["path_leg"] = np.asarray([leg for leg, _x, _y in flat], dtype=np.int16)
+    payload["path_offsets"] = np.asarray(
+        np.cumsum([0] + [len(path) for path in result.leg_paths]), dtype=np.int32)
     if extra_arrays:
         payload.update(extra_arrays)
     return payload

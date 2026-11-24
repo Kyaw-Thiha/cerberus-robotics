@@ -71,7 +71,8 @@ def test_payload_has_the_record_once_fields():
     result = run_tour(backend, grid, [(2.5, 2.5)], config=TourConfig(goal_tolerance_m=0.3))
     payload = tour_npz_payload(grid, result, scene_id="toy")
     for key in ("t", "pose_xyzw", "cmd", "goal_index", "goal_xy", "fallen", "contact", "goals_xy",
-                "reached", "grid", "grid_origin_xy", "grid_resolution_m", "metrics"):
+                "reached", "grid", "grid_origin_xy", "grid_resolution_m", "metrics",
+                "path_xy", "path_leg", "path_offsets"):
         assert key in payload, key
     n = len(payload["t"])
     assert payload["pose_xyzw"].shape == (n, 7)

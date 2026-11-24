@@ -109,6 +109,26 @@ def yaw_of(quat_wxyz: tuple[float, float, float, float]) -> float:
     return math.atan2(2 * (w * z + x * y), 1 - 2 * (y * y + z * z))
 
 
+def clear_boom(base_pos: np.ndarray, base_yaw: float, *, distance: float, height: float, occupancy,
+               min_distance: float = 0.6, step: float = 0.1) -> tuple[float, bool]:
+    """Shorten the chase boom so the camera stays in free space: never through a wall, never closer than 0.6 m.
+
+    ``occupancy`` is a :class:`planning.occupancy.OccupancyGrid` (only ``is_free`` is used). Returns the usable
+    distance and whether it was pulled in.
+    """
+    fwd = np.array([math.cos(base_yaw), math.sin(base_yaw), 0.0])
+    usable = min(float(min_distance), float(distance))
+    d = usable
+    while d <= distance + 1e-9:
+        eye = np.asarray(base_pos, dtype=float) + np.array([0.0, 0.0, height]) - d * fwd
+        if occupancy.is_free(float(eye[0]), float(eye[1]), inflated=True):
+            usable = d
+        else:
+            break
+        d += step
+    return usable, usable < distance - 1e-9
+
+
 def chase_pose(base_pos: np.ndarray, base_yaw: float, *, distance: float = 1.6, height: float = 0.9,
                pitch_down_deg: float = 12.0) -> tuple[np.ndarray, np.ndarray]:
     """Eye behind the base along its yaw, looking forward and down: world position + rotation matrix."""
@@ -162,6 +182,7 @@ class CameraSpec:
     pitch_down_deg: float = 17.0
     distance: float = 1.6         # chase
     height: float = 0.9
+    near_clip_m: float = 0.05     # walls/cushions closer than this are hidden instead of filling the frame
     world_pose: tuple[float, float, float, float, float] | None = None  # overview: x, y, z, yaw, pitch
 
 
@@ -221,7 +242,7 @@ class CameraRig:
             camera = UsdGeom.Camera.Define(self.stage, path)
             camera.CreateFocalLengthAttr(focal_length_for(spec.hfov_deg))
             camera.CreateHorizontalApertureAttr(20.955)
-            camera.CreateClippingRangeAttr(self._Gf.Vec2f(0.05, 1000.0))
+            camera.CreateClippingRangeAttr(self._Gf.Vec2f(max(0.02, float(spec.near_clip_m)), 1000.0))
             xform = UsdGeom.Xformable(camera)
             xform.AddTranslateOp()
             xform.AddOrientOp()
@@ -282,7 +303,7 @@ class CameraRig:
         imag = q.GetImaginary()
         return np.array([t[0], t[1], t[2]]), (q.GetReal(), imag[0], imag[1], imag[2])
 
-    def update(self, *, low_pass: float = 0.25, base_pos=None, base_quat_wxyz=None) -> None:
+    def update(self, *, low_pass: float = 0.25, base_pos=None, base_quat_wxyz=None, occupancy=None) -> None:
         """Place the moving cameras from the robot's live pose.
 
         `base_pos`/`base_quat_wxyz` should come from the articulation's physics state: on Isaac Lab 3.0 the USD xform
@@ -302,7 +323,11 @@ class CameraRig:
         for spec in self.specs.values():
             if spec.kind != "chase":
                 continue
-            eye, R = chase_pose(base_pos, self._chase_yaw, distance=spec.distance, height=spec.height,
+            boom = spec.distance
+            if occupancy is not None:
+                boom, _pulled = clear_boom(base_pos, self._chase_yaw, distance=spec.distance,
+                                           height=spec.height, occupancy=occupancy)
+            eye, R = chase_pose(base_pos, self._chase_yaw, distance=boom, height=spec.height,
                                 pitch_down_deg=spec.pitch_down_deg)
             self._write_xform(spec.name, eye, quat_from_matrix(R))
         for spec in self.specs.values():

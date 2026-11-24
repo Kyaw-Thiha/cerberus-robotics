@@ -121,11 +121,18 @@ class PurePursuit:
         alpha = wrap_angle(math.atan2(dy, dx) - pose[2])
         dist = max(math.hypot(dx, dy), 1e-6)
 
-        speed_factor = min(1.0, math.hypot(goal[0] - pose[0], goal[1] - pose[1]) / cfg.slow_radius_m)
-        speed_factor *= max(cfg.min_speed_factor, 1.0 - abs(alpha) / cfg.turn_slowdown_rad)
-        v = cfg.max_vx * max(0.0, min(1.0, speed_factor))
-        wz = 2.0 * v * math.sin(alpha) / dist
-        wz = max(-cfg.max_wz, min(cfg.max_wz, wz))
+        if abs(alpha) > math.pi / 2.0:
+            # Pure pursuit's curvature term 2*v*sin(alpha)/dist vanishes at alpha=pi, i.e. a target directly
+            # behind commands full speed and almost no yaw: the robot drives away in a huge loop instead of
+            # turning round (measured on the scene tour: 14 m travelled away from the next goal). Turn in place.
+            v = 0.0
+            wz = math.copysign(cfg.max_wz, alpha)
+        else:
+            speed_factor = min(1.0, math.hypot(goal[0] - pose[0], goal[1] - pose[1]) / cfg.slow_radius_m)
+            speed_factor *= max(cfg.min_speed_factor, 1.0 - abs(alpha) / cfg.turn_slowdown_rad)
+            v = cfg.max_vx * max(0.0, min(1.0, speed_factor))
+            wz = 2.0 * v * math.sin(alpha) / dist
+            wz = max(-cfg.max_wz, min(cfg.max_wz, wz))
         self._last_speed = v
         return self._emit({**ZERO_COMMAND, "vx": v, "wz": wz}, dt)
 

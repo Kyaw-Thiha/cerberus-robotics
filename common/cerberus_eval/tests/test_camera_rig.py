@@ -129,3 +129,31 @@ def test_update_uses_the_passed_pose_and_logs_a_world_ego_pose():
     # a quarter turn about z moves the ego offset to +y in world coordinates
     rotated = rotate_vector((0.38, 0.0, 0.3), (0.7071067811865476, 0.0, 0.0, 0.7071067811865476))
     assert rotated == pytest.approx([0.0, 0.38, 0.3], abs=1e-6)
+
+
+class _TinyGrid:
+    """Only what ``clear_boom`` uses: is_free in world coordinates against two half-planes."""
+
+    def __init__(self, blocked_x=None):
+        self.blocked_x = blocked_x
+
+    def is_free(self, x, y, *, inflated=True):
+        if self.blocked_x is None:
+            return True
+        return x > self.blocked_x if self.blocked_x < 0 else x < self.blocked_x
+
+
+def test_clear_boom_keeps_the_full_distance_on_open_ground():
+    distance, pulled = cr.clear_boom(np.array([0.0, 0.0, 0.4]), 0.0, distance=1.6, height=0.9,
+                                     occupancy=_TinyGrid())
+    assert distance == pytest.approx(1.6) and not pulled
+
+
+def test_clear_boom_pulls_in_before_a_wall_and_never_below_the_floor():
+    # the eye is behind along -X; a wall at x=-1.0 blocks everything further back than 1.0 m from the base
+    distance, pulled = cr.clear_boom(np.array([0.0, 0.0, 0.4]), 0.0, distance=1.6, height=0.9,
+                                     occupancy=_TinyGrid(blocked_x=-1.0))
+    assert pulled and 0.5 <= distance < 1.1
+    tight, pulled_tight = cr.clear_boom(np.array([0.0, 0.0, 0.4]), 0.0, distance=1.6, height=0.9,
+                                        occupancy=_TinyGrid(blocked_x=-0.5))
+    assert pulled_tight and tight >= 0.6 - 1e-9

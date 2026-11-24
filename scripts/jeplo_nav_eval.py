@@ -81,7 +81,7 @@ def run(args) -> int:
         prim_path="/World/envs/env_0/Robot/base",
         offset=RayCasterCfg.OffsetCfg(pos=OFFSET_POS, rot=OFFSET_QUAT_WXYZ), ray_alignment="base",
         pattern_cfg=RaySphericalSlicePatternCfg(),
-        max_distance=2.0, mesh_prim_paths=["/World/scan_proxy"], update_period=0.02, debug_vis=False)
+        max_distance=2.0, mesh_prim_paths=["/World/scan_proxy"], update_period=0.1, debug_vis=False)
     env, _ = se.build_loco_env(args.scene, [(start[0], start[1], 0.0, grid.floor_z)], task=se.task_for_embodiment("go2"),
                                seed=args.seed, episode_length_s=args.max_time + 60.0, with_cameras=False,
                                extra_sensors={"jeplo_lidar": lidar})

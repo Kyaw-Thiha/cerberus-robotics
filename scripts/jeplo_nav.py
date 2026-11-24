@@ -75,7 +75,8 @@ class JeploIsaacBackend:
         self.sensor = env.unwrapped.scene[sensor_name]
         self.policy = JeploBackend()
         self.policy.load(os.environ.get("JEPLO_MODELS"))
-        self.depth = SphericalDepth(seed=0)
+        # the ray caster refreshes at 10 Hz (one frame per 5 policy steps); two frames = the 0.2 s window JEPLO trained on
+        self.depth = SphericalDepth(history=2, update_every=1, seed=0)
         self.num_envs = 1
         self._depth_latest = np.ones((25, 60), dtype=np.float32)
         self._depth_rows: list[np.ndarray] = []
@@ -252,7 +253,7 @@ def run(args) -> int:
         offset=RayCasterCfg.OffsetCfg(pos=OFFSET_POS, rot=OFFSET_QUAT_WXYZ),
         ray_alignment="base",
         pattern_cfg=RaySphericalSlicePatternCfg(),
-        max_distance=2.0, mesh_prim_paths=["/World/scan_proxy"], update_period=0.02, debug_vis=False)
+        max_distance=2.0, mesh_prim_paths=["/World/scan_proxy"], update_period=0.1, debug_vis=False)
     env, _scene = se.build_loco_env(args.scene, [(start[0], start[1], yaw, grid.floor_z)],
                                     task=se.task_for_embodiment(args.embodiment), seed=args.seed,
                                     episode_length_s=max(120.0, args.max_total_time + 60.0), with_cameras=False,

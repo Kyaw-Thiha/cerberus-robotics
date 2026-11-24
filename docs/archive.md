@@ -83,3 +83,20 @@ planning artifacts under `docs/superpowers/` and `docs/archive/superpowers_plans
 as `docs/platform_config.md`), the agent handoffs in `plans/` (the four that carried design content became
 `docs/worlds_integration_spec.md`, `docs/sensor_setup.md`, `docs/slam_design.md` and
 `docs/adversarial_gate_method.md`), and two functions with no caller (`xacro_available`, `looks_like_path`).
+
+## Session 4 (2026-11-24, tag `archive/session4-2026-11-24`)
+
+Removed from `main` because the Brev relay was dropped and the session reports had served their purpose; all files
+were uploaded to R2 `archive/2026-11-24/repo-tidy/` (21 files, byte-verified) before deletion:
+
+| path | why |
+|---|---|
+| `docs/reports/session3/` | session-3 ledger, log, state and handoff; superseded by `docs/reports/jeplo_spike.md`, `docs/showcase.md` and `docs/dev_machine.md` |
+| `docs/reports/first_scene_session.md` | session-1/2 narrative; its lasting lessons are in `docs/dev_machine.md` "Known issues" |
+| `docs/reports/render_unblock.md` | RTX/material recipe; the lasting steps moved to "Known issues" (material conversion wrapper + reboot) |
+| `docs/reports/kit_crash_report.md`, `kit_reliability.md` | Kit stability notes, superseded by "Known issues" |
+| `docs/reports/brev_instances.md`, `brev_reply.md`, `brev_ssh_issue.md` | Brev is no longer used |
+| `scripts/host/brev_*.sh`, `tests/test_brev_wrappers.py` | Brev wrappers and their tests |
+| `scripts/host/r2_channel.{py,sh}`, `tests/test_r2_channel.py` | R2 command channel, not used by the Hyperstack plain-SSH path |
+
+Restore with `git checkout archive/session4-2026-11-24 -- <path>`.

@@ -101,8 +101,8 @@ scripts/host/bootstrap_host.sh --data-dir ~/cerberus-data --env-file .env   # im
 scripts/host/run_session.sh --scene MV7J6NIKTKJZ2AABAAAAADQ8_usd            # stand, demo, nav, replay
 ```
 
-Three routes to a compliant machine (workstation, an AWS worked example, Brev with the catalog prices read on
-2026-11-22) are in [`docs/dev_machine.md`](docs/dev_machine.md). The Brev wrappers in `scripts/host/brev_*.sh`
+Two routes to a compliant machine (your own workstation, an AWS worked example) and the Hyperstack plain-SSH
+route are in [`docs/dev_machine.md`](docs/dev_machine.md). The provider wrappers in `scripts/host/hyperstack_*.sh`
 enforce a 1.50 USD/h price cap, a 3.5 h wall clock (a systemd kill timer armed before the instance exists), at most
 four creations and one live instance, and they only touch instances they created.
 

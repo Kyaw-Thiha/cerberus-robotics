@@ -1,7 +1,7 @@
 # Arm bring-up: Go2 + ARX5 as a locomotion platform
 
 How the fused body is spawned, what the policy sees, and what is still open. Session evidence: 2026-11-23
-(`docs/reports/first_scene_session.md`, session 2).
+(session 2; archived under tag `archive/session4-2026-11-24`).
 
 ## What runs
 

@@ -226,7 +226,7 @@ cerberus/
 │   │   ├── bootstrap_host.sh           # caches, image, scene, checkpoint (idempotent)
 │   │   ├── run_session.sh              # stand/demo/smoke/nav/replay, judged by artifacts
 │   │   ├── run_stack_check.sh, run_scene_admission.sh, run_scene_eval.sh, run_slam_eval.sh
-│   │   ├── brev_{up,status,exec,copy,down}.sh  # caps, kill switch, ownership guard
+│   │   ├── hyperstack_{up,down,kill,status,ssh}.sh  # caps, kill switch, ownership guard
 │   │   └── tests/                      # colocated tests (mocked system output only)
 │   └── tests/                          # colocated tests for the other scripts
 ├── data/                             # gitignored — demos, trajectories, scenes, reports

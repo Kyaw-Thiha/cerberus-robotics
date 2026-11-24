@@ -60,7 +60,10 @@ Result: reached within 0.33 m of the goal, net displacement **11.33 m**, no fall
 tracking is close to the requested speed (~0.65 m/s achieved on ~0.75 m/s commands). The checkpoint is the authors'
 released ONNX pair, unchanged; the observation comes from our simulator (no height scan, no privileged data).
 
-The full multi-goal tour, the N=10 seeded comparison against the PPO baseline, and the arm-robot check follow below.
+Navigation eval (same seeded start-goal pairs, planner and controller as the PPO baseline, seed 0, N=5,
+25 s cap, 10 Hz depth refresh): **5/5 success, 0 falls, mean SPL 1.0**, episode times 2.7-15.2 s. Pair files and
+`summary.json` under `outputs/scratch/jeplo/nav_eval` (VM copy `/home/ubuntu/cerberus-results/jeplo/nav_eval_seed0`).
+The PPO baseline on the same pairs follows below.
 
 On the same task the PPO baseline (Go2 height-scan policy) walked 5.7 m and fell at 8.3 s while turning west; the
 legs-only policy tracks 0.41 m/s in a straight-line probe. Those are results about the trained policies, not about

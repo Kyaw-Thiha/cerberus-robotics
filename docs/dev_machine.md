@@ -60,96 +60,11 @@ aws ec2 stop-instances --instance-ids <id>
 The Deep Learning AMI's driver is not guaranteed to be in the allowlist — run the doctor and, if it fails, either pick
 a newer AMI or install 580.95.05+ from NVIDIA's `.run` installer (a full VM with sudo can do this; a container cannot).
 
-## 3. Brev (legacy relay)
+## 3. Hyperstack (plain SSH, no relay)
 
-Brev is the route this repository's cloud sessions used. The CLI is `brev` (v0.6.337 at the time of writing).
-
-### What the catalog offered on 2026-11-22
-
-Command (works without being logged in; it reads the public catalog):
-
-```bash
-brev search gpu --min-vram 24 --min-ram 32 --min-disk 200 --json
-```
-
-127 types matched the filters. After removing GPUs without RT cores (A100/H100/B200 and similar), requiring at least
-24 GB VRAM, 32 GB RAM and a 200 GB disk, and capping the price at 1.50 USD/h, six remained, cheapest first. **Prices are
-the catalog's `price_per_hour` on 2026-11-22**, not a quote; Brev's catalog changes daily.
-
-| USD/h | type | GPU | VRAM | RAM | disk | boot | stoppable |
-|---|---|---|---|---|---|---|---|
-| 0.828 | `gpu_1x_rtx6000` | RTX 6000 | 24 GB | 46 GB | 512 GB | 600 s | no |
-| 1.056 | `massedcompute_L40` | L40 | 48 GB | 72 GB | 625 GB | 330 s | no |
-| 1.056 | `massedcompute_L40S` | L40S | 48 GB | 72 GB | 625 GB | 390 s | no |
-| 1.140 | `scaleway_L4` | L4 | 24 GB | 48 GB | 500 GB | 390 s | no |
-| 1.164 | `massedcompute_RTX6000Ada` | RTX 6000 Ada | 48 GB | 80 GB | 350 GB | 390 s | no |
-| 1.200 | `hyperstack_L40` | L40 | 48 GB | 58 GB | 825 GB | 330 s | no |
-
-Ranking: price first, then boot time. The catalog does **not** report the driver version, so the first two steps on any
-new instance are `nvidia-smi` and `host_doctor`; a non-compliant driver means replacing the instance rather than
-fighting it (the H4 session lost hours to exactly that).
-
-`brev create --dry-run` was verified against the top choice:
-
-```bash
-brev create cerberus-t0-dry --type gpu_1x_rtx6000 --min-disk 200 --dry-run
-# -> gpu_1x_rtx6000
-```
-
-### The wrappers in this repo (recommended)
-
-`scripts/host/brev_up.sh` enforces the caps before anything is created: at most **1.50 USD/h**, at most **3.5 h** per
-instance, at most **4 creations** per run, and **one live instance** at a time. It arms a systemd user timer that
-stops and deletes the instance even if the agent dies, and refuses to create anything if the timer cannot be armed.
-
-```bash
-scripts/host/brev_up.sh --name cerberus-t0 --type gpu_1x_rtx6000 --price 0.828
-scripts/host/brev_exec.sh cerberus-t0 'nvidia-smi'
-scripts/host/brev_copy.sh ./scripts cerberus-t0:/workspace/cerberus/scripts
-scripts/host/brev_status.sh                # state, spend estimate, armed timers
-scripts/host/brev_down.sh cerberus-t0      # stop, delete, cancel the timer
-```
-
-Only instances this run created can be touched: `brev_exec`, `brev_copy` and `brev_down` refuse any other name, so the
-owner's other workspaces are safe.
-
-### Raw CLI, if you prefer it
-
-```bash
-brev login                                  # interactive; the one step that cannot be automated here
-brev create cerberus-t0 --type gpu_1x_rtx6000 --detached --min-disk 200
-brev ls                                     # pipes to instance names when not a tty
-brev exec cerberus-t0 'nvidia-smi'
-brev copy ./local cerberus-t0:/workspace/cerberus/
-brev stop cerberus-t0 && brev delete cerberus-t0
-```
-
-**Unverified, because no account was logged in during this run:** `brev login`, `brev create` (without `--dry-run`),
-`brev start`, `brev stop`, `brev delete`, `brev exec` and `brev copy` against a real instance. Their flag names come from
-`brev <cmd> --help` (v0.6.337) and their behaviour is covered by mock tests
-(`scripts/host/tests/test_brev_wrappers.py`), but no live call was made. `brev search gpu --json` and
-`brev create --dry-run` were run and worked.
-
-### If SSH to an instance times out at "banner exchange"
-
-Symptom: `brev exec`, `brev shell` and plain `ssh <name>` all print `Connection timed out during banner exchange`; `brev ls`
-shows the instance `RUNNING` with shell `READY` and health `HEALTHY`. The relay accepts TCP (ssh's `-vvv` says
-`Connection established`) and never sends a banner.
-
-What this machine showed on 2026-11-22 (CLI v0.6.337, OpenSSH 10.6, cloudflared 2024.10.0): the generated
-`~/.brev/ssh_config` entry had **no `ProxyCommand`**, and no cloudflared process or brev service was running.
-`brev register` installs the tunnel but requires sudo (`register.sudoWriteFile` in the CLI); after running it the config
-was unchanged and no tunnel appeared. `brev refresh`/`brev enable-ssh`, clearing `ControlMaster`, `brev exec --host`,
-`brev port-forward`, and a different instance/provider all failed the same way.
-
-So: check `grep ProxyCommand ~/.brev/ssh_config` and `pgrep -a cloudflared` first. If both are empty, this is the
-client-side tunnel, not the instance — do not spend money creating another instance. Full evidence, timeline and a
-ready-to-send support message: `docs/reports/brev_ssh_issue.md`.
-
-## 4. Hyperstack (plain SSH, no relay)
-
-Hyperstack gives a normal `ubuntu@<floating-ip>` shell, which is why the cloud session moved here after the Brev relay
-failed (see `docs/reports/first_scene_session.md`). The API base is `https://infrahub-api.nexgencloud.com/v1` and
+Hyperstack gives a normal `ubuntu@<floating-ip>` shell, which is why the cloud session moved here after the earlier relay approach
+failed (the session-2/3 evidence is in the archive: tag `archive/session4-2026-11-24`, R2
+`archive/2026-11-24/repo-tidy/`). The API base is `https://infrahub-api.nexgencloud.com/v1` and
 authentication is the `api_key` header; the wrappers read `HYPERSTACK_API_KEY` from `.env` inside a subshell for each
 call and never print it.
 
@@ -195,48 +110,15 @@ scripts/host/bootstrap_host.sh --data-dir /workspace/cerberus-data --env-file .e
 scripts/host/run_session.sh --scene MV7J6NIKTKJZ2AABAAAAADQ8_usd --out-dir /workspace/cerberus-results/s1
 ```
 
-Put the credentials file on the instance over `brev copy`, `chmod 600` it, and delete it before deleting the instance
+Put the credentials file on the instance over `scp`, `chmod 600` it, and delete it before deleting the instance
 (see the report for the rotation advice that follows any token copy).
-
-## Running without SSH: the R2 command channel
-
-When a host gives no shell (see the Brev SSH issue), `scripts/host/r2_channel.*` turns a bucket prefix into a job
-runner. The instance side is started by the Brev startup script; the laptop side writes commands and reads results.
-
-```bash
-# 1. put the channel where the bootstrap will fetch it, then build a startup script (mode 600, contains credentials)
-python3 scripts/host/r2_channel.py put --job scene1 --src scripts/host/r2_channel.sh --key input/r2_channel.sh
-python3 scripts/host/r2_channel.py bundle --job scene1 --out /tmp/scene1-start.sh
-
-# 2. create the instance with it
-brev create NAME --type TYPE --startup-script @/tmp/scene1-start.sh --detached
-
-# 3. wait for the channel, then run commands; large files move R2 <-> instance, never through the laptop
-python3 scripts/host/r2_channel.py wait --job scene1 --timeout 600
-python3 scripts/host/r2_channel.py exec --job scene1 --cmd 'nvidia-smi; df -h' --timeout 120
-python3 scripts/host/r2_channel.py put --job scene1 --src ./scene.tar --key input/scene.tar
-python3 scripts/host/r2_channel.py get --job scene1 --key out/0007.out --dst ./out.txt
-```
-
-Layout: `jobs/<job>/cmd/<seq>_<timeout>.cmd`, `out/<seq>.{out,err,rc}`, `heartbeat.json` every 30 s,
-`state/channel.json`, `state/startup.log`. The loop runs only commands under its own job prefix, with bash, in
-`/tmp/cerberus/work/<job>`, under `timeout`; a long job should `nohup` itself and log to a file for a later command to
-upload. Only the bucket-scoped token is used, passed to rclone as environment variables inside a 0600 file.
-
-**Measured limitation (2026-11-22):** on this Brev account the startup script did not start the channel on three
-attempts (two CPU, one GPU), although a minimal startup-script canary had run in an earlier session. No heartbeat and
-no `state/startup.log` appeared, which points at the script running before the network is usable or not running at all
-on those instances. The bootstrap now retries the rclone install and the channel fetch for up to ~3 minutes each and
-uploads its log, but that has not yet been confirmed on a live instance. Treat the channel as implemented and tested
-locally, not yet proven on Brev.
 
 ## Cost control
 
-- The wrappers refuse to exceed 1.50 USD/h, 3.5 h, 4 creations and one live instance.
+- The Hyperstack wrappers refuse to exceed the run's caps (session 4: 1.50 USD/h, 11 h, 2 creations, one live VM).
 - The kill timer is armed **before** the instance exists.
-- `brev_status.sh` prints a spend estimate from the local ledger (`~/cerberus-results/brev/ledger.jsonl`), computed as
-  price x hours alive for every create that has no matching delete.
-- Check `brev ls` before you go to sleep; a stopped instance can still bill for its disk on some providers.
+- `hyperstack_status.sh` prints a spend estimate from the local ledger, price x hours alive for every create without
+  a delete. The kill timer is armed before the VM exists; the VM-side dead-man deletes it if the heartbeat goes stale.
 
 ## Known issues (2026-11-24)
 
